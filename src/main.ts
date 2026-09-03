@@ -27,7 +27,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
 
   const port = configService.get('PORT');
-  app.setGlobalPrefix('api/v2');
+  app.setGlobalPrefix('api/v1');
   app.use(new HttpLogger().use);
 
   // port
