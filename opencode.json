@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "figma-bridge": {
+      "type": "local",
+      "command": ["npx", "-y", "@gethopp/figma-mcp-bridge"],
+      "enabled": true
+    }
+  }
+}
