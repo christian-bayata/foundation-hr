@@ -12,6 +12,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
+    "start:staging": "node --max-old-space-size=460 dist/main",
     "start:prod": "node dist/main",
     "lint": "oxlint src/ test/",
     "test": "jest",
