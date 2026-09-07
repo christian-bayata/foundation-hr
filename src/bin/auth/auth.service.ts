@@ -608,7 +608,7 @@ export class AuthService {
     await user.save();
 
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-    const verifyLink = `${frontendUrl}/verify-email?token=${rawToken}`;
+    const verifyLink = `${frontendUrl}/auth/create-account/email-confirmation?token=${rawToken}`;
 
     const email_user = this.configService.get('EMAIL_USER');
     function emailDispatcherPayload(): MailDispatcherDto {
