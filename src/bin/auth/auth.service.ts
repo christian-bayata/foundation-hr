@@ -20,6 +20,7 @@ import { RefreshTokenEntry } from './interface/auth.interface';
 import { passwordResetTemplate } from '../../email/template/password-reset.template';
 import { emailVerificationTemplate } from '../../email/template/email-verification.template';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
+import { OrganizationDocument } from '../organization/entity/organization.schema';
 import { Product } from './enum/product.enum';
 import { UserType } from './enum/user.enum';
 import { existsSync } from 'fs';
@@ -220,9 +221,15 @@ export class AuthService {
 
       await user.save();
 
+      const organization =
+        await this.organizationRepository.findOrganizationByOwner(user?._id);
+
+      const kyc = this.getIncompleteKycFields(user, organization);
+
       return {
         accessToken: tokens?.accessToken,
         refreshToken: tokens?.refreshToken,
+        kyc,
       };
     } catch (error: any) {
       error.location = `AuthServices.${this.signIn.name} method`;
@@ -613,5 +620,38 @@ export class AuthService {
       };
     }
     await this.emailService.brevoEmailDispatcher(emailDispatcherPayload());
+  }
+
+  /**
+   * @Responsibility: Determine the KYC fields that are yet to be completed
+   *
+   * @param user - The authenticated user document
+   * @param organization - The user's organization document (if any)
+   * @returns Array of incomplete KYC field names
+   */
+  private getIncompleteKycFields(
+    user: any,
+    organization: OrganizationDocument | null,
+  ): string[] {
+    const kyc: string[] = [];
+
+    if (!user?.firstName) kyc.push('firstName');
+    if (!user?.lastName) kyc.push('lastName');
+
+    if (!organization) {
+      kyc.push('name', 'size', 'country', 'products', 'topInterest');
+    } else {
+      if (!organization.name) kyc.push('name');
+      if (!organization.size) kyc.push('size');
+      if (!organization.country) kyc.push('country');
+      if (!organization.products || organization.products.length === 0) {
+        kyc.push('products');
+        kyc.push('topInterest');
+      } else if (!organization.topInterest) {
+        kyc.push('topInterest');
+      }
+    }
+
+    return kyc;
   }
 }
