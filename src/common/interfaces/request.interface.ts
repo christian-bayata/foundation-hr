@@ -4,6 +4,7 @@ export interface CurrentUser {
   userId: string;
   email: string;
   userType?: string;
+  organizationId?: string;
 }
 
 export interface IRequest extends Request {

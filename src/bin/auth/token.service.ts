@@ -11,6 +11,7 @@ export interface AccessTokenPayload {
   sub: string;
   email: string;
   userType?: string;
+  organizationId?: string;
 }
 
 @Injectable()

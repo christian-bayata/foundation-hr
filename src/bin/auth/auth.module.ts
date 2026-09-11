@@ -10,6 +10,7 @@ import { User, UserSchema } from './entity/user.schema';
 import { AuthUtility } from './auth.utility';
 import { EmailModule } from '../../email/email.module';
 import { OrganizationModule } from '../organization/organization.module';
+import { RoleModule } from '../role/role.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { OrganizationModule } from '../organization/organization.module';
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     EmailModule,
     OrganizationModule,
+    RoleModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, TokenService, UserRepository, AuthUtility],

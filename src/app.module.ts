@@ -7,8 +7,11 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './bin/auth/auth.module';
+import { EmployeeModule } from './bin/employee/employee.module';
+import { RoleModule } from './bin/role/role.module';
 import { HttpExceptionFilter } from './common';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RoleGuard } from './common/guards/role.guard';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -17,6 +20,8 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     AuthModule,
+    EmployeeModule,
+    RoleModule,
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -31,6 +36,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     // { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: RoleGuard },
   ],
 })
 export class AppModule {}

@@ -21,6 +21,7 @@ import { passwordResetTemplate } from '../../email/template/password-reset.templ
 import { emailVerificationTemplate } from '../../email/template/email-verification.template';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
 import { OrganizationDocument } from '../organization/entity/organization.schema';
+import { RoleService } from '../role/role.service';
 import { Product } from './enum/product.enum';
 import { UserType } from './enum/user.enum';
 import { existsSync } from 'fs';
@@ -37,6 +38,7 @@ export class AuthService {
     @Inject(AuthUtility) private readonly authUtility: AuthUtility,
     @Inject(OrganizationRepository)
     private readonly organizationRepository: OrganizationRepository,
+    @Inject(RoleService) private readonly roleService: RoleService,
   ) {}
 
   /**
@@ -203,10 +205,21 @@ export class AuthService {
         });
       }
 
+      const organization =
+        await this.organizationRepository.findOrganizationByOwner(user?._id);
+
+      const organizationId =
+        organization?._id?.toString() ??
+        (await this.roleService.findOrganizationForUser(
+          user?._id?.toString(),
+        )) ??
+        undefined;
+
       const payload = {
         sub: user?._id?.toString(),
         email: user?.email,
         userType: user?.userType,
+        organizationId,
       };
       const tokens = await this.tokenService?.generateTokenPair(payload);
 
@@ -220,9 +233,6 @@ export class AuthService {
       ];
 
       await user.save();
-
-      const organization =
-        await this.organizationRepository.findOrganizationByOwner(user?._id);
 
       const kyc = this.getIncompleteKycFields(user, organization);
 
@@ -275,6 +285,9 @@ export class AuthService {
         });
       }
 
+      const refreshOrg =
+        await this.organizationRepository.findOrganizationByOwner(user?._id);
+
       user.refreshTokens =
         user?.refreshTokens?.filter(
           (t: RefreshTokenEntry) => t?.tokenHash !== tokenHash,
@@ -284,6 +297,7 @@ export class AuthService {
         sub: user?._id?.toString(),
         email: user?.email,
         userType: user?.userType,
+        organizationId: refreshOrg?._id?.toString(),
       };
       const tokens = await this.tokenService?.generateTokenPair(newPayload);
 
@@ -337,7 +351,7 @@ export class AuthService {
         await user.save();
 
         const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-        const resetLink = `${frontendUrl}/reset-password?token=${rawToken}`;
+        const resetLink = `${frontendUrl}/auth/reset-password?token=${rawToken}`;
 
         function emailDispatcherPayload(): MailDispatcherDto {
           return {
@@ -528,6 +542,13 @@ export class AuthService {
           marketingOptIn,
           termsAcceptedAt: new Date(),
         },
+      );
+
+      const organizationId = organization._id?.toString();
+      await this.roleService.initializeSystemRoles(organizationId);
+      await this.roleService.assignCompanyOwner(
+        owner._id.toString(),
+        organizationId,
       );
 
       return organization;

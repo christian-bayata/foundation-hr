@@ -1,0 +1,4 @@
+export enum InfoAccess {
+  DIRECT_REPORTS_ONLY = 'DIRECT_REPORTS_ONLY',
+  EVERYONE = 'EVERYONE',
+}

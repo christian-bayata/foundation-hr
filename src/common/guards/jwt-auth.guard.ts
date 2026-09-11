@@ -13,6 +13,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   userType?: string;
+  organizationId?: string;
 }
 
 @Injectable()
@@ -48,6 +49,7 @@ export class JwtAuthGuard implements CanActivate {
         userId: payload.sub,
         email: payload.email,
         userType: payload.userType,
+        organizationId: payload.organizationId,
       };
     } catch {
       throw new UnauthorizedException('Invalid or expired access token.');
