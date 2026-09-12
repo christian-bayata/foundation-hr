@@ -16,12 +16,17 @@ import { EmployeeService } from './employee.service';
 import { EmployeeRepository } from './repository/employee.repository';
 import { EmployeeStatus } from './enum/employee.enum';
 
+const INVITE_ID = '64f1b2c3d4e5f678901234ab';
+
 describe('EmployeeController (integration)', () => {
   let app: INestApplication<App>;
   let employeeRepository: {
     create: jest.Mock;
     findOne: jest.Mock;
     findByEmployeeId: jest.Mock;
+    findByEmail: jest.Mock;
+    findById: jest.Mock;
+    updateById: jest.Mock;
     updateByEmployeeId: jest.Mock;
     paginatedQuery: jest.Mock;
   };
@@ -34,6 +39,9 @@ describe('EmployeeController (integration)', () => {
       create: jest.fn(),
       findOne: jest.fn(),
       findByEmployeeId: jest.fn(),
+      findByEmail: jest.fn(),
+      findById: jest.fn(),
+      updateById: jest.fn(),
       updateByEmployeeId: jest.fn(),
       paginatedQuery: jest.fn(),
     };
@@ -55,7 +63,16 @@ describe('EmployeeController (integration)', () => {
       ],
     })
       .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: () => true })
+      .useValue({
+        canActivate: (context: any) => {
+          context.switchToHttp().getRequest().user = {
+            userId: 'usr123',
+            email: 'admin@example.com',
+            organizationId: 'org123',
+          };
+          return true;
+        },
+      })
       .compile();
 
     app = module.createNestApplication();
@@ -94,6 +111,44 @@ describe('EmployeeController (integration)', () => {
       expect(res.body.data.status).toBe(EmployeeStatus.DRAFT);
     });
 
+    it('completes basic info for the employee invited via inviteId', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'jane@example.com',
+        status: EmployeeStatus.DRAFT,
+      });
+      employeeRepository.updateById.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'jane@example.com',
+        firstName: 'Jane',
+        lastName: 'Smith',
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/step-one')
+        .send({ ...payload, inviteId: INVITE_ID });
+
+      expect(res.status).toBe(201);
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(
+        INVITE_ID,
+        expect.objectContaining({ firstName: 'Jane' }),
+      );
+    });
+
+    it('rejects when the email does not match the invited account', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'other@example.com',
+        status: EmployeeStatus.DRAFT,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/step-one')
+        .send({ ...payload, inviteId: INVITE_ID });
+
+      expect(res.status).toBe(400);
+    });
+
     it('rejects an invalid email', async () => {
       const res = await request(app.getHttpServer())
         .post('/employees/step-one')
@@ -120,8 +175,7 @@ describe('EmployeeController (integration)', () => {
     });
   });
 
-  describe('POST /employees/step-two/:employeeId', () => {
-    const employeeId = 'FHR0042';
+  describe('POST /employees/step-two/:inviteId', () => {
     const payload = {
       contractDuration: 'indefinite',
       jobType: 'full-time',
@@ -130,28 +184,40 @@ describe('EmployeeController (integration)', () => {
       jobTitle: 'Backend Engineer',
     };
 
-    it('saves contract details', async () => {
-      employeeRepository.findByEmployeeId.mockResolvedValue({
-        employeeId,
+    it('saves contract details and activates the employee', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
         status: EmployeeStatus.DRAFT,
       });
-      employeeRepository.updateByEmployeeId.mockResolvedValue({
-        employeeId,
+      employeeRepository.updateById.mockResolvedValue({
+        _id: INVITE_ID,
         ...payload,
         salaryCurrency: 'NGN',
+        status: EmployeeStatus.ACTIVE,
       });
 
       const res = await request(app.getHttpServer())
-        .post(`/employees/step-two/${employeeId}`)
+        .post(`/employees/step-two/${INVITE_ID}`)
         .send(payload);
 
       expect(res.status).toBe(200);
-      expect(employeeRepository.updateByEmployeeId).toHaveBeenCalled();
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(
+        INVITE_ID,
+        expect.objectContaining({ status: EmployeeStatus.ACTIVE }),
+      );
+    });
+
+    it('rejects an invalid inviteId', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/employees/step-two/not-an-id')
+        .send(payload);
+
+      expect(res.status).toBe(400);
     });
 
     it('rejects an invalid contract duration', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/employees/step-two/${employeeId}`)
+        .post(`/employees/step-two/${INVITE_ID}`)
         .send({ ...payload, contractDuration: 'not-a-duration' });
 
       expect(res.status).toBe(400);
@@ -159,7 +225,7 @@ describe('EmployeeController (integration)', () => {
 
     it('rejects an invalid work mode', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/employees/step-two/${employeeId}`)
+        .post(`/employees/step-two/${INVITE_ID}`)
         .send({ ...payload, workMode: 'not-a-mode' });
 
       expect(res.status).toBe(400);
@@ -167,7 +233,7 @@ describe('EmployeeController (integration)', () => {
 
     it('rejects a missing job title', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/employees/step-two/${employeeId}`)
+        .post(`/employees/step-two/${INVITE_ID}`)
         .send({ ...payload, jobTitle: '' });
 
       expect(res.status).toBe(400);
@@ -175,114 +241,117 @@ describe('EmployeeController (integration)', () => {
 
     it('rejects an invalid probation period', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/employees/step-two/${employeeId}`)
+        .post(`/employees/step-two/${INVITE_ID}`)
         .send({ ...payload, probationPeriod: '7 years' });
 
       expect(res.status).toBe(400);
     });
   });
 
-  describe('GET /employees/:employeeId', () => {
+  describe('GET /employees/:inviteId', () => {
     it('returns the employee for the summary screen', async () => {
-      employeeRepository.findByEmployeeId.mockResolvedValue({
-        employeeId: 'FHR0042',
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'jane@example.com',
       });
 
       const res = await request(app.getHttpServer()).get(
-        '/employees/FHR0042',
+        `/employees/${INVITE_ID}`,
       );
 
       expect(res.status).toBe(200);
-      expect(res.body.data.employeeId).toBe('FHR0042');
+      expect(res.body.data.email).toBe('jane@example.com');
     });
 
     it('returns 404 for an unknown employee', async () => {
-      employeeRepository.findByEmployeeId.mockResolvedValue(null);
+      employeeRepository.findById.mockResolvedValue(null);
 
       const res = await request(app.getHttpServer()).get(
-        '/employees/FHR9999',
+        `/employees/${INVITE_ID}`,
       );
 
       expect(res.status).toBe(404);
     });
   });
 
-  describe('POST /employees/:employeeId/save-draft', () => {
+  describe('POST /employees/:inviteId/save-draft', () => {
     it('saves the employee as a draft', async () => {
-      employeeRepository.findByEmployeeId.mockResolvedValue({
-        employeeId: 'FHR0042',
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
         status: EmployeeStatus.DRAFT,
       });
-      employeeRepository.updateByEmployeeId.mockResolvedValue({
-        employeeId: 'FHR0042',
+      employeeRepository.updateById.mockResolvedValue({
+        _id: INVITE_ID,
         status: EmployeeStatus.DRAFT,
       });
 
       const res = await request(app.getHttpServer()).post(
-        '/employees/FHR0042/save-draft',
+        `/employees/${INVITE_ID}/save-draft`,
       );
 
       expect(res.status).toBe(200);
-      expect(employeeRepository.updateByEmployeeId).toHaveBeenCalledWith(
-        'FHR0042',
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(
+        INVITE_ID,
         { status: EmployeeStatus.DRAFT },
       );
     });
   });
 
-  describe('POST /employees/:employeeId/invite', () => {
-    const employee = {
-      employeeId: 'FHR0042',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      email: 'jane@example.com',
-      employmentDate: new Date('2024-03-01'),
-      contractDuration: 'indefinite',
-      jobType: 'full-time',
-      workMode: 'hybrid',
-      department: 'engineering',
-      jobTitle: 'Backend Engineer',
-      status: EmployeeStatus.DRAFT,
-    };
-
-    it('invites the employee', async () => {
-      employeeRepository.findByEmployeeId.mockResolvedValue(employee);
-      employeeRepository.updateByEmployeeId.mockResolvedValue({
-        ...employee,
-        status: EmployeeStatus.ACTIVE,
+  describe('POST /employees/invite', () => {
+    it('creates sparse employee accounts and sends invite emails', async () => {
+      employeeRepository.findByEmail.mockResolvedValue(null);
+      employeeRepository.create.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'jane@example.com',
+        organizationId: 'org123',
+        status: EmployeeStatus.DRAFT,
       });
 
-      const res = await request(app.getHttpServer()).post(
-        '/employees/FHR0042/invite',
-      );
+      const res = await request(app.getHttpServer())
+        .post('/employees/invite')
+        .send({ invitees: ['Jane@Example.com'] });
 
       expect(res.status).toBe(200);
+      expect(employeeRepository.create).toHaveBeenCalledWith({
+        email: 'jane@example.com',
+        organizationId: 'org123',
+        status: EmployeeStatus.DRAFT,
+      });
       expect(emailService.brevoEmailDispatcher).toHaveBeenCalled();
-      expect(employeeRepository.updateByEmployeeId).toHaveBeenCalledWith(
-        'FHR0042',
-        { status: EmployeeStatus.ACTIVE },
-      );
+      expect(res.body.data.invited).toEqual([
+        { email: 'jane@example.com', inviteId: INVITE_ID },
+      ]);
     });
 
-    it('returns 404 for an unknown employee', async () => {
-      employeeRepository.findByEmployeeId.mockResolvedValue(null);
-
-      const res = await request(app.getHttpServer()).post(
-        '/employees/FHR9999/invite',
-      );
-
-      expect(res.status).toBe(404);
-    });
-
-    it('returns 400 when contract details are incomplete', async () => {
-      employeeRepository.findByEmployeeId.mockResolvedValue({
-        ...employee,
-        jobTitle: null,
+    it('skips emails that already have an employee account', async () => {
+      employeeRepository.findByEmail.mockResolvedValue({
+        email: 'jane@example.com',
       });
 
-      const res = await request(app.getHttpServer()).post(
-        '/employees/FHR0042/invite',
-      );
+      const res = await request(app.getHttpServer())
+        .post('/employees/invite')
+        .send({ invitees: ['jane@example.com'] });
+
+      expect(res.status).toBe(200);
+      expect(employeeRepository.create).not.toHaveBeenCalled();
+      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
+      expect(res.body.data.skipped).toEqual([
+        { email: 'jane@example.com' },
+      ]);
+    });
+
+    it('rejects an invalid email', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/employees/invite')
+        .send({ invitees: ['not-an-email'] });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects an empty invite list', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/employees/invite')
+        .send({ invitees: [] });
 
       expect(res.status).toBe(400);
     });

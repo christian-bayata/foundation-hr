@@ -13,7 +13,11 @@ import { CurrentUser, IRequest } from '../interfaces/request.interface';
 export const ROLE_SERVICE = 'ROLE_SERVICE';
 
 export interface IRoleService {
-  getUserSystemRoles(userId: string, organizationId: string): Promise<SystemRole[]>;
+  getUserSystemRoles(
+    userId: string,
+    organizationId: string,
+  ): Promise<SystemRole[]>;
+  findOrganizationForUser(userId: string): Promise<string | null>;
 }
 
 @Injectable()
@@ -38,17 +42,27 @@ export class RoleGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<IRequest>();
     const user: CurrentUser | undefined = request.user;
 
-    if (!user?.userId || !user?.organizationId) {
-      this.logger.warn(
-        `RoleGuard: Missing userId or organizationId on request`,
-      );
+    if (!user?.userId) {
+      this.logger.warn(`RoleGuard: Missing userId on request`);
       return false;
     }
 
     try {
+      const organizationId =
+        user.organizationId ??
+        (await this.roleService.findOrganizationForUser(user.userId)) ??
+        undefined;
+
+      if (!organizationId) {
+        this.logger.warn(
+          `RoleGuard: Could not resolve organization for user ${user.userId}`,
+        );
+        return false;
+      }
+
       const userRoles = await this.roleService.getUserSystemRoles(
         user.userId,
-        user.organizationId,
+        organizationId,
       );
 
       const hasRole = requiredRoles.some((role) => userRoles.includes(role));

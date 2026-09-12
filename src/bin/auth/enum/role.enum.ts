@@ -1,9 +1,9 @@
 export enum SystemRole {
-  COMPANY_OWNER = 'COMPANY_OWNER',
-  HR_ADMIN = 'HR_ADMIN',
-  HR_OPS = 'HR_OPS',
-  DEPT_MANAGER = 'DEPT_MANAGER',
-  EMPLOYEE = 'EMPLOYEE',
-  IT_ADMIN = 'IT_ADMIN',
-  FINANCE = 'FINANCE',
+  COMPANY_OWNER = 'company_owner',
+  HR_ADMIN = 'hr_admin',
+  HR_OPS = 'hr_ops',
+  DEPT_MANAGER = 'dept_manager',
+  EMPLOYEE = 'employee',
+  IT_ADMIN = 'it_admin',
+  FINANCE = 'finance',
 }

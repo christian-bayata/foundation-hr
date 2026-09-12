@@ -10,6 +10,14 @@ export class UserRoleRepository {
     private readonly userRoleModel: Model<UserRoleDocument>,
   ) {}
 
+  /**
+   * @Responsibility: Repo to retrieve a user's role assignments within an organization,
+   * with each assignment's role document populated
+   *
+   * @param userId - The user to resolve assignments for
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<UserRoleDocument[]>}
+   */
   async findByUserAndOrganization(
     userId: string,
     organizationId: string,
@@ -23,6 +31,13 @@ export class UserRoleRepository {
     }
   }
 
+  /**
+   * @Responsibility: Repo to retrieve all role assignments for a user across every organization,
+   * with each assignment's role document populated
+   *
+   * @param userId - The user to resolve assignments for
+   * @returns {Promise<UserRoleDocument[]>}
+   */
   async findByUser(userId: string): Promise<UserRoleDocument[]> {
     try {
       return await this.userRoleModel.find({ userId }).populate('roleId');
@@ -31,6 +46,14 @@ export class UserRoleRepository {
     }
   }
 
+  /**
+   * @Responsibility: Repo to check whether a user already has a specific role in an organization
+   *
+   * @param userId - The user to scope the query to
+   * @param organizationId - The organization to scope the query to
+   * @param roleId - The role to check against
+   * @returns {Promise<UserRoleDocument | null>}
+   */
   async findByUserAndOrgAndRole(
     userId: string,
     organizationId: string,
@@ -47,6 +70,13 @@ export class UserRoleRepository {
     }
   }
 
+  /**
+   * @Responsibility: Repo to retrieve all users assigned to a specific role in an organization
+   *
+   * @param roleId - The role to resolve assignments for
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<UserRoleDocument[]>}
+   */
   async findByRoleAndOrganization(
     roleId: Types.ObjectId,
     organizationId: string,
@@ -58,6 +88,12 @@ export class UserRoleRepository {
     }
   }
 
+  /**
+   * @Responsibility: Repo to persist a new user-role assignment
+   *
+   * @param data - User-role assignment fields to save
+   * @returns {Promise<UserRoleDocument>}
+   */
   async assign(data: Partial<UserRole>): Promise<UserRoleDocument> {
     try {
       return await this.userRoleModel.create(data);
@@ -66,6 +102,14 @@ export class UserRoleRepository {
     }
   }
 
+  /**
+   * @Responsibility: Repo to delete a single user-role assignment
+   *
+   * @param userId - The user to scope the deletion to
+   * @param roleId - The role to scope the deletion to
+   * @param organizationId - The organization to scope the deletion to
+   * @returns {Promise<void>}
+   */
   async remove(
     userId: string,
     roleId: Types.ObjectId,
@@ -82,6 +126,13 @@ export class UserRoleRepository {
     }
   }
 
+  /**
+   * @Responsibility: Repo to delete every role assignment for a user within an organization
+   *
+   * @param userId - The user to clear assignments for
+   * @param organizationId - The organization to scope the deletion to
+   * @returns {Promise<void>}
+   */
   async removeAllForUser(
     userId: string,
     organizationId: string,

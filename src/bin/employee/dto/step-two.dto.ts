@@ -10,6 +10,7 @@ import {
   ContractDuration,
   Department,
   JobType,
+  ProbationPeriod,
   WorkMode,
 } from '../enum/employee.enum';
 
@@ -27,8 +28,7 @@ export class StepTwoDto {
   workMode: WorkMode;
 
   @IsOptional()
-  @IsString()
-  probationPeriod?: string;
+  probationPeriod?: ProbationPeriod;
 
   @IsEnum(Department, { message: 'Invalid department.' })
   @IsNotEmpty({ message: 'Department is required.' })

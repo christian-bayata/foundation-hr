@@ -29,6 +29,27 @@ export class Organization {
 
   @Prop({ type: Date, default: null })
   termsAcceptedAt: Date | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  registrationNumber: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  website: string | null;
+
+  @Prop({ type: String, trim: true, lowercase: true, default: null })
+  primaryContactEmail: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  phoneNumber: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  timezone: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  language: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  fiscalYearStartDate: string | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

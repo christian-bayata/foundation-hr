@@ -44,4 +44,42 @@ export class OrganizationRepository {
       throw error;
     }
   }
+
+  /**
+   * @Responsibility: Repo to retrieve an organization by its id
+   *
+   * @param organizationId - The organization's id
+   * @returns {Promise<OrganizationDocument | null>}
+   */
+  async findById(
+    organizationId: string,
+  ): Promise<OrganizationDocument | null> {
+    try {
+      return await this.organizationModel.findById(organizationId);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to partially update an organization by its id
+   *
+   * @param organizationId - The organization's id
+   * @param data - Fields to update on the organization
+   * @returns {Promise<OrganizationDocument | null>}
+   */
+  async updateById(
+    organizationId: string,
+    data: Partial<Organization>,
+  ): Promise<OrganizationDocument | null> {
+    try {
+      return await this.organizationModel.findByIdAndUpdate(
+        organizationId,
+        { $set: data },
+        { new: true },
+      );
+    } catch (error) {
+      throw error;
+    }
+  }
 }

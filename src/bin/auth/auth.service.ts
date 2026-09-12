@@ -21,7 +21,7 @@ import { passwordResetTemplate } from '../../email/template/password-reset.templ
 import { emailVerificationTemplate } from '../../email/template/email-verification.template';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
 import { OrganizationDocument } from '../organization/entity/organization.schema';
-import { RoleService } from '../role/role.service';
+import { SettingService } from '../setting/setting.service';
 import { Product } from './enum/product.enum';
 import { UserType } from './enum/user.enum';
 import { existsSync } from 'fs';
@@ -38,7 +38,7 @@ export class AuthService {
     @Inject(AuthUtility) private readonly authUtility: AuthUtility,
     @Inject(OrganizationRepository)
     private readonly organizationRepository: OrganizationRepository,
-    @Inject(RoleService) private readonly roleService: RoleService,
+    @Inject(SettingService) private readonly settingService: SettingService,
   ) {}
 
   /**
@@ -210,10 +210,17 @@ export class AuthService {
 
       const organizationId =
         organization?._id?.toString() ??
-        (await this.roleService.findOrganizationForUser(
+        (await this.settingService.findOrganizationForUser(
           user?._id?.toString(),
         )) ??
         undefined;
+
+      const roles = organizationId
+        ? await this.settingService.getUserSystemRoles(
+            user?._id?.toString() ?? '',
+            organizationId,
+          )
+        : [];
 
       const payload = {
         sub: user?._id?.toString(),
@@ -240,6 +247,8 @@ export class AuthService {
         accessToken: tokens?.accessToken,
         refreshToken: tokens?.refreshToken,
         kyc,
+        role: roles,
+        organizationId,
       };
     } catch (error: any) {
       error.location = `AuthServices.${this.signIn.name} method`;
@@ -545,8 +554,8 @@ export class AuthService {
       );
 
       const organizationId = organization._id?.toString();
-      await this.roleService.initializeSystemRoles(organizationId);
-      await this.roleService.assignCompanyOwner(
+      await this.settingService.initializeSystemRoles(organizationId);
+      await this.settingService.assignCompanyOwner(
         owner._id.toString(),
         organizationId,
       );

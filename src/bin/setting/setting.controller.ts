@@ -16,72 +16,88 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser } from '../../common';
 import { SystemRole } from '../auth/enum/role.enum';
-import { RoleService } from './role.service';
-import { CreateRoleDto } from './dto/create-role.dto';
-import { AssignRoleDto, RemoveRoleDto } from './dto/assign-role.dto';
+import { SettingService } from './setting.service';
+import { CreateRoleDto } from './access-control/dto/create-role.dto';
+import {
+  AssignRoleDto,
+  RemoveRoleDto,
+} from './access-control/dto/assign-role.dto';
 import { AppResponse } from '../../common/response/app-response';
 
-@Controller('roles')
+@Controller('setting')
 @UseGuards(JwtAuthGuard, RoleGuard)
-export class RoleController {
-  constructor(private readonly roleService: RoleService) {}
+export class SettingController {
+  constructor(private readonly settingService: SettingService) {}
 
-  @Get()
+  @Get('access-control/role/retrieve/all')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async getRoles(@CurrentUser() user: ICurrentUser) {
-    const data = await this.roleService.getRolesByOrganization(
+  async retrieveAllRoles(@CurrentUser() user: ICurrentUser) {
+    const data = await this.settingService.getRolesByOrganization(
       user.organizationId!,
     );
     return AppResponse.success('Roles retrieved successfully', 200, data);
   }
 
-  @Get(':id')
+  @Get('access-control/role/retrieve/user/:userId')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async getRole(@Param('id') id: string) {
-    const data = await this.roleService.getRoleById(id);
+  async retrieveUserRoles(
+    @CurrentUser() user: ICurrentUser,
+    @Param('userId') userId: string,
+  ) {
+    const data = await this.settingService.getUserRoles(
+      userId,
+      user.organizationId!,
+    );
+    return AppResponse.success('User roles retrieved successfully', 200, data);
+  }
+
+  @Get('access-control/role/retrieve/:id')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async retrieveRole(@Param('id') id: string) {
+    const data = await this.settingService.getRoleById(id);
     return AppResponse.success('Role retrieved successfully', 200, data);
   }
 
-  @Post()
+  @Post('access-control/role/create')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.CREATED)
   async createRole(
     @CurrentUser() user: ICurrentUser,
     @Body() createRoleDto: CreateRoleDto,
   ) {
-    const data = await this.roleService.createCustomRole(
+    const data = await this.settingService.createCustomRole(
       user.organizationId!,
       createRoleDto,
     );
     return AppResponse.success('Role created successfully', 201, data);
   }
 
-  @Patch(':id')
+  @Patch('access-control/role/update/:id')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   async updateRole(
     @Param('id') id: string,
     @Body() updateRoleDto: Partial<CreateRoleDto>,
   ) {
-    const data = await this.roleService.updateCustomRole(id, updateRoleDto);
+    const data = await this.settingService.updateCustomRole(id, updateRoleDto);
     return AppResponse.success('Role updated successfully', 200, data);
   }
 
-  @Delete(':id')
+  @Delete('access-control/role/delete/:id')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
   async deleteRole(@Param('id') id: string) {
-    await this.roleService.deleteCustomRole(id);
+    await this.settingService.deleteCustomRole(id);
     return AppResponse.success('Role deleted successfully', 200);
   }
 
-  @Post('assign')
+  @Post('access-control/role/assign')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
   async assignRole(
     @CurrentUser() user: ICurrentUser,
     @Body() assignRoleDto: AssignRoleDto,
   ) {
-    await this.roleService.assignRole(
+    await this.settingService.assignRole(
       assignRoleDto.userId,
       assignRoleDto.roleId,
       user.organizationId!,
@@ -89,31 +105,18 @@ export class RoleController {
     return AppResponse.success('Role assigned successfully', 200);
   }
 
-  @Post('remove')
+  @Post('access-control/role/remove')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
   async removeRole(
     @CurrentUser() user: ICurrentUser,
     @Body() removeRoleDto: RemoveRoleDto,
   ) {
-    await this.roleService.removeRole(
+    await this.settingService.removeRole(
       removeRoleDto.userId,
       removeRoleDto.roleId,
       user.organizationId!,
     );
     return AppResponse.success('Role removed successfully', 200);
-  }
-
-  @Get('user/:userId')
-  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async getUserRoles(
-    @CurrentUser() user: ICurrentUser,
-    @Param('userId') userId: string,
-  ) {
-    const data = await this.roleService.getUserRoles(
-      userId,
-      user.organizationId!,
-    );
-    return AppResponse.success('User roles retrieved successfully', 200, data);
   }
 }

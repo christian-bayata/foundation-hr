@@ -1,13 +1,18 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
-import { RoleRepository } from './repository/role.repository';
-import { UserRoleRepository } from './repository/user-role.repository';
-import { RoleDocument } from './entity/role.schema';
-import { SystemRole } from '../auth/enum/role.enum';
-import { InfoAccess } from '../auth/enum/info-access.enum';
-import { PermissionModule } from '../auth/enum/module.enum';
-import { CreateRoleDto } from './dto/create-role.dto';
-import { AppResponse } from '../../common/response/app-response';
+import { RoleRepository } from '../access-control/repository/role.repository';
+import { UserRoleRepository } from '../access-control/repository/user-role.repository';
+import { InviteeUserRepository } from '../access-control/repository/invitee-user.repository';
+import { RoleDocument } from '../access-control/entity/role.schema';
+import { SystemRole } from '../../auth/enum/role.enum';
+import { InfoAccess } from '../../auth/enum/info-access.enum';
+import { PermissionModule } from '../../auth/enum/module.enum';
+import { CreateRoleDto } from '../access-control/dto/create-role.dto';
+import { AppResponse } from '../../../common/response/app-response';
+import { EmailService } from '../../../email/email.service';
+import { roleInviteTemplate } from '../../../email/template/role-invite.template';
+import { MailDispatcherDto } from '../../../email/dto/send-mail.dto';
 
 const SYSTEM_ROLE_DEFAULTS: {
   name: string;
@@ -54,18 +59,25 @@ const SYSTEM_ROLE_DEFAULTS: {
 const ALL_MODULES = Object.values(PermissionModule);
 
 @Injectable()
-export class RoleService {
-  private readonly logger = new Logger(RoleService.name);
+export class SettingsDomainAccessControlService {
+  private readonly logger = new Logger(SettingsDomainAccessControlService.name);
 
   constructor(
     @Inject(RoleRepository) private readonly roleRepository: RoleRepository,
     @Inject(UserRoleRepository)
     private readonly userRoleRepository: UserRoleRepository,
+    @Inject(InviteeUserRepository)
+    private readonly inviteeUserRepository: InviteeUserRepository,
+    private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
-   * Seed the 7 (actually 8) system roles for a new organization.
+   * @Responsibility: Seed the default system roles for a newly created organization.
    * Called during org creation in AuthService.
+   *
+   * @param organizationId - The organization to seed system roles for
+   * @returns {Promise<void>}
    */
   async initializeSystemRoles(organizationId: string): Promise<void> {
     try {
@@ -86,7 +98,7 @@ export class RoleService {
         parentSystemRole: sr.systemRole,
         infoAccess: sr.infoAccess,
         modulePermissions: new Map(
-          ALL_MODULES.map((mod) => [mod, { view: false, edit: false }]),
+          ALL_MODULES.map((mod) => [mod, { view: true, edit: true }]),
         ),
       }));
 
@@ -104,7 +116,11 @@ export class RoleService {
   }
 
   /**
-   * Assign the COMPANY_OWNER role to the first signup user.
+   * @Responsibility: Assign the COMPANY_OWNER role to the first signup user
+   *
+   * @param userId - The user to assign the owner role to
+   * @param organizationId - The organization the user owns
+   * @returns {Promise<void>}
    */
   async assignCompanyOwner(
     userId: string,
@@ -142,8 +158,12 @@ export class RoleService {
   }
 
   /**
-   * Get a user's system roles for an organization.
+   * @Responsibility: Get a user's system roles for an organization.
    * Used by the RoleGuard to check authorization.
+   *
+   * @param userId - The user to resolve roles for
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<SystemRole[]>}
    */
   async getUserSystemRoles(
     userId: string,
@@ -175,7 +195,10 @@ export class RoleService {
   }
 
   /**
-   * Get all roles (system + custom) for an organization.
+   * @Responsibility: Get all roles (system + custom) for an organization
+   *
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<RoleDocument[]>}
    */
   async getRolesByOrganization(
     organizationId: string,
@@ -189,7 +212,12 @@ export class RoleService {
   }
 
   /**
-   * Get a single role by ID.
+   * @Responsibility: Get a single role by ID
+   *
+   * @param roleId - The role id to look up
+   * @returns {Promise<RoleDocument>}
+   *
+   * @throws {404} Role not found
    */
   async getRoleById(roleId: string): Promise<RoleDocument> {
     try {
@@ -202,14 +230,22 @@ export class RoleService {
       }
       return role!;
     } catch (error: any) {
-      error.location = `RoleService.${this.getRoleById.name}`;
+      error.location = `SettingsDomainAccessControlService.${this.getRoleById.name}`;
       AppResponse.error(error);
       throw error;
     }
   }
 
   /**
-   * Create a custom role within an organization.
+   * @Responsibility: Create a custom role within an organization.
+   * If invitees are provided, assigns the role to each valid user and sends an invitation email.
+   * 409 conflicts (user already has the role) are logged and skipped.
+   *
+   * @param organizationId - The organization the role belongs to
+   * @param dto - The role creation payload
+   * @returns {Promise<RoleDocument>}
+   *
+   * @throws {409} Role with the same name already exists in the organization
    */
   async createCustomRole(
     organizationId: string,
@@ -231,12 +267,13 @@ export class RoleService {
         string,
         { view: boolean; edit: boolean }
       >();
-      if (dto.modulePermissions) {
-        for (const mp of dto.modulePermissions) {
-          modulePermissions.set(mp.module, { view: mp.view, edit: mp.edit });
-        }
-      } else {
-        for (const mod of ALL_MODULES) {
+      for (const [module, perms] of Object.entries(
+        dto.modulePermissions ?? {},
+      )) {
+        modulePermissions.set(module, { view: perms.view, edit: perms.edit });
+      }
+      for (const mod of ALL_MODULES) {
+        if (!modulePermissions.has(mod)) {
           modulePermissions.set(mod, { view: false, edit: false });
         }
       }
@@ -254,21 +291,100 @@ export class RoleService {
       this.logger.log(
         `Created custom role "${dto.name}" in org ${organizationId}`,
       );
+
+      if (dto.invitees?.length) {
+        await this.inviteRoleMembers(dto.invitees, role, organizationId);
+      }
+
       return role;
     } catch (error: any) {
-      error.location = `RoleService.${this.createCustomRole.name}`;
+      error.location = `SettingsDomainAccessControlService.${this.createCustomRole.name}`;
       AppResponse.error(error);
       throw error;
     }
   }
 
   /**
-   * Update a custom role (system roles cannot be updated).
+   * @Responsibility: Resolve invitee emails to users, assign the role, and dispatch invitation emails.
+   * 409 conflicts (user already has the role) are logged and skipped; email dispatch failures don't throw.
+   *
+   * @param inviteeEmails - The invitee email addresses to invite
+   * @param role - The newly created role document
+   * @param organizationId - The organization the role belongs to
+   * @returns {Promise<void>}
+   */
+  private async inviteRoleMembers(
+    inviteeEmails: string[],
+    role: RoleDocument,
+    organizationId: string,
+  ): Promise<void> {
+    const uniqueEmails = [
+      ...new Set(inviteeEmails.map((email) => email.trim().toLowerCase())),
+    ];
+    const users = await this.inviteeUserRepository.findByEmails(uniqueEmails);
+
+    if (users.length === 0) {
+      this.logger.warn(
+        `No matching users found for invitee emails: ${uniqueEmails.join(', ')}`,
+      );
+      return;
+    }
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const inviteLink = `${frontendUrl}/invite?roleId=${role._id}`;
+
+    for (const user of users) {
+      try {
+        await this.assignRole(
+          user._id as Types.ObjectId as unknown as string,
+          role._id as unknown as string,
+          organizationId,
+        );
+      } catch (error: any) {
+        if (error?.status === HttpStatus.CONFLICT) {
+          this.logger.warn(
+            `User ${user._id} already has role ${role.name}, skipping assignment`,
+          );
+        } else {
+          throw error;
+        }
+      }
+
+      const payload: MailDispatcherDto = {
+        to: user.email,
+        from: 'Foundation HR <no-reply@foundationhr.com>',
+        subject: `You've been added to ${role.name}`,
+        html: roleInviteTemplate(user.firstName, role.name, inviteLink),
+      };
+
+      try {
+        await this.emailService.brevoEmailDispatcher(payload);
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to send invite email to ${user.email}: ${error.message}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Invite flow completed for role "${role.name}" — ${users.length} user(s) processed`,
+    );
+  }
+
+  /**
+   * @Responsibility: Update a custom role (system roles cannot be updated)
+   *
+   * @param roleId - The role id to update
+   * @param dto - The partial role update payload
+   * @returns {Promise<RoleDocument>}
+   *
+   * @throws {404} Role not found
+   * @throws {403} System roles cannot be modified
    */
   async updateCustomRole(
     roleId: string,
     dto: Partial<CreateRoleDto>,
-  ): Promise<RoleDocument> {
+  ): Promise<string> {
     try {
       const role = await this.roleRepository.findById(roleId);
       if (!role) {
@@ -293,13 +409,30 @@ export class RoleService {
       if (dto.infoAccess !== undefined) updateData.infoAccess = dto.infoAccess;
 
       if (dto.modulePermissions) {
+        const existing = new Map(
+          (role!.modulePermissions as Map<
+            string,
+            { view: boolean; edit: boolean }
+          >) ?? new Map<string, { view: boolean; edit: boolean }>(),
+        );
         const modulePermissions = new Map<
           string,
           { view: boolean; edit: boolean }
         >();
-        for (const mp of dto.modulePermissions) {
-          modulePermissions.set(mp.module, { view: mp.view, edit: mp.edit });
+
+        for (const [module, perms] of Object.entries(dto.modulePermissions)) {
+          modulePermissions.set(module, { view: perms.view, edit: perms.edit });
         }
+
+        for (const mod of ALL_MODULES) {
+          const value = modulePermissions.get(mod) ?? existing.get(mod);
+          if (value) {
+            modulePermissions.set(mod, value);
+          } else if (!modulePermissions.has(mod)) {
+            modulePermissions.set(mod, { view: false, edit: false });
+          }
+        }
+
         updateData.modulePermissions = modulePermissions;
       }
 
@@ -311,17 +444,22 @@ export class RoleService {
         });
       }
 
-      this.logger.log(`Updated custom role ${roleId}`);
-      return updated!;
+      return 'Updated custom role';
     } catch (error: any) {
-      error.location = `RoleService.${this.updateCustomRole.name}`;
+      error.location = `SettingsDomainAccessControlService.${this.updateCustomRole.name}`;
       AppResponse.error(error);
       throw error;
     }
   }
 
   /**
-   * Delete a custom role (system roles cannot be deleted).
+   * @Responsibility: Delete a custom role (system roles cannot be deleted)
+   *
+   * @param roleId - The role id to delete
+   * @returns {Promise<void>}
+   *
+   * @throws {404} Role not found
+   * @throws {403} System roles cannot be deleted
    */
   async deleteCustomRole(roleId: string): Promise<void> {
     try {
@@ -343,14 +481,23 @@ export class RoleService {
       await this.roleRepository.delete(roleId);
       this.logger.log(`Deleted custom role ${roleId}`);
     } catch (error: any) {
-      error.location = `RoleService.${this.deleteCustomRole.name}`;
+      error.location = `SettingsDomainAccessControlService.${this.deleteCustomRole.name}`;
       AppResponse.error(error);
       throw error;
     }
   }
 
   /**
-   * Assign a role to a user within an organization.
+   * @Responsibility: Assign a role to a user within an organization
+   *
+   * @param userId - The user to assign the role to
+   * @param roleId - The role to assign
+   * @param organizationId - The organization to scope the assignment to
+   * @returns {Promise<void>}
+   *
+   * @throws {404} Role not found
+   * @throws {403} Role does not belong to the organization
+   * @throws {409} User already has the role
    */
   async assignRole(
     userId: string,
@@ -396,14 +543,22 @@ export class RoleService {
         `Assigned role ${roleId} to user ${userId} in org ${organizationId}`,
       );
     } catch (error: any) {
-      error.location = `RoleService.${this.assignRole.name}`;
+      error.location = `SettingsDomainAccessControlService.${this.assignRole.name}`;
       AppResponse.error(error);
       throw error;
     }
   }
 
   /**
-   * Remove a role from a user within an organization.
+   * @Responsibility: Remove a role from a user within an organization
+   *
+   * @param userId - The user to remove the role from
+   * @param roleId - The role to remove
+   * @param organizationId - The organization to scope the removal to
+   * @returns {Promise<void>}
+   *
+   * @throws {404} Role not found
+   * @throws {403} Owner role cannot be removed from a user
    */
   async removeRole(
     userId: string,
@@ -439,14 +594,18 @@ export class RoleService {
         `Removed role ${roleId} from user ${userId} in org ${organizationId}`,
       );
     } catch (error: any) {
-      error.location = `RoleService.${this.removeRole.name}`;
+      error.location = `SettingsDomainAccessControlService.${this.removeRole.name}`;
       AppResponse.error(error);
       throw error;
     }
   }
 
   /**
-   * Get all roles assigned to a specific user in an organization.
+   * @Responsibility: Get all roles assigned to a specific user in an organization
+   *
+   * @param userId - The user to resolve roles for
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<RoleDocument[]>}
    */
   async getUserRoles(
     userId: string,
@@ -469,7 +628,11 @@ export class RoleService {
   }
 
   /**
-   * Get all users assigned to a specific role in an organization.
+   * @Responsibility: Get all users assigned to a specific role in an organization
+   *
+   * @param roleId - The role to resolve users for
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<string[]>}
    */
   async getUsersByRole(
     roleId: string,
@@ -492,8 +655,11 @@ export class RoleService {
   }
 
   /**
-   * Resolve the organization a user belongs to via their role assignments.
+   * @Responsibility: Resolve the organization a user belongs to via their role assignments.
    * Used at sign-in so non-owner users also carry an organizationId in the JWT.
+   *
+   * @param userId - The user to resolve the organization for
+   * @returns {Promise<string | null>}
    */
   async findOrganizationForUser(userId: string): Promise<string | null> {
     try {

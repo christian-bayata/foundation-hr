@@ -15,8 +15,8 @@ export interface ListEmployeeQuery {
   location?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
-  page?: number;
-  pageSize?: number;
+  batch?: number;
+  limit?: number;
 }
 
 export interface ListEmployeeFilters {
@@ -30,9 +30,6 @@ export interface ListEmployeeFilters {
 }
 
 export interface PaginatedResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  data: T[];
+  count: number;
 }

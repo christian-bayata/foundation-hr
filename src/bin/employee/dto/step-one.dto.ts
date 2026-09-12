@@ -26,10 +26,6 @@ export class StepOneDto {
   @IsString()
   middleName?: string;
 
-  @IsString()
-  @IsNotEmpty({ message: 'Employee ID is required.' })
-  employeeId: string;
-
   @IsEmail()
   @IsNotEmpty({ message: 'Email is required.' })
   email: string;
@@ -37,6 +33,10 @@ export class StepOneDto {
   @IsDateString()
   @IsNotEmpty({ message: 'Employment date is required.' })
   employmentDate: string;
+
+  @IsOptional()
+  @IsString()
+  inviteId?: string;
 
   req?: IRequest;
 }

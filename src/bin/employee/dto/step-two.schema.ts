@@ -28,13 +28,9 @@ export const stepTwoSchema = Joi.object({
       'any.only': 'Invalid work mode.',
       'any.required': 'Work mode is required.',
     }),
-  probationPeriod: Joi.string()
-    .valid('none', '1 month', '2 months', '3 months', '6 months')
-    .optional()
-    .allow('', null)
-    .messages({
-      'any.only': 'Invalid probation period.',
-    }),
+  probationPeriod: Joi.string().optional().allow('', null).messages({
+    'any.only': 'Invalid probation period.',
+  }),
   department: Joi.string()
     .valid(...Object.values(Department))
     .required()

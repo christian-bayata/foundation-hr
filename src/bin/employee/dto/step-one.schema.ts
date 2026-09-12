@@ -16,9 +16,6 @@ export const stepOneSchema = Joi.object({
     'any.required': 'Last name is required.',
   }),
   middleName: Joi.string().trim().optional().allow('', null),
-  employeeId: Joi.string().trim().required().messages({
-    'any.required': 'Employee ID is required.',
-  }),
   email: Joi.string().email().required().messages({
     'string.email': 'Please provide a valid email address.',
     'any.required': 'Email is required.',
@@ -27,5 +24,12 @@ export const stepOneSchema = Joi.object({
     'date.base': 'Employment date must be a valid date.',
     'any.required': 'Employment date is required.',
   }),
+  inviteId: Joi.string()
+    .trim()
+    .pattern(/^[a-f\d]{24}$/i)
+    .optional()
+    .messages({
+      'string.pattern.base': 'Invalid employee invite ID.',
+    }),
   req: Joi.any(),
 });

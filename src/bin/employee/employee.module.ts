@@ -5,14 +5,17 @@ import { EmployeeController } from './employee.controller';
 import { EmployeeService } from './employee.service';
 import { EmployeeRepository } from './repository/employee.repository';
 import { Employee, EmployeeSchema } from './entity/employee.schema';
+import { EmployeeUtility } from './repository/employee.utility';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Employee.name, schema: EmployeeSchema }]),
+    MongooseModule.forFeature([
+      { name: Employee.name, schema: EmployeeSchema },
+    ]),
     EmailModule,
   ],
   controllers: [EmployeeController],
-  providers: [EmployeeService, EmployeeRepository],
+  providers: [EmployeeService, EmployeeRepository, EmployeeUtility],
   exports: [EmployeeService],
 })
 export class EmployeeModule {}

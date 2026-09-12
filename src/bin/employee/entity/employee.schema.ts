@@ -16,27 +16,27 @@ export class Employee {
   @Prop({
     type: String,
     enum: Object.values(EmployeeType),
-    required: true,
+    default: null,
   })
-  employeeType: EmployeeType;
+  employeeType: EmployeeType | null;
 
-  @Prop({ type: String, required: true, trim: true })
-  firstName: string;
+  @Prop({ type: String, trim: true, default: null })
+  firstName: string | null;
 
-  @Prop({ type: String, required: true, trim: true })
-  lastName: string;
+  @Prop({ type: String, trim: true, default: null })
+  lastName: string | null;
 
   @Prop({ type: String, trim: true, default: null })
   middleName: string | null;
 
-  @Prop({ type: String, required: true, trim: true })
-  employeeId: string;
+  @Prop({ type: String, trim: true, default: null })
+  employeeUniqueId: string | null;
 
   @Prop({ type: String, required: true, trim: true, lowercase: true })
   email: string;
 
-  @Prop({ type: Date, required: true })
-  employmentDate: Date;
+  @Prop({ type: Date, default: null })
+  employmentDate: Date | null;
 
   @Prop({
     type: String,
@@ -90,16 +90,20 @@ export class Employee {
 }
 
 export const EmployeeSchema = SchemaFactory.createForClass(Employee);
-EmployeeSchema.index({ email: 1 }, { name: 'employee_email_idx', unique: true });
+EmployeeSchema.index(
+  { email: 1 },
+  { name: 'employee_email_idx', unique: true },
+);
 EmployeeSchema.index(
   { employeeId: 1 },
-  { name: 'employee_employee_id_idx', unique: true },
+  {
+    name: 'employee_employee_id_idx',
+    unique: true,
+    partialFilterExpression: { employeeId: { $type: 'string' } },
+  },
 );
 EmployeeSchema.index(
   { organizationId: 1 },
   { name: 'employee_organization_idx' },
 );
-EmployeeSchema.index(
-  { userId: 1 },
-  { name: 'employee_user_idx' },
-);
+EmployeeSchema.index({ userId: 1 }, { name: 'employee_user_idx' });

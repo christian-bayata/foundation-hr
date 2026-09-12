@@ -11,6 +11,37 @@ export const employeeIdParamSchema = Joi.string().trim().required().messages({
   'any.required': 'Employee ID is required.',
 });
 
+export const inviteIdParamSchema = Joi.string()
+  .trim()
+  .pattern(/^[a-f\d]{24}$/i)
+  .required()
+  .messages({
+    'string.pattern.base': 'Invalid employee invite ID.',
+    'string.empty': 'Employee invite ID is required.',
+    'any.required': 'Employee invite ID is required.',
+  });
+
+export const inviteEmployeesSchema = Joi.object({
+  invitees: Joi.array()
+    .items(
+      Joi.string().trim().lowercase().email().required().messages({
+        'string.email': 'Each invitee must be a valid email address.',
+        'any.required': 'Each invitee must be a valid email address.',
+      }),
+    )
+    .min(1)
+    .max(100)
+    .unique()
+    .required()
+    .messages({
+      'array.min': 'At least one invitee email is required.',
+      'array.max': 'You can invite at most 100 employees at once.',
+      'array.unique': 'Invitee email addresses must be unique.',
+      'any.required': 'Invitee email addresses are required.',
+    }),
+  req: Joi.any(),
+});
+
 export const createEmployeeSchema = Joi.object({
   firstName: Joi.string().required().messages({
     'any.required': 'First name is required.',

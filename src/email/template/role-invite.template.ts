@@ -1,4 +1,6 @@
-export function employeeInviteTemplate(
+export function roleInviteTemplate(
+  firstName: string,
+  roleName: string,
   inviteLink: string,
   orgName = 'your organisation',
 ): string {
@@ -22,9 +24,12 @@ export function employeeInviteTemplate(
                 </tr>
                 <tr>
                   <td style="padding: 32px;">
-                    <h2 style="margin: 0 0 12px; color: #212121; font-size: 20px;">You're invited to join ${orgName}</h2>
+                    <h2 style="margin: 0 0 12px; color: #212121; font-size: 20px;">You've been invited to join ${orgName}</h2>
+                    <p style="margin: 0 0 8px; color: #475569; font-size: 15px; line-height: 1.6;">
+                      Hi ${firstName},
+                    </p>
                     <p style="margin: 0 0 24px; color: #475569; font-size: 15px; line-height: 1.6;">
-                      You've been added as an employee. Click the button below to set up your account and start onboarding.
+                      You've been granted the <strong>${roleName}</strong> role. Click the button below to sign in and get started.
                     </p>
                     <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
                       <tr>

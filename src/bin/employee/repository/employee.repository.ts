@@ -60,6 +60,34 @@ export class EmployeeRepository {
   }
 
   /**
+   * @Responsibility: Repo to retrieve an employee by Mongo document ID
+   *
+   * @param id - Mongo ObjectId (invite/onboarding reference)
+   * @returns {Promise<EmployeeDocument | null>}
+   */
+  async findById(id: string): Promise<EmployeeDocument | null> {
+    try {
+      return await this.employeeModel.findById(id);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to retrieve an employee by email address
+   *
+   * @param email - Employee email (lowercased)
+   * @returns {Promise<EmployeeDocument | null>}
+   */
+  async findByEmail(email: string): Promise<EmployeeDocument | null> {
+    try {
+      return await this.employeeModel.findOne({ email });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to update an existing employee by employee ID
    *
    * @param employeeId - Employee identity string
@@ -73,6 +101,28 @@ export class EmployeeRepository {
     try {
       return await this.employeeModel.findOneAndUpdate(
         { employeeId },
+        { $set: data },
+        { new: true },
+      );
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to update an existing employee by Mongo document ID
+   *
+   * @param id - Mongo ObjectId (invite/onboarding reference)
+   * @param data - Fields to update
+   * @returns {Promise<EmployeeDocument | null>}
+   */
+  async updateById(
+    id: string,
+    data: Partial<Employee>,
+  ): Promise<EmployeeDocument | null> {
+    try {
+      return await this.employeeModel.findByIdAndUpdate(
+        id,
         { $set: data },
         { new: true },
       );
