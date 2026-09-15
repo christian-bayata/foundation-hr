@@ -14,6 +14,21 @@ export type OrganizationDocument = Organization & Document;
 //   vatNumber: string | null;
 // }
 
+@Schema({ _id: true })
+export class Location {
+  @Prop({ type: String, trim: true, required: true })
+  name: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  address: string;
+
+  @Prop({ type: String, trim: true, default: null })
+  phoneNumber: string | null;
+
+  @Prop({ type: String, trim: true, lowercase: true, default: null })
+  email: string | null;
+}
+
 @Schema({ _id: false })
 export class BusinessDetails {
   // @Prop({ type: String, trim: true, default: null })
@@ -91,6 +106,9 @@ export class Organization {
 
   @Prop({ type: () => BusinessDetails, default: null })
   businessDetails: BusinessDetails | null;
+
+  @Prop({ type: () => [Location], default: [] })
+  locations: Location[];
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

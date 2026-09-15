@@ -2,10 +2,12 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
 import {
   BusinessDetails,
+  Location,
   OrganizationDocument,
 } from '../../organization/entity/organization.schema';
 import { UpdateGeneralInfoDto } from '../organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-details.dto';
+import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
 import { AppResponse } from '../../../common/response/app-response';
 
 @Injectable()
@@ -203,29 +205,95 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Placeholder for the Locations settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Retrieve an organization's locations settings.
+   * When a search term is provided, locations are filtered case-insensitively
+   * against name, address, phone number and email.
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param search - Optional location search term
+   * @returns {Promise<Location[]>}
+   *
+   * @throws {404} Organization not found
    */
-  async getLocations(organizationId: string): Promise<unknown> {
-    return this.pendingSection('locations', organizationId);
+  async getLocations(
+    organizationId: string,
+    search?: string,
+  ): Promise<Location[]> {
+    try {
+      const organization =
+        (await this.organizationRepository.findById(organizationId)) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const locations = organization!.locations ?? [];
+
+      const term = search?.trim().toLowerCase();
+      if (!term) {
+        return locations;
+      }
+
+      return locations.filter((location) =>
+        [location.name, location.address, location.phoneNumber, location.email]
+          .some((value) => value !== null && value.toLowerCase().includes(term)),
+      );
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getLocations.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Placeholder for the Locations settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Replace an organization's locations settings.
+   * The submitted list represents the full desired state and is saved as-is.
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The full locations list payload
+   * @returns {Promise<Location[]>}
+   *
+   * @throws {404} Organization not found
    */
   async updateLocations(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
-    return this.pendingSection('locations', organizationId, dto);
+    dto: UpdateLocationsDto,
+  ): Promise<Location[]> {
+    try {
+      const found = await this.organizationRepository.findById(organizationId);
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const locationsPayload = (dto.locations ?? []).map((loc) => ({
+        name: loc.name,
+        address: loc.address,
+        phoneNumber: loc.phoneNumber ?? null,
+        email: loc.email ?? null,
+      }));
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { locations: locationsPayload },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization locations',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated locations for org ${organizationId}`);
+      return updated!.locations ?? [];
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateLocations.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**

@@ -5,8 +5,10 @@ import { CreateRoleDto } from './access-control/dto/create-role.dto';
 import { RoleDocument } from './access-control/entity/role.schema';
 import { UpdateGeneralInfoDto } from './organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-details.dto';
+import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
 import {
   BusinessDetails,
+  Location,
   OrganizationDocument,
 } from '../organization/entity/organization.schema';
 import { SystemRole } from '../auth/enum/role.enum';
@@ -262,20 +264,27 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's locations settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param search - Optional location search term
+   * @returns {Promise<Location[]>}
    */
-  getOrgLocations(organizationId: string): Promise<unknown> {
-    return this.organisationDomainService.getLocations(organizationId);
+  getOrgLocations(
+    organizationId: string,
+    search?: string,
+  ): Promise<Location[]> {
+    return this.organisationDomainService.getLocations(organizationId, search);
   }
 
   /**
-   * @Responsibility: Module-level facade to update an organization's locations settings
+   * @Responsibility: Module-level facade to replace an organization's locations settings
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The full locations list payload
+   * @returns {Promise<Location[]>}
    */
-  updateOrgLocations(organizationId: string, dto: unknown): Promise<unknown> {
+  updateOrgLocations(
+    organizationId: string,
+    dto: UpdateLocationsDto,
+  ): Promise<Location[]> {
     return this.organisationDomainService.updateLocations(organizationId, dto);
   }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { AppException } from '../../../common/response/app-exception';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
+import { BusinessType } from '../organisation/enum/organisation.enum';
 import { SettingsDomainOrganisationService } from './settings.domain.organisation.service';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
@@ -99,9 +100,9 @@ describe('SettingsDomainOrganisationService', () => {
   describe('getBusinessDetails', () => {
     it('returns the business details sub-document when present', async () => {
       const businessDetails = {
-        legalName: 'FoundationHR Ltd',
+        businessType: 'private_limited',
         industry: 'Software',
-        tax: { vatNumber: 'VN12345' },
+        tin: 'TIN-0001',
       };
       organizationRepository.findById.mockResolvedValue({
         _id: ORG_ID,
@@ -131,7 +132,7 @@ describe('SettingsDomainOrganisationService', () => {
   });
 
   describe('updateBusinessDetails', () => {
-    it('saves a partial business details payload', async () => {
+    it('merges a partial payload into the existing business details', async () => {
       organizationRepository.findById.mockResolvedValue({
         _id: ORG_ID,
         businessDetails: { industry: 'Software' },
@@ -139,72 +140,39 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.updateById.mockResolvedValue({
         _id: ORG_ID,
         businessDetails: {
-          legalName: 'FoundationHR Ltd',
+          businessType: BusinessType.PRIVATE_LIMITED,
           industry: 'Software',
         },
       });
 
       const result = await service.updateBusinessDetails(ORG_ID, {
-        legalName: 'FoundationHR Ltd',
+        businessType: BusinessType.PRIVATE_LIMITED,
       });
 
-      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
-        businessDetails: {
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          businessDetails: expect.objectContaining({
+            businessType: BusinessType.PRIVATE_LIMITED,
+            industry: 'Software',
+          }),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          businessType: BusinessType.PRIVATE_LIMITED,
           industry: 'Software',
-          legalName: 'FoundationHR Ltd',
-        },
-      });
-      expect(result).toEqual({
-        legalName: 'FoundationHR Ltd',
-        industry: 'Software',
-      });
-    });
-
-    it('merges nested tax details with existing values on partial updates', async () => {
-      organizationRepository.findById.mockResolvedValue({
-        _id: ORG_ID,
-        businessDetails: {
-          tax: {
-            taxIdentificationNumber: 'TIN-0001',
-            vatNumber: 'VN12345',
-          },
-        },
-      });
-      organizationRepository.updateById.mockResolvedValue({
-        _id: ORG_ID,
-        businessDetails: {
-          tax: {
-            taxIdentificationNumber: 'TIN-0001',
-            vatNumber: 'VN99999',
-          },
-        },
-      });
-
-      const result = await service.updateBusinessDetails(ORG_ID, {
-        tax: { vatNumber: 'VN99999' },
-      });
-
-      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
-        businessDetails: {
-          tax: {
-            taxIdentificationNumber: 'TIN-0001',
-            vatNumber: 'VN99999',
-          },
-        },
-      });
-      expect(result).toEqual({
-        tax: {
-          taxIdentificationNumber: 'TIN-0001',
-          vatNumber: 'VN99999',
-        },
-      });
+        }),
+      );
     });
 
     it('throws a 404 when the organization does not exist', async () => {
       organizationRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.updateBusinessDetails(ORG_ID, { legalName: 'FoundationHR Ltd' }),
+        service.updateBusinessDetails(ORG_ID, {
+          businessType: BusinessType.PRIVATE_LIMITED,
+        }),
       ).rejects.toThrow(AppException);
     });
 
@@ -213,14 +181,141 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.updateById.mockResolvedValue(null);
 
       await expect(
-        service.updateBusinessDetails(ORG_ID, { legalName: 'FoundationHR Ltd' }),
+        service.updateBusinessDetails(ORG_ID, {
+          businessType: BusinessType.PRIVATE_LIMITED,
+        }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('getLocations', () => {
+    const locations = [
+      {
+        name: 'Headquarters',
+        address: '123 Main Street, Suite 100, Lagos, Nigeria',
+        phoneNumber: '+234 123 456 7890',
+        email: 'info@company.com',
+      },
+      {
+        name: 'Warehouse',
+        address: '67 Industrial Park, Ikeja, Lagos, Nigeria',
+        phoneNumber: '+234 234 567 8901',
+        email: 'warehouse@company.com',
+      },
+    ];
+
+    it('returns all locations when no search term is provided', async () => {
+      organizationRepository.findById.mockResolvedValue({
+        _id: ORG_ID,
+        locations,
+      });
+
+      const result = await service.getLocations(ORG_ID);
+
+      expect(organizationRepository.findById).toHaveBeenCalledWith(ORG_ID);
+      expect(result).toEqual(locations);
+    });
+
+    it('returns an empty array when locations are not set', async () => {
+      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getLocations(ORG_ID);
+
+      expect(result).toEqual([]);
+    });
+
+    it('filters locations case-insensitively by name or email', async () => {
+      organizationRepository.findById.mockResolvedValue({
+        _id: ORG_ID,
+        locations,
+      });
+
+      const byName = await service.getLocations(ORG_ID, 'warehouse');
+      const byEmail = await service.getLocations(ORG_ID, 'INFO@COMPANY.COM');
+
+      expect(byName).toEqual([locations[1]]);
+      expect(byEmail).toEqual([locations[0]]);
+    });
+
+    it('returns an empty array when no location matches the search term', async () => {
+      organizationRepository.findById.mockResolvedValue({
+        _id: ORG_ID,
+        locations,
+      });
+
+      const result = await service.getLocations(ORG_ID, 'not-a-location');
+
+      expect(result).toEqual([]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findById.mockResolvedValue(null);
+
+      await expect(service.getLocations(ORG_ID)).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('updateLocations', () => {
+    it('replaces the locations list with the submitted payload', async () => {
+      const incoming = [
+        {
+          name: 'Headquarters',
+          address: '123 Main Street, Lagos, Nigeria',
+          phoneNumber: '+234 123 456 7890',
+          email: 'info@company.com',
+        },
+      ];
+      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        locations: incoming,
+      });
+
+      const result = await service.updateLocations(ORG_ID, {
+        locations: incoming,
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        locations: incoming,
+      });
+      expect(result).toEqual(incoming);
+    });
+
+    it('clears locations when the payload is empty', async () => {
+      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        locations: [],
+      });
+
+      const result = await service.updateLocations(ORG_ID, { locations: [] });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        locations: [],
+      });
+      expect(result).toEqual([]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findById.mockResolvedValue(null);
+
+      await expect(
+        service.updateLocations(ORG_ID, { locations: [] }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws an error when the update fails', async () => {
+      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue(null);
+
+      await expect(
+        service.updateLocations(ORG_ID, { locations: [] }),
       ).rejects.toThrow(AppException);
     });
   });
 
   describe('pending sections', () => {
     it.each([
-      'getLocations',
       'getOrganisationHierarchy',
       'getPolicyManagement',
       'getBranding',
@@ -235,7 +330,6 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it.each([
-      'updateLocations',
       'updateOrganisationHierarchy',
       'updatePolicyManagement',
       'updateBranding',

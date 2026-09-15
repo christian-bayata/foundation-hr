@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Patch,
+  Query,
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { SystemRole } from '../../auth/enum/role.enum';
 import { SettingsDomainOrganisationService } from '../domain/settings.domain.organisation.service';
 import { UpdateGeneralInfoDto } from './dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
+import { UpdateLocationsDto } from './dto/update-locations.dto';
 import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
@@ -95,9 +97,13 @@ export class OrganisationController {
 
   @Get('locations/retrieve')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async retrieveLocations(@CurrentUser() user: ICurrentUser) {
+  async retrieveLocations(
+    @CurrentUser() user: ICurrentUser,
+    @Query('search') search?: string,
+  ) {
     const data = await this.organisationService.getLocations(
       user.organizationId!,
+      search,
     );
     return AppResponse.success('Locations retrieved successfully', 200, data);
   }
@@ -107,11 +113,11 @@ export class OrganisationController {
   @HttpCode(HttpStatus.OK)
   async updateLocations(
     @CurrentUser() user: ICurrentUser,
-    @Body() dto: unknown,
+    @Body() updateLocationsDto: UpdateLocationsDto,
   ) {
     const data = await this.organisationService.updateLocations(
       user.organizationId!,
-      dto,
+      updateLocationsDto,
     );
     return AppResponse.success('Locations updated successfully', 200, data);
   }

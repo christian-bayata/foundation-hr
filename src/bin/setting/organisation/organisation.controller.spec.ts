@@ -147,7 +147,7 @@ describe('OrganisationController (integration)', () => {
   describe('GET /setting/organization/business-details/retrieve', () => {
     it('retrieves the organization business details', async () => {
       const businessDetails = {
-        legalName: 'FoundationHR Ltd',
+        businessType: 'private_limited',
         industry: 'Software',
       };
       organisationService.getBusinessDetails.mockResolvedValue(businessDetails);
@@ -168,18 +168,16 @@ describe('OrganisationController (integration)', () => {
   describe('PATCH /setting/organization/business-details/update', () => {
     it('updates the organization business details with a valid payload', async () => {
       const updated = {
-        legalName: 'FoundationHR Ltd',
-        companyType: 'private_limited',
-        tax: { vatNumber: 'VN12345' },
+        businessType: 'private_limited',
+        industry: 'Software',
       };
       organisationService.updateBusinessDetails.mockResolvedValue(updated);
 
       const response = await request(app.getHttpServer())
         .patch('/setting/organization/business-details/update')
         .send({
-          legalName: 'FoundationHR Ltd',
-          companyType: 'private_limited',
-          tax: { vatNumber: 'VN12345' },
+          businessType: 'private_limited',
+          industry: 'Software',
         });
 
       expect(response.status).toBe(200);
@@ -187,25 +185,125 @@ describe('OrganisationController (integration)', () => {
       expect(organisationService.updateBusinessDetails).toHaveBeenCalledWith(
         ORG_ID,
         {
-          legalName: 'FoundationHR Ltd',
-          companyType: 'private_limited',
-          tax: { vatNumber: 'VN12345' },
+          businessType: 'private_limited',
+          industry: 'Software',
         },
       );
     });
 
-    it('rejects an invalid company type', async () => {
+    it('rejects an invalid business type', async () => {
       const response = await request(app.getHttpServer())
         .patch('/setting/organization/business-details/update')
-        .send({ companyType: 'not-a-company-type' });
+        .send({ businessType: 'not-a-business-type' });
 
       expect(response.status).toBe(400);
       expect(organisationService.updateBusinessDetails).not.toHaveBeenCalled();
     });
   });
 
+  describe('GET /setting/organization/locations/retrieve', () => {
+    it('retrieves locations without a search query', async () => {
+      const locations = [
+        {
+          name: 'Headquarters',
+          address: '123 Main Street, Lagos, Nigeria',
+          phoneNumber: '+234 123 456 7890',
+          email: 'info@company.com',
+        },
+      ];
+      organisationService.getLocations.mockResolvedValue(locations);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/locations/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(locations);
+      expect(organisationService.getLocations).toHaveBeenCalledWith(ORG_ID);
+    });
+
+    it('passes the search query parameter to the service', async () => {
+      organisationService.getLocations.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/locations/retrieve?search=warehouse',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getLocations).toHaveBeenCalledWith(
+        ORG_ID,
+        'warehouse',
+      );
+    });
+  });
+
+  describe('PATCH /setting/organization/locations/update', () => {
+    it('updates locations with a valid payload', async () => {
+      const incoming = [
+        {
+          name: 'Headquarters',
+          address: '123 Main Street, Lagos, Nigeria',
+          phoneNumber: '+234 123 456 7890',
+          email: 'info@company.com',
+        },
+      ];
+      organisationService.updateLocations.mockResolvedValue(incoming);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({ locations: incoming });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(incoming);
+      expect(organisationService.updateLocations).toHaveBeenCalledWith(
+        ORG_ID,
+        { locations: incoming },
+      );
+    });
+
+    it('accepts an empty locations array to clear all locations', async () => {
+      organisationService.updateLocations.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({ locations: [] });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual([]);
+      expect(organisationService.updateLocations).toHaveBeenCalledWith(
+        ORG_ID,
+        { locations: [] },
+      );
+    });
+
+    it('rejects locations when the type is not an array', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({ locations: 'not-an-array' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateLocations).not.toHaveBeenCalled();
+    });
+
+    it('rejects a location item missing the required name field', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({
+          locations: [
+            {
+              address: '123 Main Street, Lagos, Nigeria',
+              email: 'info@company.com',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateLocations).not.toHaveBeenCalled();
+    });
+  });
+
   describe.each([
-    { section: 'locations', getter: 'getLocations', updater: 'updateLocations' },
     {
       section: 'organization-hierarchy',
       getter: 'getOrganisationHierarchy',
