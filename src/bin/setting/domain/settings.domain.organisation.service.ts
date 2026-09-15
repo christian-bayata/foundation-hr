@@ -1,7 +1,11 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
-import { OrganizationDocument } from '../../organization/entity/organization.schema';
+import {
+  BusinessDetails,
+  OrganizationDocument,
+} from '../../organization/entity/organization.schema';
 import { UpdateGeneralInfoDto } from '../organisation/dto/update-general-info.dto';
+import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-details.dto';
 import { AppResponse } from '../../../common/response/app-response';
 
 @Injectable()
@@ -97,29 +101,105 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Placeholder for the Business details settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Retrieve an organization's business details settings
    *
-   * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to retrieve settings for
+   * @returns {Promise<BusinessDetails | null>}
+   *
+   * @throws {404} Organization not found
    */
-  async getBusinessDetails(organizationId: string): Promise<unknown> {
-    return this.pendingSection('business-details', organizationId);
+  async getBusinessDetails(
+    organizationId: string,
+  ): Promise<BusinessDetails | null> {
+    try {
+      const organization =
+        (await this.organizationRepository.findById(organizationId)) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return organization!.businessDetails ?? null;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getBusinessDetails.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Placeholder for the Business details settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Update an organization's business details settings.
+   * Nested tax details are merged with any existing values so partial updates are safe.
    *
-   * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial business details payload
+   * @returns {Promise<BusinessDetails | null>}
+   *
+   * @throws {404} Organization not found
    */
   async updateBusinessDetails(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
-    return this.pendingSection('business-details', organizationId, dto);
+    dto: UpdateBusinessDetailsDto,
+  ): Promise<BusinessDetails | null> {
+    try {
+      const found = await this.organizationRepository.findById(organizationId);
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current: BusinessDetails = found!.businessDetails ?? {
+        businessType: null,
+        industry: null,
+        incorporationDate: null,
+        currency: null,
+        companySize: null,
+        tin: null,
+      };
+
+      const merged: BusinessDetails = { ...current };
+
+      if (dto.businessType !== undefined)
+        merged.businessType = dto.businessType;
+      if (dto.industry !== undefined) merged.industry = dto.industry;
+      if (dto.companySize !== undefined) merged.companySize = dto.companySize;
+      if (dto.currency !== undefined) merged.currency = dto.currency;
+      if (dto.tin !== undefined) merged.tin = dto.tin;
+
+      // if (dto.tax) {
+      //   merged.tax = {
+      //     taxIdentificationNumber:
+      //       dto.tax.taxIdentificationNumber !== undefined
+      //         ? dto.tax.taxIdentificationNumber
+      //         : (current.tax?.taxIdentificationNumber ?? null),
+      //     vatNumber:
+      //       dto.tax.vatNumber !== undefined
+      //         ? dto.tax.vatNumber
+      //         : (current.tax?.vatNumber ?? null),
+      //   };
+      // }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { businessDetails: merged },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization business details',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated business details for org ${organizationId}`);
+      return updated!.businessDetails ?? null;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateBusinessDetails.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**

@@ -16,7 +16,11 @@ import type { CurrentUser as ICurrentUser } from '../../../common';
 import { SystemRole } from '../../auth/enum/role.enum';
 import { SettingsDomainOrganisationService } from '../domain/settings.domain.organisation.service';
 import { UpdateGeneralInfoDto } from './dto/update-general-info.dto';
-import { orgGeneralInfoSchema } from './dto/organisation.schemas';
+import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
+import {
+  orgBusinessDetailsSchema,
+  orgGeneralInfoSchema,
+} from './dto/organisation.schemas';
 
 @Controller('setting/organization')
 @UseGuards(JwtAuthGuard, RoleGuard)
@@ -41,7 +45,7 @@ export class OrganisationController {
   @Patch('general-info/update')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
-  @UsePipes(new JoiValidationPipe(orgGeneralInfoSchema))
+  // @UsePipes(new JoiValidationPipe(orgGeneralInfoSchema))
   async updateGeneralInfo(
     @CurrentUser() user: ICurrentUser,
     @Body() updateGeneralInfoDto: UpdateGeneralInfoDto,
@@ -73,15 +77,20 @@ export class OrganisationController {
   @Patch('business-details/update')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
+  // @UsePipes(new JoiValidationPipe(orgBusinessDetailsSchema))
   async updateBusinessDetails(
     @CurrentUser() user: ICurrentUser,
-    @Body() dto: unknown,
+    @Body() updateBusinessDetailsDto: UpdateBusinessDetailsDto,
   ) {
     const data = await this.organisationService.updateBusinessDetails(
       user.organizationId!,
-      dto,
+      updateBusinessDetailsDto,
     );
-    return AppResponse.success('Business details updated successfully', 200, data);
+    return AppResponse.success(
+      'Business details updated successfully',
+      200,
+      data,
+    );
   }
 
   @Get('locations/retrieve')
@@ -227,10 +236,7 @@ export class OrganisationController {
   @Patch('billing/update')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
-  async updateBilling(
-    @CurrentUser() user: ICurrentUser,
-    @Body() dto: unknown,
-  ) {
+  async updateBilling(@CurrentUser() user: ICurrentUser, @Body() dto: unknown) {
     const data = await this.organisationService.updateBilling(
       user.organizationId!,
       dto,

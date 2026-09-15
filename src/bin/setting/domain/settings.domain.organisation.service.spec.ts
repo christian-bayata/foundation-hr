@@ -96,9 +96,130 @@ describe('SettingsDomainOrganisationService', () => {
     });
   });
 
+  describe('getBusinessDetails', () => {
+    it('returns the business details sub-document when present', async () => {
+      const businessDetails = {
+        legalName: 'FoundationHR Ltd',
+        industry: 'Software',
+        tax: { vatNumber: 'VN12345' },
+      };
+      organizationRepository.findById.mockResolvedValue({
+        _id: ORG_ID,
+        businessDetails,
+      });
+
+      const result = await service.getBusinessDetails(ORG_ID);
+
+      expect(result).toEqual(businessDetails);
+    });
+
+    it('returns null when business details are not set', async () => {
+      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getBusinessDetails(ORG_ID);
+
+      expect(result).toBeNull();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findById.mockResolvedValue(null);
+
+      await expect(service.getBusinessDetails(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('updateBusinessDetails', () => {
+    it('saves a partial business details payload', async () => {
+      organizationRepository.findById.mockResolvedValue({
+        _id: ORG_ID,
+        businessDetails: { industry: 'Software' },
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        businessDetails: {
+          legalName: 'FoundationHR Ltd',
+          industry: 'Software',
+        },
+      });
+
+      const result = await service.updateBusinessDetails(ORG_ID, {
+        legalName: 'FoundationHR Ltd',
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        businessDetails: {
+          industry: 'Software',
+          legalName: 'FoundationHR Ltd',
+        },
+      });
+      expect(result).toEqual({
+        legalName: 'FoundationHR Ltd',
+        industry: 'Software',
+      });
+    });
+
+    it('merges nested tax details with existing values on partial updates', async () => {
+      organizationRepository.findById.mockResolvedValue({
+        _id: ORG_ID,
+        businessDetails: {
+          tax: {
+            taxIdentificationNumber: 'TIN-0001',
+            vatNumber: 'VN12345',
+          },
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        businessDetails: {
+          tax: {
+            taxIdentificationNumber: 'TIN-0001',
+            vatNumber: 'VN99999',
+          },
+        },
+      });
+
+      const result = await service.updateBusinessDetails(ORG_ID, {
+        tax: { vatNumber: 'VN99999' },
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        businessDetails: {
+          tax: {
+            taxIdentificationNumber: 'TIN-0001',
+            vatNumber: 'VN99999',
+          },
+        },
+      });
+      expect(result).toEqual({
+        tax: {
+          taxIdentificationNumber: 'TIN-0001',
+          vatNumber: 'VN99999',
+        },
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findById.mockResolvedValue(null);
+
+      await expect(
+        service.updateBusinessDetails(ORG_ID, { legalName: 'FoundationHR Ltd' }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws an error when the update fails', async () => {
+      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue(null);
+
+      await expect(
+        service.updateBusinessDetails(ORG_ID, { legalName: 'FoundationHR Ltd' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
   describe('pending sections', () => {
     it.each([
-      'getBusinessDetails',
       'getLocations',
       'getOrganisationHierarchy',
       'getPolicyManagement',
@@ -114,7 +235,6 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it.each([
-      'updateBusinessDetails',
       'updateLocations',
       'updateOrganisationHierarchy',
       'updatePolicyManagement',

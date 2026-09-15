@@ -1,8 +1,46 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Product } from '../../auth/enum/product.enum';
+import { BusinessType } from '../../setting/organisation/enum/organisation.enum';
 
 export type OrganizationDocument = Organization & Document;
+
+// @Schema({ _id: false })
+// export class TaxDetails {
+//   @Prop({ type: String, trim: true, default: null })
+//   taxIdentificationNumber: string | null;
+
+//   @Prop({ type: String, trim: true, default: null })
+//   vatNumber: string | null;
+// }
+
+@Schema({ _id: false })
+export class BusinessDetails {
+  // @Prop({ type: String, trim: true, default: null })
+  // legalName: string | null;
+
+  @Prop({
+    type: String,
+    enum: Object.values(BusinessType),
+    default: null,
+  })
+  businessType: BusinessType | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  industry: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  incorporationDate: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  currency: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  companySize: string | null;
+
+  @Prop({ type: String, default: null })
+  tin: string | null;
+}
 
 @Schema({ timestamps: true })
 export class Organization {
@@ -50,6 +88,9 @@ export class Organization {
 
   @Prop({ type: String, trim: true, default: null })
   fiscalYearStartDate: string | null;
+
+  @Prop({ type: () => BusinessDetails, default: null })
+  businessDetails: BusinessDetails | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

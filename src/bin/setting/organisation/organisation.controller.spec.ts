@@ -144,12 +144,67 @@ describe('OrganisationController (integration)', () => {
     });
   });
 
+  describe('GET /setting/organization/business-details/retrieve', () => {
+    it('retrieves the organization business details', async () => {
+      const businessDetails = {
+        legalName: 'FoundationHR Ltd',
+        industry: 'Software',
+      };
+      organisationService.getBusinessDetails.mockResolvedValue(businessDetails);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/business-details/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(businessDetails);
+      expect(organisationService.getBusinessDetails).toHaveBeenCalledWith(
+        ORG_ID,
+      );
+    });
+  });
+
+  describe('PATCH /setting/organization/business-details/update', () => {
+    it('updates the organization business details with a valid payload', async () => {
+      const updated = {
+        legalName: 'FoundationHR Ltd',
+        companyType: 'private_limited',
+        tax: { vatNumber: 'VN12345' },
+      };
+      organisationService.updateBusinessDetails.mockResolvedValue(updated);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/business-details/update')
+        .send({
+          legalName: 'FoundationHR Ltd',
+          companyType: 'private_limited',
+          tax: { vatNumber: 'VN12345' },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(organisationService.updateBusinessDetails).toHaveBeenCalledWith(
+        ORG_ID,
+        {
+          legalName: 'FoundationHR Ltd',
+          companyType: 'private_limited',
+          tax: { vatNumber: 'VN12345' },
+        },
+      );
+    });
+
+    it('rejects an invalid company type', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/business-details/update')
+        .send({ companyType: 'not-a-company-type' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBusinessDetails).not.toHaveBeenCalled();
+    });
+  });
+
   describe.each([
-    {
-      section: 'business-details',
-      getter: 'getBusinessDetails',
-      updater: 'updateBusinessDetails',
-    },
     { section: 'locations', getter: 'getLocations', updater: 'updateLocations' },
     {
       section: 'organization-hierarchy',

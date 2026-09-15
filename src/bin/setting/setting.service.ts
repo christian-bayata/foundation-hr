@@ -4,7 +4,11 @@ import { SettingsDomainOrganisationService } from './domain/settings.domain.orga
 import { CreateRoleDto } from './access-control/dto/create-role.dto';
 import { RoleDocument } from './access-control/entity/role.schema';
 import { UpdateGeneralInfoDto } from './organisation/dto/update-general-info.dto';
-import { OrganizationDocument } from '../organization/entity/organization.schema';
+import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-details.dto';
+import {
+  BusinessDetails,
+  OrganizationDocument,
+} from '../organization/entity/organization.schema';
 import { SystemRole } from '../auth/enum/role.enum';
 
 @Injectable()
@@ -229,9 +233,11 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's business details settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @returns {Promise<BusinessDetails | null>}
    */
-  getOrgBusinessDetails(organizationId: string): Promise<unknown> {
+  getOrgBusinessDetails(
+    organizationId: string,
+  ): Promise<BusinessDetails | null> {
     return this.organisationDomainService.getBusinessDetails(organizationId);
   }
 
@@ -240,12 +246,12 @@ export class SettingService {
    *
    * @param organizationId - The organization to scope the query to
    * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @returns {Promise<BusinessDetails | null>}
    */
   updateOrgBusinessDetails(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
+    dto: UpdateBusinessDetailsDto,
+  ): Promise<BusinessDetails | null> {
     return this.organisationDomainService.updateBusinessDetails(
       organizationId,
       dto,
