@@ -5,9 +5,16 @@ import {
   Location,
   OrganizationDocument,
 } from '../../organization/entity/organization.schema';
+import { EmployeeService } from '../../employee/employee.service';
+import { EmployeeDocument } from '../../employee/entity/employee.schema';
+import { PaginatedResult } from '../../employee/interface/employee.interface';
 import { UpdateGeneralInfoDto } from '../organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
+import {
+  UpdateHierarchyDto,
+  HierarchyQueryDto,
+} from '../organisation/dto/organization-hierarchy.dto';
 import { AppResponse } from '../../../common/response/app-response';
 
 @Injectable()
@@ -17,6 +24,8 @@ export class SettingsDomainOrganisationService {
   constructor(
     @Inject(OrganizationRepository)
     private readonly organizationRepository: OrganizationRepository,
+    @Inject(EmployeeService)
+    private readonly employeeService: EmployeeService,
   ) {}
 
   /**
@@ -30,7 +39,7 @@ export class SettingsDomainOrganisationService {
   async getGeneralInfo(organizationId: string): Promise<OrganizationDocument> {
     try {
       const organization =
-        (await this.organizationRepository.findById(organizationId)) ??
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
         AppResponse.error({
           message: 'Organization not found',
           status: HttpStatus.NOT_FOUND,
@@ -58,7 +67,9 @@ export class SettingsDomainOrganisationService {
     dto: UpdateGeneralInfoDto,
   ): Promise<OrganizationDocument> {
     try {
-      const found = await this.organizationRepository.findById(organizationId);
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
       if (!found) {
         AppResponse.error({
           message: 'Organization not found',
@@ -115,7 +126,7 @@ export class SettingsDomainOrganisationService {
   ): Promise<BusinessDetails | null> {
     try {
       const organization =
-        (await this.organizationRepository.findById(organizationId)) ??
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
         AppResponse.error({
           message: 'Organization not found',
           status: HttpStatus.NOT_FOUND,
@@ -144,7 +155,9 @@ export class SettingsDomainOrganisationService {
     dto: UpdateBusinessDetailsDto,
   ): Promise<BusinessDetails | null> {
     try {
-      const found = await this.organizationRepository.findById(organizationId);
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
       if (!found) {
         AppResponse.error({
           message: 'Organization not found',
@@ -221,7 +234,7 @@ export class SettingsDomainOrganisationService {
   ): Promise<Location[]> {
     try {
       const organization =
-        (await this.organizationRepository.findById(organizationId)) ??
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
         AppResponse.error({
           message: 'Organization not found',
           status: HttpStatus.NOT_FOUND,
@@ -235,8 +248,12 @@ export class SettingsDomainOrganisationService {
       }
 
       return locations.filter((location) =>
-        [location.name, location.address, location.phoneNumber, location.email]
-          .some((value) => value !== null && value.toLowerCase().includes(term)),
+        [
+          location.name,
+          location.address,
+          location.phoneNumber,
+          location.email,
+        ].some((value) => value !== null && value.toLowerCase().includes(term)),
       );
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.getLocations.name}`;
@@ -260,7 +277,9 @@ export class SettingsDomainOrganisationService {
     dto: UpdateLocationsDto,
   ): Promise<Location[]> {
     try {
-      const found = await this.organizationRepository.findById(organizationId);
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
       if (!found) {
         AppResponse.error({
           message: 'Organization not found',
@@ -297,29 +316,63 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Placeholder for the Organisation hierarchy settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Retrieve an organization's hierarchy data as a flat,
+   * org-scoped employee list. The manager relationship is the employee's
+   * supervisor field, so the tree can be derived client-side.
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param query - search, department, role (job title), supervisorId, batch
+   * and limit filters
+   * @returns {Promise<PaginatedResult<unknown>>}
    */
-  async getOrganisationHierarchy(organizationId: string): Promise<unknown> {
-    return this.pendingSection('organization-hierarchy', organizationId);
+  async getOrganisationHierarchy(
+    organizationId: string,
+    query: HierarchyQueryDto,
+  ): Promise<PaginatedResult<unknown>> {
+    try {
+      return await this.employeeService.listEmployees({
+        q: query?.search,
+        department: query?.department,
+        jobTitle: query?.role,
+        supervisorId: query?.supervisorId,
+        batch: query?.batch,
+        limit: query?.limit,
+        organizationId,
+      });
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getOrganisationHierarchy.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Placeholder for the Organisation hierarchy settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Reassign an employee's supervisor to update the
+   * organization's reporting structure. The employee whose supervisor field
+   * is null is the root of the hierarchy (e.g. the CEO).
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The employee and their new supervisor
+   * @returns {Promise<EmployeeDocument>}
+   *
+   * @throws {400} Self-assignment or circular reporting line
+   * @throws {404} Employee or supervisor not found
    */
   async updateOrganisationHierarchy(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
-    return this.pendingSection('organization-hierarchy', organizationId, dto);
+    dto: UpdateHierarchyDto,
+  ): Promise<EmployeeDocument> {
+    try {
+      return await this.employeeService.updateSupervisor(
+        dto.employeeId,
+        dto.supervisorId ?? null,
+        organizationId,
+      );
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateOrganisationHierarchy.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**

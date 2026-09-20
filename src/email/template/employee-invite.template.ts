@@ -1,6 +1,7 @@
 export function employeeInviteTemplate(
   inviteLink: string,
-  orgName = 'your organisation',
+  orgName: string,
+  expiryInfo: string,
 ): string {
   return `
     <!DOCTYPE html>
@@ -25,6 +26,9 @@ export function employeeInviteTemplate(
                     <h2 style="margin: 0 0 12px; color: #212121; font-size: 20px;">You're invited to join ${orgName}</h2>
                     <p style="margin: 0 0 24px; color: #475569; font-size: 15px; line-height: 1.6;">
                       You've been added as an employee. Click the button below to set up your account and start onboarding.
+                    </p>
+                    <p style="margin: 0 0 24px; color: #b45309; font-size: 13px; line-height: 1.6;">
+                      ${expiryInfo}
                     </p>
                     <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
                       <tr>

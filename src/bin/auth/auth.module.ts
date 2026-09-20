@@ -23,6 +23,6 @@ import { SettingModule } from '../setting/setting.module';
   ],
   controllers: [AuthController],
   providers: [AuthService, TokenService, UserRepository, AuthUtility],
-  exports: [AuthService],
+  exports: [AuthService, TokenService, AuthUtility],
 })
 export class AuthModule {}

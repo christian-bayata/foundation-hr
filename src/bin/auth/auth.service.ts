@@ -24,7 +24,7 @@ import { OrganizationDocument } from '../organization/entity/organization.schema
 import { SettingService } from '../setting/setting.service';
 import { Product } from './enum/product.enum';
 import { UserType } from './enum/user.enum';
-import { existsSync } from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class AuthService {
@@ -546,6 +546,7 @@ export class AuthService {
           name: organisationName,
           size: organisationSize,
           country,
+          slug: `oRg-${uuidv4()}`,
           owner: owner?._id,
           products: [],
           marketingOptIn,

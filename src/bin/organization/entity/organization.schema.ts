@@ -68,6 +68,9 @@ export class Organization {
   @Prop({ type: String, required: true })
   country: string;
 
+  @Prop({ type: String, required: true })
+  slug: string;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   owner: Types.ObjectId;
 

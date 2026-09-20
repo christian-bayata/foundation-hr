@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { AppException } from '../../../common/response/app-exception';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
+import { EmployeeService } from '../../employee/employee.service';
 import { BusinessType } from '../organisation/enum/organisation.enum';
 import { SettingsDomainOrganisationService } from './settings.domain.organisation.service';
 
@@ -14,6 +15,10 @@ describe('SettingsDomainOrganisationService', () => {
     findById: jest.Mock<AnyPromiseFn>;
     updateById: jest.Mock<AnyPromiseFn>;
   };
+  let employeeService: {
+    listEmployees: jest.Mock<AnyPromiseFn>;
+    updateSupervisor: jest.Mock<AnyPromiseFn>;
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -23,11 +28,17 @@ describe('SettingsDomainOrganisationService', () => {
       updateById: jest.fn(),
     };
 
+    employeeService = {
+      listEmployees: jest.fn(),
+      updateSupervisor: jest.fn(),
+    };
+
     const { Test } = await import('@nestjs/testing');
     const module = await Test.createTestingModule({
       providers: [
         SettingsDomainOrganisationService,
         { provide: OrganizationRepository, useValue: organizationRepository },
+        { provide: EmployeeService, useValue: employeeService },
       ],
     }).compile();
 
@@ -314,9 +325,115 @@ describe('SettingsDomainOrganisationService', () => {
     });
   });
 
+  describe('getOrganisationHierarchy', () => {
+    it('delegates to the employee service scoped to the organization', async () => {
+      const employees = [
+        {
+          _id: 'emp1',
+          firstName: 'Priscilla',
+          lastName: 'Jobi',
+          jobTitle: 'Art director',
+          supervisor: null,
+        },
+      ];
+      employeeService.listEmployees.mockResolvedValue({
+        data: employees,
+        count: 1,
+      });
+
+      const result = await service.getOrganisationHierarchy(ORG_ID, {
+        search: 'job',
+        department: 'Design',
+        role: 'Art director',
+        supervisorId: 'emp2',
+        batch: 2,
+        limit: 25,
+      });
+
+      expect(employeeService.listEmployees).toHaveBeenCalledWith({
+        q: 'job',
+        department: 'Design',
+        jobTitle: 'Art director',
+        supervisorId: 'emp2',
+        batch: 2,
+        limit: 25,
+        organizationId: ORG_ID,
+      });
+      expect(result).toEqual({ data: employees, count: 1 });
+    });
+
+    it('maps no role filter to an empty query', async () => {
+      employeeService.listEmployees.mockResolvedValue({ data: [], count: 0 });
+
+      await service.getOrganisationHierarchy(ORG_ID, {});
+
+      expect(employeeService.listEmployees).toHaveBeenCalledWith({
+        q: undefined,
+        department: undefined,
+        jobTitle: undefined,
+        supervisorId: undefined,
+        batch: undefined,
+        limit: undefined,
+        organizationId: ORG_ID,
+      });
+    });
+  });
+
+  describe('updateOrganisationHierarchy', () => {
+    it('delegates the reassignment to the employee service', async () => {
+      const updated = {
+        _id: 'emp1',
+        firstName: 'Priscilla',
+        lastName: 'Jobi',
+        supervisor: 'emp2',
+      };
+      employeeService.updateSupervisor.mockResolvedValue(updated);
+
+      const result = await service.updateOrganisationHierarchy(ORG_ID, {
+        employeeId: 'emp1',
+        supervisorId: 'emp2',
+      });
+
+      expect(employeeService.updateSupervisor).toHaveBeenCalledWith(
+        'emp1',
+        'emp2',
+        ORG_ID,
+      );
+      expect(result).toEqual(updated);
+    });
+
+    it('passes null through when no supervisor is provided', async () => {
+      const updated = { _id: 'emp1', supervisor: null };
+      employeeService.updateSupervisor.mockResolvedValue(updated);
+
+      await service.updateOrganisationHierarchy(ORG_ID, { employeeId: 'emp1' });
+
+      expect(employeeService.updateSupervisor).toHaveBeenCalledWith(
+        'emp1',
+        null,
+        ORG_ID,
+      );
+    });
+
+    it('propagates employee service errors', async () => {
+      employeeService.updateSupervisor.mockRejectedValue(
+        new AppException({
+          message: 'Supervisor not found',
+          status: 404,
+        } as any),
+      );
+
+      await expect(
+        service.updateOrganisationHierarchy(ORG_ID, {
+          employeeId: 'emp1',
+          supervisorId: 'missing',
+        }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
   describe('pending sections', () => {
     it.each([
-      'getOrganisationHierarchy',
       'getPolicyManagement',
       'getBranding',
       'getDepartments',
@@ -330,7 +447,6 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it.each([
-      'updateOrganisationHierarchy',
       'updatePolicyManagement',
       'updateBranding',
       'updateDepartments',

@@ -13,6 +13,7 @@ import { AppResponse } from '../../../common/response/app-response';
 import { EmailService } from '../../../email/email.service';
 import { roleInviteTemplate } from '../../../email/template/role-invite.template';
 import { MailDispatcherDto } from '../../../email/dto/send-mail.dto';
+import { OrganizationRepository } from '../../organization/repository/organization.repository';
 
 const SYSTEM_ROLE_DEFAULTS: {
   name: string;
@@ -66,6 +67,8 @@ export class SettingsDomainAccessControlService {
     @Inject(RoleRepository) private readonly roleRepository: RoleRepository,
     @Inject(UserRoleRepository)
     private readonly userRoleRepository: UserRoleRepository,
+    @Inject(OrganizationRepository)
+    private readonly organizationRepository: OrganizationRepository,
     @Inject(InviteeUserRepository)
     private readonly inviteeUserRepository: InviteeUserRepository,
     private readonly emailService: EmailService,
@@ -333,12 +336,18 @@ export class SettingsDomainAccessControlService {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const inviteLink = `${frontendUrl}/invite?roleId=${role._id}`;
 
+    let organizationDetails: any;
     for (const user of users) {
       try {
         await this.assignRole(
           user._id as Types.ObjectId as unknown as string,
           role._id as unknown as string,
           organizationId,
+        );
+
+        organizationDetails = await this.organizationRepository.findOrg(
+          { _id: organizationId },
+          'name',
         );
       } catch (error: any) {
         if (error?.status === HttpStatus.CONFLICT) {
@@ -354,7 +363,12 @@ export class SettingsDomainAccessControlService {
         to: user.email,
         from: 'Foundation HR <no-reply@foundationhr.com>',
         subject: `You've been added to ${role.name}`,
-        html: roleInviteTemplate(user.firstName, role.name, inviteLink),
+        html: roleInviteTemplate(
+          user.firstName,
+          role.name,
+          inviteLink,
+          organizationDetails?.name,
+        ),
       };
 
       try {

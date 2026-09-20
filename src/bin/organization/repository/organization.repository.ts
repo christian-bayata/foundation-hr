@@ -5,6 +5,7 @@ import {
   Organization,
   OrganizationDocument,
 } from '../entity/organization.schema';
+import { PropDataInput } from '../../../common/util/util.interface';
 
 @Injectable()
 export class OrganizationRepository {
@@ -46,16 +47,31 @@ export class OrganizationRepository {
   }
 
   /**
+   * @Responsibility: Repo to retrieve an organization by slug
+   *
+   * @param slug - The organization's URL slug
+   * @returns {Promise<OrganizationDocument | null>}
+   */
+  async findBySlug(slug: string): Promise<OrganizationDocument | null> {
+    try {
+      return await this.organizationModel.findOne({ slug });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to retrieve an organization by its id
    *
    * @param organizationId - The organization's id
    * @returns {Promise<OrganizationDocument | null>}
    */
-  async findById(
-    organizationId: string,
+  async findOrg(
+    where: PropDataInput,
+    attributes: string = '',
   ): Promise<OrganizationDocument | null> {
     try {
-      return await this.organizationModel.findById(organizationId);
+      return await this.organizationModel.findById(where).select(attributes);
     } catch (error) {
       throw error;
     }

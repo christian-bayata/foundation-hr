@@ -49,3 +49,48 @@ export enum EmployeeStatus {
   ON_LEAVE = 'on_leave',
   SUSPENDED = 'suspended',
 }
+
+export enum Sex {
+  MALE = 'male',
+  FEMALE = 'female',
+}
+
+export enum MaritalStatus {
+  SINGLE = 'single',
+  MARRIED = 'married',
+  DIVORCED = 'divorced',
+  WIDOWED = 'widowed',
+}
+
+export enum Religion {
+  CHRISTIANITY = 'christianity',
+  ISLAM = 'islam',
+  OTHERS = 'others',
+}
+
+export enum EducationLevel {
+  SSCE = 'ssce',
+  OND = 'ond',
+  HND = 'hnd',
+  BSC = 'bsc',
+  MSC = 'msc',
+  PHD = 'phd',
+  OTHERS = 'others',
+}
+
+export enum ContactType {
+  EMERGENCY_CONTACT = 'emergency_contact',
+  GUARANTOR = 'guarantor',
+  DEPENDANT = 'dependant',
+}
+
+export enum VoluntaryContribution {
+  YES = 'yes',
+  NO = 'no',
+}
+
+export enum OnboardingStep {
+  BASIC_INFORMATION = 'basic_information',
+  ASSOCIATED_CONTACTS = 'associated_contacts',
+  FINANCE_INFORMATION = 'finance_information',
+}

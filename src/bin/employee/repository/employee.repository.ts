@@ -2,7 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter } from 'mongoose';
 import { Employee, EmployeeDocument } from '../entity/employee.schema';
+import { Department } from '../enum/employee.enum';
 import { ListEmployeeFilters } from '../interface/employee.interface';
+import { PropDataInput } from '../../../common/util/util.interface';
 
 const SEARCHABLE_FIELDS = ['firstName', 'lastName', 'email', 'employeeId'];
 
@@ -49,9 +51,7 @@ export class EmployeeRepository {
    * @param employeeId - Employee identity string (e.g. 'FHR0001')
    * @returns {Promise<EmployeeDocument | null>}
    */
-  async findByEmployeeId(
-    employeeId: string,
-  ): Promise<EmployeeDocument | null> {
+  async findByEmployeeId(employeeId: string): Promise<EmployeeDocument | null> {
     try {
       return await this.employeeModel.findOne({ employeeId });
     } catch (error) {
@@ -88,6 +88,23 @@ export class EmployeeRepository {
   }
 
   /**
+   * @Responsibility: Repo to retrieve an employee by email address, including
+   * the password field (which is hidden from queries by default)
+   *
+   * @param email - Employee email (lowercased)
+   * @returns {Promise<EmployeeDocument | null>}
+   */
+  async findByEmailWithPassword(
+    email: string,
+  ): Promise<EmployeeDocument | null> {
+    try {
+      return await this.employeeModel.findOne({ email }).select('+password');
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to update an existing employee by employee ID
    *
    * @param employeeId - Employee identity string
@@ -118,7 +135,7 @@ export class EmployeeRepository {
    */
   async updateById(
     id: string,
-    data: Partial<Employee>,
+    data: Partial<Employee> | Record<string, any>,
   ): Promise<EmployeeDocument | null> {
     try {
       return await this.employeeModel.findByIdAndUpdate(
@@ -126,6 +143,26 @@ export class EmployeeRepository {
         { $set: data },
         { new: true },
       );
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to update an existing employee
+   *
+   * @param where - Generic
+   * @param data - Fields to update
+   * @returns {Promise<EmployeeDocument | null>}
+   */
+  async updateEmployee(
+    where: PropDataInput,
+    data: Partial<Employee> | Record<string, any>,
+  ): Promise<void> {
+    try {
+      await this.employeeModel.findOneAndUpdate(where, data, {
+        new: true,
+      });
     } catch (error) {
       throw error;
     }
@@ -185,11 +222,13 @@ export class EmployeeRepository {
     }
 
     if (filters.employeeType) where.employeeType = filters.employeeType;
-    if (filters.department) where.department = filters.department;
+    if (filters.department) where.department = filters.department as Department;
     if (filters.jobTitle) where.jobTitle = filters.jobTitle;
     if (filters.jobType) where.jobType = filters.jobType;
     if (filters.status) where.status = filters.status;
     if (filters.location) where.location = filters.location;
+    if (filters.supervisorId) where.supervisor = filters.supervisorId;
+    if (filters.organizationId) where.organizationId = filters.organizationId;
 
     return where;
   }

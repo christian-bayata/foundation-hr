@@ -13,6 +13,7 @@ import { InviteeUserRepository } from './access-control/repository/invitee-user.
 import { ROLE_SERVICE } from '../../common/guards/role.guard';
 import { EmailModule } from '../../email/email.module';
 import { OrganizationModule } from '../organization/organization.module';
+import { EmployeeModule } from '../employee/employee.module';
 import { User, UserSchema } from '../auth/entity/user.schema';
 
 @Module({
@@ -24,6 +25,7 @@ import { User, UserSchema } from '../auth/entity/user.schema';
     ]),
     EmailModule,
     OrganizationModule,
+    EmployeeModule,
   ],
   controllers: [SettingController, OrganisationController],
   providers: [

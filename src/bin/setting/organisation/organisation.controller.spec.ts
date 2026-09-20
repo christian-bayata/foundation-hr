@@ -303,12 +303,107 @@ describe('OrganisationController (integration)', () => {
     });
   });
 
+  describe('GET /setting/organization/organization-hierarchy/retrieve', () => {
+    it('retrieves the hierarchy with query filters', async () => {
+      const employees = {
+        data: [
+          {
+            _id: 'emp1',
+            firstName: 'Priscilla',
+            lastName: 'Jobi',
+            jobTitle: 'Art director',
+            supervisor: null,
+          },
+        ],
+        count: 1,
+      };
+      organisationService.getOrganisationHierarchy.mockResolvedValue(employees);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/organization-hierarchy/retrieve?search=job&department=Design&role=Art%20director&supervisorId=emp2&batch=2&limit=25',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(employees);
+      expect(organisationService.getOrganisationHierarchy).toHaveBeenCalledWith(
+        ORG_ID,
+        {
+          search: 'job',
+          department: 'Design',
+          role: 'Art director',
+          supervisorId: 'emp2',
+          batch: 2,
+          limit: 25,
+        },
+      );
+    });
+
+    it('retrieves the hierarchy without any filters', async () => {
+      organisationService.getOrganisationHierarchy.mockResolvedValue({
+        data: [],
+        count: 0,
+      });
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/organization-hierarchy/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getOrganisationHierarchy).toHaveBeenCalledWith(
+        ORG_ID,
+        {},
+      );
+    });
+
+    it('rejects a batch value below one', async () => {
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/organization-hierarchy/retrieve?batch=0',
+      );
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.getOrganisationHierarchy,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/organization/organization-hierarchy/update', () => {
+    it('reassigns an employee supervisor with a valid payload', async () => {
+      const updated = {
+        _id: 'emp1',
+        firstName: 'Priscilla',
+        lastName: 'Jobi',
+        supervisor: 'emp2',
+      };
+      organisationService.updateOrganisationHierarchy.mockResolvedValue(updated);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/organization-hierarchy/update')
+        .send({ employeeId: 'emp1', supervisorId: 'emp2' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(
+        organisationService.updateOrganisationHierarchy,
+      ).toHaveBeenCalledWith(ORG_ID, {
+        employeeId: 'emp1',
+        supervisorId: 'emp2',
+      });
+    });
+
+    it('rejects a payload missing the employee id', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/organization-hierarchy/update')
+        .send({ supervisorId: 'emp2' });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.updateOrganisationHierarchy,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
   describe.each([
-    {
-      section: 'organization-hierarchy',
-      getter: 'getOrganisationHierarchy',
-      updater: 'updateOrganisationHierarchy',
-    },
     {
       section: 'policy-management',
       getter: 'getPolicyManagement',

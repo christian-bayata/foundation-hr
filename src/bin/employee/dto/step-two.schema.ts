@@ -3,6 +3,7 @@ import {
   ContractDuration,
   Department,
   JobType,
+  ProbationPeriod,
   WorkMode,
 } from '../enum/employee.enum';
 
@@ -28,9 +29,13 @@ export const stepTwoSchema = Joi.object({
       'any.only': 'Invalid work mode.',
       'any.required': 'Work mode is required.',
     }),
-  probationPeriod: Joi.string().optional().allow('', null).messages({
-    'any.only': 'Invalid probation period.',
-  }),
+  probationPeriod: Joi.string()
+    .valid(...Object.values(ProbationPeriod))
+    .optional()
+    .allow('', null)
+    .messages({
+      'any.only': 'Invalid probation period.',
+    }),
   department: Joi.string()
     .valid(...Object.values(Department))
     .required()

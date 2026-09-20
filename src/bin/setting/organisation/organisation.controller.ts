@@ -20,6 +20,10 @@ import { UpdateGeneralInfoDto } from './dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
 import { UpdateLocationsDto } from './dto/update-locations.dto';
 import {
+  UpdateHierarchyDto,
+  HierarchyQueryDto,
+} from './dto/organization-hierarchy.dto';
+import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
 } from './dto/organisation.schemas';
@@ -124,9 +128,13 @@ export class OrganisationController {
 
   @Get('organization-hierarchy/retrieve')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async retrieveOrganisationHierarchy(@CurrentUser() user: ICurrentUser) {
+  async retrieveOrganisationHierarchy(
+    @CurrentUser() user: ICurrentUser,
+    @Query() query: HierarchyQueryDto,
+  ) {
     const data = await this.organisationService.getOrganisationHierarchy(
       user.organizationId!,
+      query,
     );
     return AppResponse.success(
       'Organisation hierarchy retrieved successfully',
@@ -140,11 +148,11 @@ export class OrganisationController {
   @HttpCode(HttpStatus.OK)
   async updateOrganisationHierarchy(
     @CurrentUser() user: ICurrentUser,
-    @Body() dto: unknown,
+    @Body() updateHierarchyDto: UpdateHierarchyDto,
   ) {
     const data = await this.organisationService.updateOrganisationHierarchy(
       user.organizationId!,
-      dto,
+      updateHierarchyDto,
     );
     return AppResponse.success(
       'Organisation hierarchy updated successfully',

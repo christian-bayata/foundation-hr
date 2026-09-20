@@ -7,10 +7,16 @@ import { UpdateGeneralInfoDto } from './organisation/dto/update-general-info.dto
 import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
 import {
+  UpdateHierarchyDto,
+  HierarchyQueryDto,
+} from './organisation/dto/organization-hierarchy.dto';
+import {
   BusinessDetails,
   Location,
   OrganizationDocument,
 } from '../organization/entity/organization.schema';
+import { EmployeeDocument } from '../employee/entity/employee.schema';
+import { PaginatedResult } from '../employee/interface/employee.interface';
 import { SystemRole } from '../auth/enum/role.enum';
 
 @Injectable()
@@ -292,11 +298,16 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's organisation hierarchy settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param query - search, department, role and supervisorId filters
+   * @returns {Promise<PaginatedResult<unknown>>}
    */
-  getOrgOrganisationHierarchy(organizationId: string): Promise<unknown> {
+  getOrgOrganisationHierarchy(
+    organizationId: string,
+    query: HierarchyQueryDto,
+  ): Promise<PaginatedResult<unknown>> {
     return this.organisationDomainService.getOrganisationHierarchy(
       organizationId,
+      query,
     );
   }
 
@@ -304,13 +315,13 @@ export class SettingService {
    * @Responsibility: Module-level facade to update an organization's organisation hierarchy settings
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The employee reassignment payload
+   * @returns {Promise<EmployeeDocument>}
    */
   updateOrgOrganisationHierarchy(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
+    dto: UpdateHierarchyDto,
+  ): Promise<EmployeeDocument> {
     return this.organisationDomainService.updateOrganisationHierarchy(
       organizationId,
       dto,

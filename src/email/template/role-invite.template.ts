@@ -2,7 +2,7 @@ export function roleInviteTemplate(
   firstName: string,
   roleName: string,
   inviteLink: string,
-  orgName = 'your organisation',
+  orgName: string,
 ): string {
   return `
     <!DOCTYPE html>

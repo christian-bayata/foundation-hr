@@ -1,5 +1,4 @@
 import {
-  Department,
   EmployeeStatus,
   EmployeeType,
   JobType,
@@ -8,11 +7,13 @@ import {
 export interface ListEmployeeQuery {
   q?: string;
   employeeType?: EmployeeType;
-  department?: Department;
+  department?: string;
   jobTitle?: string;
   jobType?: JobType;
   status?: EmployeeStatus;
   location?: string;
+  supervisorId?: string;
+  organizationId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   batch?: number;
@@ -22,11 +23,13 @@ export interface ListEmployeeQuery {
 export interface ListEmployeeFilters {
   q?: string;
   employeeType?: EmployeeType;
-  department?: Department;
+  department?: string;
   jobTitle?: string;
   jobType?: JobType;
   status?: EmployeeStatus;
   location?: string;
+  supervisorId?: string;
+  organizationId?: string;
 }
 
 export interface PaginatedResult<T> {
