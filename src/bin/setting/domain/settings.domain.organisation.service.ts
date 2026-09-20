@@ -7,14 +7,11 @@ import {
 } from '../../organization/entity/organization.schema';
 import { EmployeeService } from '../../employee/employee.service';
 import { EmployeeDocument } from '../../employee/entity/employee.schema';
-import { PaginatedResult } from '../../employee/interface/employee.interface';
+import { HierarchyTreeNode } from '../../employee/interface/employee.interface';
 import { UpdateGeneralInfoDto } from '../organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
-import {
-  UpdateHierarchyDto,
-  HierarchyQueryDto,
-} from '../organisation/dto/organization-hierarchy.dto';
+import { UpdateHierarchyDto } from '../organisation/dto/organization-hierarchy.dto';
 import { AppResponse } from '../../../common/response/app-response';
 
 @Injectable()
@@ -316,29 +313,21 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Retrieve an organization's hierarchy data as a flat,
-   * org-scoped employee list. The manager relationship is the employee's
-   * supervisor field, so the tree can be derived client-side.
+   * @Responsibility: Retrieve an organization's hierarchy as a nested tree.
+   * Employees reference their manager through the supervisor field, so the
+   * roots are the employees at the top of the reporting structure and children
+   * are the employees reporting to each node.
    *
    * @param organizationId - The organization to scope the query to
-   * @param query - search, department, role (job title), supervisorId, batch
-   * and limit filters
-   * @returns {Promise<PaginatedResult<unknown>>}
+   * @returns {Promise<HierarchyTreeNode[]>}
    */
   async getOrganisationHierarchy(
     organizationId: string,
-    query: HierarchyQueryDto,
-  ): Promise<PaginatedResult<unknown>> {
+  ): Promise<HierarchyTreeNode[]> {
     try {
-      return await this.employeeService.listEmployees({
-        q: query?.search,
-        department: query?.department,
-        jobTitle: query?.role,
-        supervisorId: query?.supervisorId,
-        batch: query?.batch,
-        limit: query?.limit,
+      return await this.employeeService.getOrganisationHierarchy(
         organizationId,
-      });
+      );
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.getOrganisationHierarchy.name}`;
       AppResponse.error(error);

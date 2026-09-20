@@ -1,11 +1,4 @@
-import {
-  IsNotEmpty,
-  IsOptional,
-  IsInt,
-  IsString,
-  Min,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class UpdateHierarchyDto {
   @IsString()
@@ -17,34 +10,4 @@ export class UpdateHierarchyDto {
   @IsString()
   @IsOptional()
   supervisorId?: string | null;
-}
-
-export class HierarchyQueryDto {
-  @IsString()
-  @IsOptional()
-  search?: string;
-
-  @IsString()
-  @IsOptional()
-  department?: string;
-
-  @IsString()
-  @IsOptional()
-  role?: string;
-
-  @IsString()
-  @IsOptional()
-  supervisorId?: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  batch?: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  limit?: number;
 }

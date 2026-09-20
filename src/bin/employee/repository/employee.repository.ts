@@ -169,6 +169,27 @@ export class EmployeeRepository {
   }
 
   /**
+   * @Responsibility: Repo to retrieve all employees belonging to an organization,
+   * without pagination. Used to assemble the org chart hierarchy.
+   *
+   * @param organizationId - Organization id to scope the query to
+   * @returns {Promise<EmployeeDocument[]>}
+   */
+  async findByOrganization(
+    organizationId: string,
+    attributes: string = '',
+  ): Promise<EmployeeDocument[]> {
+    try {
+      return await this.employeeModel
+        .find({ organizationId })
+        .select(attributes)
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to retrieve employees in batches with search,
    * filters, sorting and pagination
    *

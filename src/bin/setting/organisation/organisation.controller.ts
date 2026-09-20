@@ -7,7 +7,6 @@ import {
   Patch,
   Query,
   UseGuards,
-  UsePipes,
 } from '@nestjs/common';
 import { AppResponse, JoiValidationPipe, Roles } from '../../../common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -19,10 +18,7 @@ import { SettingsDomainOrganisationService } from '../domain/settings.domain.org
 import { UpdateGeneralInfoDto } from './dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
 import { UpdateLocationsDto } from './dto/update-locations.dto';
-import {
-  UpdateHierarchyDto,
-  HierarchyQueryDto,
-} from './dto/organization-hierarchy.dto';
+import { UpdateHierarchyDto } from './dto/organization-hierarchy.dto';
 import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
@@ -128,13 +124,9 @@ export class OrganisationController {
 
   @Get('organization-hierarchy/retrieve')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async retrieveOrganisationHierarchy(
-    @CurrentUser() user: ICurrentUser,
-    @Query() query: HierarchyQueryDto,
-  ) {
+  async retrieveOrganisationHierarchy(@CurrentUser() user: ICurrentUser) {
     const data = await this.organisationService.getOrganisationHierarchy(
       user.organizationId!,
-      query,
     );
     return AppResponse.success(
       'Organisation hierarchy retrieved successfully',

@@ -31,6 +31,7 @@ describe('EmployeeService', () => {
     findByEmail: jest.Mock<AnyPromiseFn>;
     findByEmailWithPassword: jest.Mock<AnyPromiseFn>;
     findById: jest.Mock<AnyPromiseFn>;
+    findByOrganization: jest.Mock<AnyPromiseFn>;
     updateById: jest.Mock<AnyPromiseFn>;
     updateByEmployeeId: jest.Mock<AnyPromiseFn>;
     paginatedQuery: jest.Mock<AnyPromiseFn>;
@@ -60,6 +61,7 @@ describe('EmployeeService', () => {
       findByEmail: jest.fn<AnyPromiseFn>(),
       findByEmailWithPassword: jest.fn<AnyPromiseFn>(),
       findById: jest.fn<AnyPromiseFn>(),
+      findByOrganization: jest.fn<AnyPromiseFn>(),
       updateById: jest.fn<AnyPromiseFn>(),
       updateByEmployeeId: jest.fn<AnyPromiseFn>(),
       paginatedQuery: jest.fn<AnyPromiseFn>(),
@@ -1209,6 +1211,92 @@ describe('EmployeeService', () => {
           service.saveOnboardingFinanceInformation(EMAIL, {} as any),
         ).rejects.toThrow(AppException);
       });
+    });
+  });
+
+  describe('getOrganisationHierarchy', () => {
+    const toDoc = (data: any) => ({
+      _id: data._id,
+      toObject: () => data,
+    });
+
+    it('builds a nested tree from the supervisor relationships', async () => {
+      employeeRepository.findByOrganization.mockResolvedValue([
+        toDoc({
+          _id: 'emp1',
+          firstName: 'Priscilla',
+          lastName: 'Jobi',
+          jobTitle: 'Art director',
+          supervisor: null,
+        }),
+        toDoc({
+          _id: 'emp2',
+          firstName: 'Adam',
+          lastName: 'Smith',
+          jobTitle: 'Designer',
+          supervisor: 'emp1',
+        }),
+        toDoc({
+          _id: 'emp3',
+          firstName: 'Eve',
+          lastName: 'Jones',
+          jobTitle: 'Junior designer',
+          supervisor: 'emp2',
+        }),
+      ]);
+
+      const result = await service.getOrganisationHierarchy(ORG_ID);
+
+      expect(employeeRepository.findByOrganization).toHaveBeenCalledWith(
+        ORG_ID,
+      );
+      expect(result).toEqual([
+        {
+          _id: 'emp1',
+          firstName: 'Priscilla',
+          lastName: 'Jobi',
+          jobTitle: 'Art director',
+          supervisor: null,
+          children: [
+            {
+              _id: 'emp2',
+              firstName: 'Adam',
+              lastName: 'Smith',
+              jobTitle: 'Designer',
+              supervisor: 'emp1',
+              children: [
+                {
+                  _id: 'emp3',
+                  firstName: 'Eve',
+                  lastName: 'Jones',
+                  jobTitle: 'Junior designer',
+                  supervisor: 'emp2',
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('promotes employees whose supervisor is not in the org to roots', async () => {
+      employeeRepository.findByOrganization.mockResolvedValue([
+        toDoc({ _id: 'emp1', supervisor: null }),
+        toDoc({ _id: 'emp2', supervisor: 'missing-employee' }),
+      ]);
+
+      const result = await service.getOrganisationHierarchy(ORG_ID);
+
+      expect(result.map((node: any) => node._id)).toEqual(['emp1', 'emp2']);
+    });
+
+    it('returns an empty array when the org has no employees', async () => {
+      employeeRepository.findByOrganization.mockResolvedValue([]);
+
+      const result = await service.getOrganisationHierarchy(ORG_ID);
+
+      expect(result).toEqual([]);
     });
   });
 });

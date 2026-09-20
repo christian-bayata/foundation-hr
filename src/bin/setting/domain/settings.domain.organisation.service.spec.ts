@@ -17,6 +17,7 @@ describe('SettingsDomainOrganisationService', () => {
   };
   let employeeService: {
     listEmployees: jest.Mock<AnyPromiseFn>;
+    getOrganisationHierarchy: jest.Mock<AnyPromiseFn>;
     updateSupervisor: jest.Mock<AnyPromiseFn>;
   };
 
@@ -30,6 +31,7 @@ describe('SettingsDomainOrganisationService', () => {
 
     employeeService = {
       listEmployees: jest.fn(),
+      getOrganisationHierarchy: jest.fn(),
       updateSupervisor: jest.fn(),
     };
 
@@ -327,55 +329,35 @@ describe('SettingsDomainOrganisationService', () => {
 
   describe('getOrganisationHierarchy', () => {
     it('delegates to the employee service scoped to the organization', async () => {
-      const employees = [
+      const hierarchy = [
         {
           _id: 'emp1',
           firstName: 'Priscilla',
           lastName: 'Jobi',
           jobTitle: 'Art director',
           supervisor: null,
+          children: [],
         },
       ];
-      employeeService.listEmployees.mockResolvedValue({
-        data: employees,
-        count: 1,
-      });
+      employeeService.getOrganisationHierarchy.mockResolvedValue(hierarchy);
 
-      const result = await service.getOrganisationHierarchy(ORG_ID, {
-        search: 'job',
-        department: 'Design',
-        role: 'Art director',
-        supervisorId: 'emp2',
-        batch: 2,
-        limit: 25,
-      });
+      const result = await service.getOrganisationHierarchy(ORG_ID);
 
-      expect(employeeService.listEmployees).toHaveBeenCalledWith({
-        q: 'job',
-        department: 'Design',
-        jobTitle: 'Art director',
-        supervisorId: 'emp2',
-        batch: 2,
-        limit: 25,
-        organizationId: ORG_ID,
-      });
-      expect(result).toEqual({ data: employees, count: 1 });
+      expect(employeeService.getOrganisationHierarchy).toHaveBeenCalledWith(
+        ORG_ID,
+      );
+      expect(result).toEqual(hierarchy);
     });
 
-    it('maps no role filter to an empty query', async () => {
-      employeeService.listEmployees.mockResolvedValue({ data: [], count: 0 });
+    it('returns an empty array when the organization has no employees', async () => {
+      employeeService.getOrganisationHierarchy.mockResolvedValue([]);
 
-      await service.getOrganisationHierarchy(ORG_ID, {});
+      const result = await service.getOrganisationHierarchy(ORG_ID);
 
-      expect(employeeService.listEmployees).toHaveBeenCalledWith({
-        q: undefined,
-        department: undefined,
-        jobTitle: undefined,
-        supervisorId: undefined,
-        batch: undefined,
-        limit: undefined,
-        organizationId: ORG_ID,
-      });
+      expect(employeeService.getOrganisationHierarchy).toHaveBeenCalledWith(
+        ORG_ID,
+      );
+      expect(result).toEqual([]);
     });
   });
 

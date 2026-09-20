@@ -36,3 +36,8 @@ export interface PaginatedResult<T> {
   data: T[];
   count: number;
 }
+
+export interface HierarchyTreeNode {
+  children: HierarchyTreeNode[];
+  [key: string]: any;
+}

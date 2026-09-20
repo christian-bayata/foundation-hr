@@ -6,17 +6,14 @@ import { RoleDocument } from './access-control/entity/role.schema';
 import { UpdateGeneralInfoDto } from './organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
-import {
-  UpdateHierarchyDto,
-  HierarchyQueryDto,
-} from './organisation/dto/organization-hierarchy.dto';
+import { UpdateHierarchyDto } from './organisation/dto/organization-hierarchy.dto';
 import {
   BusinessDetails,
   Location,
   OrganizationDocument,
 } from '../organization/entity/organization.schema';
 import { EmployeeDocument } from '../employee/entity/employee.schema';
-import { PaginatedResult } from '../employee/interface/employee.interface';
+import { HierarchyTreeNode } from '../employee/interface/employee.interface';
 import { SystemRole } from '../auth/enum/role.enum';
 
 @Injectable()
@@ -298,16 +295,13 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's organisation hierarchy settings
    *
    * @param organizationId - The organization to scope the query to
-   * @param query - search, department, role and supervisorId filters
-   * @returns {Promise<PaginatedResult<unknown>>}
+   * @returns {Promise<HierarchyTreeNode[]>}
    */
   getOrgOrganisationHierarchy(
     organizationId: string,
-    query: HierarchyQueryDto,
-  ): Promise<PaginatedResult<unknown>> {
+  ): Promise<HierarchyTreeNode[]> {
     return this.organisationDomainService.getOrganisationHierarchy(
       organizationId,
-      query,
     );
   }
 

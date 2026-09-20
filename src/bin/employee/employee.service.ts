@@ -19,6 +19,7 @@ import {
   FinanceInformation,
 } from './entity/employee.schema';
 import {
+  HierarchyTreeNode,
   ListEmployeeFilters,
   ListEmployeeQuery,
   PaginatedResult,
@@ -1113,14 +1114,14 @@ export class EmployeeService {
       const limit = query?.limit ?? 10;
 
       const filters: ListEmployeeFilters = {
-        q: query.q,
-        employeeType: query.employeeType,
-        department: query.department,
-        jobTitle: query.jobTitle,
-        jobType: query.jobType,
-        status: query.status,
-        location: query.location,
-        supervisorId: query.supervisorId,
+        // q: query.q,
+        // employeeType: query.employeeType,
+        // department: query.department,
+        // jobTitle: query.jobTitle,
+        // jobType: query.jobType,
+        // status: query.status,
+        // location: query.location,
+        // supervisorId: query.supervisorId,
         organizationId: query.organizationId,
       };
 
@@ -1139,6 +1140,53 @@ export class EmployeeService {
       return { data: items, count: total };
     } catch (error: any) {
       error.location = `EmployeeServices.${this.listEmployees.name} method`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Assemble an organization's reporting hierarchy as a
+   * nested tree. Employees whose supervisor field is null (or whose
+   * supervisor does not belong to the organization) are the root nodes.
+   *
+   * @param organizationId - Organization to build the hierarchy for
+   * @returns {Promise<HierarchyTreeNode[]>}
+   */
+  async getOrganisationHierarchy(
+    organizationId: string,
+  ): Promise<HierarchyTreeNode[]> {
+    try {
+      const employees = await this.employeeRepository.findByOrganization(
+        organizationId,
+        '_id firstName lastName employeeUniqueId department jobTitle supervisor',
+      );
+
+      const nodes = new Map<string, HierarchyTreeNode>();
+
+      for (const employee of employees) {
+        nodes.set(employee._id.toString(), {
+          ...(employee as any).toObject(),
+          children: [],
+        });
+      }
+
+      const roots: HierarchyTreeNode[] = [];
+
+      for (const node of nodes.values()) {
+        const supervisorId = node.supervisor ? String(node.supervisor) : null;
+        const parent = supervisorId ? nodes.get(supervisorId) : undefined;
+
+        if (parent) {
+          parent.children.push(node);
+        } else {
+          roots.push(node);
+        }
+      }
+
+      return roots;
+    } catch (error: any) {
+      error.location = `EmployeeServices.${this.getOrganisationHierarchy.name} method`;
       AppResponse.error(error);
       throw error;
     }
