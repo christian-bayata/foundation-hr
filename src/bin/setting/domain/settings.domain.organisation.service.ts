@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
 import {
+  Branding,
   BusinessDetails,
   Location,
   OrganizationDocument,
@@ -12,6 +13,7 @@ import { UpdateGeneralInfoDto } from '../organisation/dto/update-general-info.dt
 import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from '../organisation/dto/organization-hierarchy.dto';
+import { UpdateBrandingDto } from '../organisation/dto/update-branding.dto';
 import { AppResponse } from '../../../common/response/app-response';
 
 @Injectable()
@@ -391,26 +393,95 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Placeholder for the Branding settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Retrieve an organization's branding settings
    *
-   * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to retrieve settings for
+   * @returns {Promise<Branding | null>}
+   *
+   * @throws {404} Organization not found
    */
-  async getBranding(organizationId: string): Promise<unknown> {
-    return this.pendingSection('branding', organizationId);
+  async getBranding(organizationId: string): Promise<Branding | null> {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return organization!.branding ?? null;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getBranding.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Placeholder for the Branding settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Update an organization's branding settings.
+   * Scalar fields (logo, brand colors) are merged with existing values, so
+   * partial updates are safe and an explicit null logoUrl clears the logo.
+   * Array fields (custom domains, login page images) represent the full
+   * desired state and are replaced as-is.
    *
-   * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial branding payload
+   * @returns {Promise<Branding | null>}
+   *
+   * @throws {404} Organization not found
    */
-  async updateBranding(organizationId: string, dto: unknown): Promise<unknown> {
-    return this.pendingSection('branding', organizationId, dto);
+  async updateBranding(
+    organizationId: string,
+    dto: UpdateBrandingDto,
+  ): Promise<any> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current: Branding = found!.branding ?? {
+        logoUrl: null,
+        navigationBackgroundColor: null,
+        buttonColor: null,
+        customDomains: [],
+        loginPageImages: [],
+      };
+
+      const merged: Branding = { ...current };
+
+      if (dto.logoUrl !== undefined) merged.logoUrl = dto.logoUrl;
+      if (dto.navigationBackgroundColor !== undefined)
+        merged.navigationBackgroundColor = dto.navigationBackgroundColor;
+      if (dto.buttonColor !== undefined) merged.buttonColor = dto.buttonColor;
+      if (dto.customDomains !== undefined)
+        merged.customDomains = dto.customDomains;
+      if (dto.loginPageImages !== undefined)
+        merged.loginPageImages = dto.loginPageImages;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { branding: merged },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization branding',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return 'Successfully updated branding';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateBranding.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**

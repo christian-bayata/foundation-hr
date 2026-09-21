@@ -7,7 +7,9 @@ import { UpdateGeneralInfoDto } from './organisation/dto/update-general-info.dto
 import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from './organisation/dto/organization-hierarchy.dto';
+import { UpdateBrandingDto } from './organisation/dto/update-branding.dto';
 import {
+  Branding,
   BusinessDetails,
   Location,
   OrganizationDocument,
@@ -353,9 +355,9 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's branding settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @returns {Promise<Branding | null>}
    */
-  getOrgBranding(organizationId: string): Promise<unknown> {
+  getOrgBranding(organizationId: string): Promise<Branding | null> {
     return this.organisationDomainService.getBranding(organizationId);
   }
 
@@ -363,10 +365,13 @@ export class SettingService {
    * @Responsibility: Module-level facade to update an organization's branding settings
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The partial branding payload
+   * @returns {Promise<Branding | null>}
    */
-  updateOrgBranding(organizationId: string, dto: unknown): Promise<unknown> {
+  updateOrgBranding(
+    organizationId: string,
+    dto: UpdateBrandingDto,
+  ): Promise<Branding | null> {
     return this.organisationDomainService.updateBranding(organizationId, dto);
   }
 

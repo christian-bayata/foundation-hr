@@ -220,7 +220,10 @@ describe('OrganisationController (integration)', () => {
       expect(response.status).toBe(200);
       expect(response.body.status).toBe(true);
       expect(response.body.data).toEqual(locations);
-      expect(organisationService.getLocations).toHaveBeenCalledWith(ORG_ID);
+      expect(organisationService.getLocations).toHaveBeenCalledWith(
+        ORG_ID,
+        undefined,
+      );
     });
 
     it('passes the search query parameter to the service', async () => {
@@ -378,13 +381,98 @@ describe('OrganisationController (integration)', () => {
     });
   });
 
+  describe('GET /setting/organization/branding/retrieve', () => {
+    it('retrieves the organization branding', async () => {
+      const branding = {
+        logoUrl: 'https://cdn.example.com/logo.png',
+        navigationBackgroundColor: '#FAFDFF',
+        buttonColor: '#1E88E5',
+        customDomains: ['@foundationhr.com'],
+        loginPageImages: ['https://cdn.example.com/login-hero.png'],
+      };
+      organisationService.getBranding.mockResolvedValue(branding);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/branding/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(branding);
+      expect(organisationService.getBranding).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('PATCH /setting/organization/branding/update', () => {
+    it('updates the organization branding with a valid payload', async () => {
+      const payload = {
+        navigationBackgroundColor: '#FAFDFF',
+        buttonColor: '#1E88E5',
+        customDomains: ['@foundationhr.com', '@foundationhr.co.uk'],
+        loginPageImages: ['https://cdn.example.com/login-1.png'],
+      };
+      const updated = { logoUrl: null, ...payload };
+      organisationService.updateBranding.mockResolvedValue(updated);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(organisationService.updateBranding).toHaveBeenCalledWith(
+        ORG_ID,
+        payload,
+      );
+    });
+
+    it('clears the logo with an explicit null logoUrl', async () => {
+      organisationService.updateBranding.mockResolvedValue({ logoUrl: null });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ logoUrl: null });
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateBranding).toHaveBeenCalledWith(ORG_ID, {
+        logoUrl: null,
+      });
+    });
+
+    it('rejects an invalid hex color', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ buttonColor: 'not-a-color' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBranding).not.toHaveBeenCalled();
+    });
+
+    it('rejects custom domains when the type is not an array', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ customDomains: 'not-an-array' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBranding).not.toHaveBeenCalled();
+    });
+
+    it('rejects login page images with non-string entries', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ loginPageImages: [123] });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBranding).not.toHaveBeenCalled();
+    });
+  });
+
   describe.each([
     {
       section: 'policy-management',
       getter: 'getPolicyManagement',
       updater: 'updatePolicyManagement',
     },
-    { section: 'branding', getter: 'getBranding', updater: 'updateBranding' },
     {
       section: 'departments',
       getter: 'getDepartments',

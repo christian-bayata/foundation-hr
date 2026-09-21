@@ -12,7 +12,7 @@ type AnyPromiseFn = (...args: any[]) => Promise<any>;
 describe('SettingsDomainOrganisationService', () => {
   let service: SettingsDomainOrganisationService;
   let organizationRepository: {
-    findById: jest.Mock<AnyPromiseFn>;
+    findOrg: jest.Mock<AnyPromiseFn>;
     updateById: jest.Mock<AnyPromiseFn>;
   };
   let employeeService: {
@@ -25,7 +25,7 @@ describe('SettingsDomainOrganisationService', () => {
     jest.clearAllMocks();
 
     organizationRepository = {
-      findById: jest.fn(),
+      findOrg: jest.fn(),
       updateById: jest.fn(),
     };
 
@@ -52,16 +52,18 @@ describe('SettingsDomainOrganisationService', () => {
   describe('getGeneralInfo', () => {
     it('returns the organization general information when found', async () => {
       const org = { _id: ORG_ID, name: 'FoundationHR' };
-      organizationRepository.findById.mockResolvedValue(org);
+      organizationRepository.findOrg.mockResolvedValue(org);
 
       const result = await service.getGeneralInfo(ORG_ID);
 
-      expect(organizationRepository.findById).toHaveBeenCalledWith(ORG_ID);
+      expect(organizationRepository.findOrg).toHaveBeenCalledWith({
+        _id: ORG_ID,
+      });
       expect(result).toEqual(org);
     });
 
     it('throws a 404 when the organization does not exist', async () => {
-      organizationRepository.findById.mockResolvedValue(null);
+      organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(service.getGeneralInfo(ORG_ID)).rejects.toThrow(AppException);
     });
@@ -69,7 +71,7 @@ describe('SettingsDomainOrganisationService', () => {
 
   describe('updateGeneralInfo', () => {
     it('partially updates only the provided fields', async () => {
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
       organizationRepository.updateById.mockResolvedValue({
         _id: ORG_ID,
         name: 'FoundationHR',
@@ -93,7 +95,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws a 404 when the organization does not exist', async () => {
-      organizationRepository.findById.mockResolvedValue(null);
+      organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(
         service.updateGeneralInfo(ORG_ID, { name: 'FoundationHR' }),
@@ -101,7 +103,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws an error when the update fails', async () => {
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
       organizationRepository.updateById.mockResolvedValue(null);
 
       await expect(
@@ -117,7 +119,7 @@ describe('SettingsDomainOrganisationService', () => {
         industry: 'Software',
         tin: 'TIN-0001',
       };
-      organizationRepository.findById.mockResolvedValue({
+      organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         businessDetails,
       });
@@ -128,7 +130,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('returns null when business details are not set', async () => {
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
 
       const result = await service.getBusinessDetails(ORG_ID);
 
@@ -136,7 +138,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws a 404 when the organization does not exist', async () => {
-      organizationRepository.findById.mockResolvedValue(null);
+      organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(service.getBusinessDetails(ORG_ID)).rejects.toThrow(
         AppException,
@@ -146,7 +148,7 @@ describe('SettingsDomainOrganisationService', () => {
 
   describe('updateBusinessDetails', () => {
     it('merges a partial payload into the existing business details', async () => {
-      organizationRepository.findById.mockResolvedValue({
+      organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         businessDetails: { industry: 'Software' },
       });
@@ -180,7 +182,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws a 404 when the organization does not exist', async () => {
-      organizationRepository.findById.mockResolvedValue(null);
+      organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(
         service.updateBusinessDetails(ORG_ID, {
@@ -190,7 +192,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws an error when the update fails', async () => {
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
       organizationRepository.updateById.mockResolvedValue(null);
 
       await expect(
@@ -218,19 +220,21 @@ describe('SettingsDomainOrganisationService', () => {
     ];
 
     it('returns all locations when no search term is provided', async () => {
-      organizationRepository.findById.mockResolvedValue({
+      organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         locations,
       });
 
       const result = await service.getLocations(ORG_ID);
 
-      expect(organizationRepository.findById).toHaveBeenCalledWith(ORG_ID);
+      expect(organizationRepository.findOrg).toHaveBeenCalledWith({
+        _id: ORG_ID,
+      });
       expect(result).toEqual(locations);
     });
 
     it('returns an empty array when locations are not set', async () => {
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
 
       const result = await service.getLocations(ORG_ID);
 
@@ -238,7 +242,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('filters locations case-insensitively by name or email', async () => {
-      organizationRepository.findById.mockResolvedValue({
+      organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         locations,
       });
@@ -251,7 +255,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('returns an empty array when no location matches the search term', async () => {
-      organizationRepository.findById.mockResolvedValue({
+      organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         locations,
       });
@@ -262,7 +266,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws a 404 when the organization does not exist', async () => {
-      organizationRepository.findById.mockResolvedValue(null);
+      organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(service.getLocations(ORG_ID)).rejects.toThrow(AppException);
     });
@@ -278,7 +282,7 @@ describe('SettingsDomainOrganisationService', () => {
           email: 'info@company.com',
         },
       ];
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
       organizationRepository.updateById.mockResolvedValue({
         _id: ORG_ID,
         locations: incoming,
@@ -295,7 +299,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('clears locations when the payload is empty', async () => {
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
       organizationRepository.updateById.mockResolvedValue({
         _id: ORG_ID,
         locations: [],
@@ -310,7 +314,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws a 404 when the organization does not exist', async () => {
-      organizationRepository.findById.mockResolvedValue(null);
+      organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(
         service.updateLocations(ORG_ID, { locations: [] }),
@@ -318,7 +322,7 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('throws an error when the update fails', async () => {
-      organizationRepository.findById.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
       organizationRepository.updateById.mockResolvedValue(null);
 
       await expect(
@@ -414,36 +418,210 @@ describe('SettingsDomainOrganisationService', () => {
     });
   });
 
-  describe('pending sections', () => {
-    it.each([
-      'getPolicyManagement',
-      'getBranding',
-      'getDepartments',
-      'getBilling',
-    ])('%s returns an unimplemented placeholder', async (method) => {
-      const result = await (service as any)[method](ORG_ID);
+  describe('getBranding', () => {
+    it('returns the branding sub-document when present', async () => {
+      const branding = {
+        logoUrl: 'https://cdn.example.com/logo.png',
+        navigationBackgroundColor: '#FAFDFF',
+        buttonColor: '#1E88E5',
+        customDomains: ['@foundationhr.com'],
+        loginPageImages: ['https://cdn.example.com/login-hero.png'],
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        branding,
+      });
 
-      expect(result).toEqual(
-        expect.objectContaining({ organizationId: ORG_ID, implemented: false }),
-      );
+      const result = await service.getBranding(ORG_ID);
+
+      expect(organizationRepository.findOrg).toHaveBeenCalledWith({
+        _id: ORG_ID,
+      });
+      expect(result).toEqual(branding);
     });
 
-    it.each([
-      'updatePolicyManagement',
-      'updateBranding',
-      'updateDepartments',
-      'updateBilling',
-    ])('%s returns an unimplemented placeholder with the payload', async (method) => {
-      const payload = { key: 'value' };
-      const result = await (service as any)[method](ORG_ID, payload);
+    it('returns null when branding is not set', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
 
+      const result = await service.getBranding(ORG_ID);
+
+      expect(result).toBeNull();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getBranding(ORG_ID)).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('updateBranding', () => {
+    const existingBranding = {
+      logoUrl: 'https://cdn.example.com/logo.png',
+      navigationBackgroundColor: '#FAFDFF',
+      buttonColor: '#1E88E5',
+      customDomains: ['@foundationhr.com'],
+      loginPageImages: ['https://cdn.example.com/login-hero.png'],
+    };
+
+    it('merges a partial payload into the existing branding', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        branding: existingBranding,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        branding: { ...existingBranding, buttonColor: '#43A047' },
+      });
+
+      const result = await service.updateBranding(ORG_ID, {
+        buttonColor: '#43A047',
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          branding: expect.objectContaining({
+            ...existingBranding,
+            buttonColor: '#43A047',
+          }),
+        }),
+      );
       expect(result).toEqual(
         expect.objectContaining({
-          organizationId: ORG_ID,
-          implemented: false,
-          receivedPayload: payload,
+          ...existingBranding,
+          buttonColor: '#43A047',
         }),
       );
     });
+
+    it('replaces array fields with the submitted payload', async () => {
+      const customDomains = ['@foundationhr.com', '@foundationhr.co.uk'];
+      const loginPageImages = [
+        'https://cdn.example.com/login-1.png',
+        'https://cdn.example.com/login-2.png',
+      ];
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        branding: existingBranding,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        branding: { ...existingBranding, customDomains, loginPageImages },
+      });
+
+      const result = await service.updateBranding(ORG_ID, {
+        customDomains,
+        loginPageImages,
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          branding: expect.objectContaining({ customDomains, loginPageImages }),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({ customDomains, loginPageImages }),
+      );
+    });
+
+    it('clears the logo when logoUrl is explicitly null', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        branding: existingBranding,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        branding: { ...existingBranding, logoUrl: null },
+      });
+
+      const result = await service.updateBranding(ORG_ID, { logoUrl: null });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          branding: expect.objectContaining({ logoUrl: null }),
+        }),
+      );
+      expect(result).toEqual(expect.objectContaining({ logoUrl: null }));
+    });
+
+    it('seeds defaults when branding has never been saved', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        branding: {
+          logoUrl: null,
+          navigationBackgroundColor: '#FAFDFF',
+          buttonColor: null,
+          customDomains: [],
+          loginPageImages: [],
+        },
+      });
+
+      await service.updateBranding(ORG_ID, {
+        navigationBackgroundColor: '#FAFDFF',
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        branding: {
+          logoUrl: null,
+          navigationBackgroundColor: '#FAFDFF',
+          buttonColor: null,
+          customDomains: [],
+          loginPageImages: [],
+        },
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateBranding(ORG_ID, { buttonColor: '#43A047' }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws an error when the update fails', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue(null);
+
+      await expect(
+        service.updateBranding(ORG_ID, { buttonColor: '#43A047' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('pending sections', () => {
+    it.each(['getPolicyManagement', 'getDepartments', 'getBilling'])(
+      '%s returns an unimplemented placeholder',
+      async (method) => {
+        const result = await (service as any)[method](ORG_ID);
+
+        expect(result).toEqual(
+          expect.objectContaining({
+            organizationId: ORG_ID,
+            implemented: false,
+          }),
+        );
+      },
+    );
+
+    it.each(['updatePolicyManagement', 'updateDepartments', 'updateBilling'])(
+      '%s returns an unimplemented placeholder with the payload',
+      async (method) => {
+        const payload = { key: 'value' };
+        const result = await (service as any)[method](ORG_ID, payload);
+
+        expect(result).toEqual(
+          expect.objectContaining({
+            organizationId: ORG_ID,
+            implemented: false,
+            receivedPayload: payload,
+          }),
+        );
+      },
+    );
   });
 });

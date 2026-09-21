@@ -19,6 +19,7 @@ import { UpdateGeneralInfoDto } from './dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
 import { UpdateLocationsDto } from './dto/update-locations.dto';
 import { UpdateHierarchyDto } from './dto/organization-hierarchy.dto';
+import { UpdateBrandingDto } from './dto/update-branding.dto';
 import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
@@ -198,7 +199,7 @@ export class OrganisationController {
   @HttpCode(HttpStatus.OK)
   async updateBranding(
     @CurrentUser() user: ICurrentUser,
-    @Body() dto: unknown,
+    @Body() dto: UpdateBrandingDto,
   ) {
     const data = await this.organisationService.updateBranding(
       user.organizationId!,

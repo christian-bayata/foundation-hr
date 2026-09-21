@@ -57,6 +57,24 @@ export class BusinessDetails {
   tin: string | null;
 }
 
+@Schema({ _id: false })
+export class Branding {
+  @Prop({ type: String, default: null })
+  logoUrl: string | null;
+
+  @Prop({ type: String, default: null })
+  navigationBackgroundColor: string | null;
+
+  @Prop({ type: String, default: null })
+  buttonColor: string | null;
+
+  @Prop({ type: [String], default: [] })
+  customDomains: string[];
+
+  @Prop({ type: [String], default: [] })
+  loginPageImages: string[];
+}
+
 @Schema({ timestamps: true })
 export class Organization {
   @Prop({ type: String, required: true })
@@ -112,6 +130,9 @@ export class Organization {
 
   @Prop({ type: () => [Location], default: [] })
   locations: Location[];
+
+  @Prop({ type: () => Branding, default: null })
+  branding: Branding | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);
