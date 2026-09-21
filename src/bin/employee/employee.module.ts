@@ -29,6 +29,6 @@ import { OrganizationRepository } from '../organization/repository/organization.
     EmployeeUtility,
     OrganizationRepository,
   ],
-  exports: [EmployeeService],
+  exports: [EmployeeService, EmployeeRepository],
 })
 export class EmployeeModule {}

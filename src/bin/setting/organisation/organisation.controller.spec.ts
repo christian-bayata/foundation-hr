@@ -467,16 +467,137 @@ describe('OrganisationController (integration)', () => {
     });
   });
 
+  describe('GET /setting/organization/departments/retrieve', () => {
+    it('retrieves departments without a search query', async () => {
+      const departments = [
+        {
+          _id: '64f1b2c3d4e5f678901234c1',
+          code: 'hr',
+          name: 'Human Resources',
+          headOfDepartmentId: null,
+          headOfDepartmentName: null,
+          parentDepartmentId: null,
+          parentDepartmentName: null,
+        },
+      ];
+      organisationService.getDepartments.mockResolvedValue(departments);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/departments/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(departments);
+      expect(organisationService.getDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        undefined,
+      );
+    });
+
+    it('passes the search query parameter to the service', async () => {
+      organisationService.getDepartments.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/departments/retrieve?search=logistics',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        'logistics',
+      );
+    });
+  });
+
+  describe('PATCH /setting/organization/departments/update', () => {
+    it('updates departments with a valid payload', async () => {
+      const incoming = [
+        {
+          name: 'Operations',
+          headOfDepartmentId: null,
+          parentCode: null,
+        },
+        {
+          name: 'Logistics & Distribution',
+          headOfDepartmentId: '64f1b2c3d4e5f678901234c4',
+          parentCode: 'operations',
+        },
+      ];
+      organisationService.updateDepartments.mockResolvedValue(incoming);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update')
+        .send({ departments: incoming });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(incoming);
+      expect(organisationService.updateDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        { departments: incoming },
+      );
+    });
+
+    it('accepts an empty departments array to clear all departments', async () => {
+      organisationService.updateDepartments.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update')
+        .send({ departments: [] });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual([]);
+      expect(organisationService.updateDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        { departments: [] },
+      );
+    });
+
+    it('rejects departments when the type is not an array', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update')
+        .send({ departments: 'not-an-array' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateDepartments).not.toHaveBeenCalled();
+    });
+
+    it('rejects a department item missing the required name field', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update')
+        .send({ departments: [{ headOfDepartmentId: null }] });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateDepartments).not.toHaveBeenCalled();
+    });
+
+    it('accepts a department with a non-object-id head of department string', async () => {
+      const incoming = [
+        {
+          name: 'Design',
+          headOfDepartmentId: 'some-custom-string',
+          parentCode: null,
+        },
+      ];
+      organisationService.updateDepartments.mockResolvedValue(incoming);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update')
+        .send({ departments: incoming });
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        { departments: incoming },
+      );
+    });
+  });
+
   describe.each([
     {
       section: 'policy-management',
       getter: 'getPolicyManagement',
       updater: 'updatePolicyManagement',
-    },
-    {
-      section: 'departments',
-      getter: 'getDepartments',
-      updater: 'updateDepartments',
     },
     { section: 'billing', getter: 'getBilling', updater: 'updateBilling' },
   ])('$section endpoints', ({ section, getter, updater }) => {

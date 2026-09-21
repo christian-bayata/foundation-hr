@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Role, RoleSchema } from './access-control/entity/role.schema';
-import { UserRole, UserRoleSchema } from './access-control/entity/user-role.schema';
+import {
+  UserRole,
+  UserRoleSchema,
+} from './access-control/entity/user-role.schema';
 import { SettingController } from './setting.controller';
 import { SettingService } from './setting.service';
 import { SettingsDomainAccessControlService } from './domain/settings.domain.access-control.service';

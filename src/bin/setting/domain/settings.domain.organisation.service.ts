@@ -1,11 +1,15 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
+import { OrganizationDepartmentRepository } from '../../organization/repository/organization-department.repository';
 import {
   Branding,
   BusinessDetails,
   Location,
   OrganizationDocument,
 } from '../../organization/entity/organization.schema';
+import { OrganizationDepartment } from '../../organization/entity/organization-department.schema';
+import { EmployeeRepository } from '../../employee/repository/employee.repository';
 import { EmployeeService } from '../../employee/employee.service';
 import { EmployeeDocument } from '../../employee/entity/employee.schema';
 import { HierarchyTreeNode } from '../../employee/interface/employee.interface';
@@ -14,7 +18,18 @@ import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-de
 import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from '../organisation/dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from '../organisation/dto/update-branding.dto';
+import { UpdateDepartmentsDto } from '../organisation/dto/update-departments.dto';
+import {
+  AddDepartmentDto,
+  AddDepartmentsDto,
+  AddSingleDepartmentDto,
+} from '../organisation/dto/add-department.dto';
 import { AppResponse } from '../../../common/response/app-response';
+
+export type DepartmentView = OrganizationDepartment & {
+  headOfDepartmentName: string | null;
+  parentDepartmentName: string | null;
+};
 
 @Injectable()
 export class SettingsDomainOrganisationService {
@@ -23,8 +38,12 @@ export class SettingsDomainOrganisationService {
   constructor(
     @Inject(OrganizationRepository)
     private readonly organizationRepository: OrganizationRepository,
+    @Inject(OrganizationDepartmentRepository)
+    private readonly organizationDepartmentRepository: OrganizationDepartmentRepository,
     @Inject(EmployeeService)
     private readonly employeeService: EmployeeService,
+    @Inject(EmployeeRepository)
+    private readonly employeeRepository: EmployeeRepository,
   ) {}
 
   /**
@@ -476,7 +495,8 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      return 'Successfully updated branding';
+      this.logger.log(`Updated branding for org ${organizationId}`);
+      return updated!.branding ?? merged;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateBranding.name}`;
       AppResponse.error(error);
@@ -485,29 +505,432 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Placeholder for the Departments settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Retrieve an organization's departments settings.
+   * Departments are returned enriched with the head of department and parent
+   * department display names so the UI can render them directly.
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param search - Optional department name search term
+   * @returns {Promise<DepartmentView[]>}
+   *
+   * @throws {404} Organization not found
    */
-  async getDepartments(organizationId: string): Promise<unknown> {
-    return this.pendingSection('departments', organizationId);
+  async getDepartments(
+    organizationId: string,
+    search?: string,
+  ): Promise<DepartmentView[]> {
+    try {
+      if (
+        !(await this.organizationRepository.findOrg({ _id: organizationId }))
+      ) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const departments =
+        (await this.organizationDepartmentRepository.findByOrganization(
+          organizationId,
+        )) ?? [];
+
+      const term = search?.trim().toLowerCase();
+      const filtered = term
+        ? departments.filter((department) =>
+            department.name?.toLowerCase().includes(term),
+          )
+        : departments;
+
+      return await this.enrichDepartments(organizationId, filtered);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getDepartments.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Placeholder for the Departments settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Persist an organization's departments settings.
+   * The submitted list represents the full desired state. Existing departments
+   * are replaced: every submitted department is created as a fresh document
+   * with a newly generated id — nothing is ever matched or updated, regardless
+   * of name, head of department or parent code. Parent references are
+   * best-effort and never block creation.
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The full departments list payload
+   * @returns {Promise<Department[]>}
+   *
+   * @throws {400} Duplicate department name
+   * @throws {404} Organization not found
    */
   async updateDepartments(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
-    return this.pendingSection('departments', organizationId, dto);
+    dto: UpdateDepartmentsDto,
+  ): Promise<OrganizationDepartment[]> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const incoming = (dto.departments ?? []).map((department) => ({
+        name: department.name.trim(),
+        headOfDepartmentId: department.headOfDepartmentId ?? null,
+        parentCode: department.parentCode?.trim() || null,
+      }));
+
+      const existing =
+        (await this.organizationDepartmentRepository.findByOrganization(
+          organizationId,
+        )) ?? [];
+
+      const resolved = this.buildDepartmentPayload(
+        organizationId,
+        incoming,
+        existing,
+      );
+
+      await this.organizationDepartmentRepository.synchronizeDepartments(
+        organizationId,
+        resolved,
+      );
+
+      this.logger.log(`Replaced departments for org ${organizationId}`);
+      return resolved;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateDepartments.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add one or more new departments additively. Unlike
+   * updateDepartments (which reconciles the full list), this creates fresh
+   * documents for each entry without deleting existing ones. Validates
+   * duplicates against both the payload and the existing collection, and
+   * resolves parent references additively.
+   *
+   * @param organizationId - The organization to scope the creation to
+   * @param dto - Bulk add payload
+   * @returns {Promise<OrganizationDepartment[]>}
+   *
+   * @throws {400} Duplicate department name (in payload or already exists)
+   * @throws {404} Organization not found
+   */
+  async addDepartments(
+    organizationId: string,
+    dto: AddDepartmentsDto,
+  ): Promise<OrganizationDepartment[]> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const incoming = (dto.departments ?? []).map((dept) => ({
+        name: dept.name.trim(),
+        headOfDepartmentId: dept.headOfDepartmentId ?? null,
+        parentCode: dept.parentCode?.trim() || null,
+      }));
+
+      if (incoming.length === 0) {
+        AppResponse.error({
+          message: 'At least one department is required.',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const existing =
+        (await this.organizationDepartmentRepository.findByOrganization(
+          organizationId,
+        )) ?? [];
+
+      const resolved = this.buildAddDepartmentPayload(
+        organizationId,
+        incoming,
+        existing,
+      );
+
+      const created =
+        await this.organizationDepartmentRepository.createMany(resolved);
+
+      this.logger.log(
+        `Added ${created.length} department(s) for org ${organizationId}`,
+      );
+      return created as unknown as OrganizationDepartment[];
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addDepartments.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Convenience single-add wrapper around addDepartments.
+   * Validates and creates a single department document.
+   *
+   * @param organizationId - The organization to scope the creation to
+   * @param dto - Single department payload
+   * @returns {Promise<OrganizationDepartment>}
+   */
+  async addDepartment(
+    organizationId: string,
+    dto: AddSingleDepartmentDto | AddDepartmentDto,
+  ): Promise<OrganizationDepartment> {
+    const result = await this.addDepartments(organizationId, {
+      departments: [dto as AddDepartmentDto],
+    });
+    return result[0];
+  }
+
+  /**
+   * @Responsibility: Validate a departments payload, preserve existing
+   * departments matched by name (case-insensitive) so their ids and codes stay
+   * stable, and assign freshly generated ids only to new departments. Parent
+   * references are resolved against the combined set of existing + incoming
+   * departments; an unresolvable or self-referencing parent never blocks
+   * creation and falls back to null.
+   *
+   * @param organizationId - The organization to scope the query to
+   * @param incoming - The normalized departments payload
+   * @param existing - Existing departments for the organization
+   * @returns {OrganizationDepartment[]}
+   */
+  private buildDepartmentPayload(
+    organizationId: string,
+    incoming: {
+      name: string;
+      headOfDepartmentId: string | null;
+      parentCode: string | null;
+    }[],
+    existing: OrganizationDepartment[] = [],
+  ): OrganizationDepartment[] {
+    const names = new Set<string>();
+    for (const department of incoming) {
+      const nameKey = department.name.toLowerCase();
+      if (names.has(nameKey)) {
+        AppResponse.error({
+          message: `A department named "${department.name}" already exists`,
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+      names.add(nameKey);
+    }
+
+    const existingByName = new Map(
+      existing.map((dept) => [dept.name.toLowerCase(), dept]),
+    );
+
+    const rows = incoming.map((department) => {
+      const matched = existingByName.get(department.name.toLowerCase());
+      if (matched) {
+        return {
+          department,
+          id: matched._id as Types.ObjectId,
+          code: matched.code,
+        };
+      }
+      const id = new Types.ObjectId();
+      return { department, id, code: id.toString() };
+    });
+
+    // Combined lookup for parent resolution: existing + incoming (incoming overrides)
+    const combinedByName = new Map<string, { id: Types.ObjectId }>();
+    for (const dept of existing) {
+      combinedByName.set(dept.name.toLowerCase(), {
+        id: dept._id as Types.ObjectId,
+      });
+    }
+    for (const row of rows) {
+      combinedByName.set(row.department.name.toLowerCase(), { id: row.id });
+    }
+
+    return rows.map(({ department, id, code }) => {
+      let parentDepartmentId: string | null = null;
+      const parentCode = department.parentCode;
+      if (parentCode != null) {
+        const parent = combinedByName.get(parentCode.toLowerCase());
+        if (!parent) {
+          this.logger.warn(
+            `Unresolvable parent code "${parentCode}" for department "${department.name}" — ignoring parent`,
+          );
+        } else if (parent.id.toString() === id.toString()) {
+          this.logger.warn(
+            `Department "${department.name}" cannot be its own parent — ignoring parent`,
+          );
+        } else {
+          parentDepartmentId = parent.id.toString();
+        }
+      }
+
+      return {
+        _id: id,
+        organizationId,
+        code,
+        name: department.name,
+        headOfDepartmentId: department.headOfDepartmentId,
+        parentDepartmentId,
+      } as OrganizationDepartment;
+    });
+  }
+
+  /**
+   * @Responsibility: Validate an additive departments payload. Unlike
+   * buildDepartmentPayload (which preserves existing ids), this always
+   * generates fresh ids/codes and rejects duplicates that already exist in
+   * the collection or collide within the payload. Parent references are
+   * resolved additively against existing departments plus siblings in the
+   * same payload; unresolvable/self refs fall back to null.
+   */
+  private buildAddDepartmentPayload(
+    organizationId: string,
+    incoming: {
+      name: string;
+      headOfDepartmentId: string | null;
+      parentCode: string | null;
+    }[],
+    existing: OrganizationDepartment[] = [],
+  ): OrganizationDepartment[] {
+    const existingNames = new Set(
+      existing.map((dept) => dept.name.toLowerCase()),
+    );
+    const existingCodes = new Set(
+      existing.map((dept) => dept.code.toLowerCase()),
+    );
+    const seen = new Set<string>();
+    for (const dept of incoming) {
+      const key = dept.name.toLowerCase();
+      if (seen.has(key)) {
+        AppResponse.error({
+          message: `A department named "${dept.name}" already exists`,
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+      if (existingNames.has(key) || existingCodes.has(key)) {
+        AppResponse.error({
+          message: `A department named "${dept.name}" already exists`,
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+      seen.add(key);
+    }
+
+    const rows = incoming.map((dept) => {
+      const id = new Types.ObjectId();
+      return { department: dept, id, code: id.toString() };
+    });
+
+    // Build parent lookup: existing (by name + by code) + incoming siblings
+    const combinedByName = new Map<string, { id: Types.ObjectId }>();
+    const combinedByCode = new Map<string, { id: Types.ObjectId }>();
+    for (const dept of existing) {
+      combinedByName.set(dept.name.toLowerCase(), {
+        id: dept._id as Types.ObjectId,
+      });
+      combinedByCode.set(dept.code.toLowerCase(), {
+        id: dept._id as Types.ObjectId,
+      });
+    }
+    for (const row of rows) {
+      combinedByName.set(row.department.name.toLowerCase(), { id: row.id });
+      combinedByCode.set(row.code.toLowerCase(), { id: row.id });
+    }
+
+    return rows.map(({ department, id, code }) => {
+      let parentDepartmentId: string | null = null;
+      const parentCode = department.parentCode;
+      if (parentCode != null) {
+        const key = parentCode.toLowerCase();
+        const parent =
+          combinedByName.get(key) ?? combinedByCode.get(key) ?? null;
+        if (!parent) {
+          this.logger.warn(
+            `Unresolvable parent code "${parentCode}" for department "${department.name}" — ignoring parent`,
+          );
+        } else if (parent.id.toString() === id.toString()) {
+          this.logger.warn(
+            `Department "${department.name}" cannot be its own parent — ignoring parent`,
+          );
+        } else {
+          parentDepartmentId = parent.id.toString();
+        }
+      }
+      return {
+        _id: id,
+        organizationId,
+        code,
+        name: department.name,
+        headOfDepartmentId: department.headOfDepartmentId,
+        parentDepartmentId,
+      } as OrganizationDepartment;
+    });
+  }
+
+  /**
+   * @Responsibility: Resolve head of department and parent department display
+   * names for a list of departments. Employee names are loaded in a single
+   * org-scoped query and parent names are resolved from the list itself.
+   *
+   * @param organizationId - The organization to scope employee lookups to
+   * @param departments - The departments to enrich
+   * @returns {Promise<DepartmentView[]>}
+   */
+  private async enrichDepartments(
+    organizationId: string,
+    departments: OrganizationDepartment[],
+  ): Promise<DepartmentView[]> {
+    const hodIds = departments
+      .map((department) => department.headOfDepartmentId?.toString())
+      .filter((id): id is string => !!id);
+
+    let employeeNames = new Map<string, string>();
+    if (hodIds.length > 0) {
+      const employees = await this.employeeRepository.findByOrganization(
+        organizationId,
+        'firstName lastName',
+      );
+      employeeNames = new Map(
+        employees.map((employee) => [
+          employee._id.toString(),
+          [employee.firstName, employee.lastName]
+            .filter((part) => part !== null && part !== '')
+            .join(' '),
+        ]),
+      );
+    }
+
+    const departmentNames = new Map(
+      departments.map((department) => [
+        department._id?.toString(),
+        department.name,
+      ]),
+    );
+
+    return departments.map((department) => ({
+      ...(department as OrganizationDepartment),
+      headOfDepartmentName:
+        department.headOfDepartmentId != null
+          ? (employeeNames.get(department.headOfDepartmentId.toString()) ??
+            null)
+          : null,
+      parentDepartmentName:
+        department.parentDepartmentId != null
+          ? (departmentNames.get(department.parentDepartmentId.toString()) ??
+            null)
+          : null,
+    }));
   }
 
   /**

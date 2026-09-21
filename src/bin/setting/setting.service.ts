@@ -8,12 +8,20 @@ import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-det
 import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from './organisation/dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from './organisation/dto/update-branding.dto';
+import { UpdateDepartmentsDto } from './organisation/dto/update-departments.dto';
+import {
+  AddDepartmentDto,
+  AddDepartmentsDto,
+  AddSingleDepartmentDto,
+} from './organisation/dto/add-department.dto';
 import {
   Branding,
   BusinessDetails,
   Location,
   OrganizationDocument,
 } from '../organization/entity/organization.schema';
+import { OrganizationDepartment } from '../organization/entity/organization-department.schema';
+import { DepartmentView } from './domain/settings.domain.organisation.service';
 import { EmployeeDocument } from '../employee/entity/employee.schema';
 import { HierarchyTreeNode } from '../employee/interface/employee.interface';
 import { SystemRole } from '../auth/enum/role.enum';
@@ -379,27 +387,62 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's departments settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param search - Optional department name search term
+   * @returns {Promise<DepartmentView[]>}
    */
-  getOrgDepartments(organizationId: string): Promise<unknown> {
-    return this.organisationDomainService.getDepartments(organizationId);
+  getOrgDepartments(
+    organizationId: string,
+    search?: string,
+  ): Promise<DepartmentView[]> {
+    return this.organisationDomainService.getDepartments(
+      organizationId,
+      search,
+    );
   }
 
   /**
    * @Responsibility: Module-level facade to update an organization's departments settings
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The full departments list payload
+   * @returns {Promise<OrganizationDepartment[]>}
    */
   updateOrgDepartments(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
+    dto: UpdateDepartmentsDto,
+  ): Promise<OrganizationDepartment[]> {
     return this.organisationDomainService.updateDepartments(
       organizationId,
       dto,
     );
+  }
+
+  /**
+   * @Responsibility: Module-level facade to add new department(s) additively
+   *
+   * @param organizationId - The organization to scope the creation to
+   * @param dto - Bulk add payload
+   * @returns {Promise<OrganizationDepartment[]>}
+   */
+  addOrgDepartments(
+    organizationId: string,
+    dto: AddDepartmentsDto,
+  ): Promise<OrganizationDepartment[]> {
+    return this.organisationDomainService.addDepartments(organizationId, dto);
+  }
+
+  /**
+   * @Responsibility: Module-level facade to add a single department additively
+   *
+   * @param organizationId - The organization to scope the creation to
+   * @param dto - Single department payload
+   * @returns {Promise<OrganizationDepartment>}
+   */
+  addOrgDepartment(
+    organizationId: string,
+    dto: AddDepartmentDto | AddSingleDepartmentDto,
+  ): Promise<OrganizationDepartment> {
+    return this.organisationDomainService.addDepartment(organizationId, dto);
   }
 
   /**

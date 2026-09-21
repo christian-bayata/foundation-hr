@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -20,6 +21,12 @@ import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
 import { UpdateLocationsDto } from './dto/update-locations.dto';
 import { UpdateHierarchyDto } from './dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
+import { UpdateDepartmentsDto } from './dto/update-departments.dto';
+import {
+  AddDepartmentDto,
+  AddDepartmentsDto,
+  AddSingleDepartmentDto,
+} from './dto/add-department.dto';
 import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
@@ -210,9 +217,13 @@ export class OrganisationController {
 
   @Get('departments/retrieve')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async retrieveDepartments(@CurrentUser() user: ICurrentUser) {
+  async retrieveDepartments(
+    @CurrentUser() user: ICurrentUser,
+    @Query('search') search?: string,
+  ) {
     const data = await this.organisationService.getDepartments(
       user.organizationId!,
+      search,
     );
     return AppResponse.success('Departments retrieved successfully', 200, data);
   }
@@ -222,13 +233,41 @@ export class OrganisationController {
   @HttpCode(HttpStatus.OK)
   async updateDepartments(
     @CurrentUser() user: ICurrentUser,
-    @Body() dto: unknown,
+    @Body() updateDepartmentsDto: UpdateDepartmentsDto,
   ) {
     const data = await this.organisationService.updateDepartments(
       user.organizationId!,
-      dto,
+      updateDepartmentsDto,
     );
     return AppResponse.success('Departments updated successfully', 200, data);
+  }
+
+  @Post('departments/add')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  async addDepartments(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: AddDepartmentsDto,
+  ) {
+    const data = await this.organisationService.addDepartments(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success('Departments added successfully', 201, data);
+  }
+
+  @Post('departments/add-single')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  async addDepartment(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: AddSingleDepartmentDto,
+  ) {
+    const data = await this.organisationService.addDepartment(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success('Department added successfully', 201, data);
   }
 
   @Get('billing/retrieve')
