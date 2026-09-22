@@ -8,7 +8,7 @@ import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-det
 import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from './organisation/dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from './organisation/dto/update-branding.dto';
-import { UpdateDepartmentsDto } from './organisation/dto/update-departments.dto';
+import { UpdateDepartmentDto } from './organisation/dto/update-departments.dto';
 import {
   AddDepartmentDto,
   AddDepartmentsDto,
@@ -401,18 +401,22 @@ export class SettingService {
   }
 
   /**
-   * @Responsibility: Module-level facade to update an organization's departments settings
+   * @Responsibility: Module-level facade to update a single department matched
+   * by its unique code
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The full departments list payload
-   * @returns {Promise<OrganizationDepartment[]>}
+   * @param code - The unique department code to match
+   * @param dto - Partial department payload
+   * @returns {Promise<OrganizationDepartment>}
    */
   updateOrgDepartments(
     organizationId: string,
-    dto: UpdateDepartmentsDto,
-  ): Promise<OrganizationDepartment[]> {
+    code: string,
+    dto: UpdateDepartmentDto,
+  ): Promise<OrganizationDepartment> {
     return this.organisationDomainService.updateDepartments(
       organizationId,
+      code,
       dto,
     );
   }

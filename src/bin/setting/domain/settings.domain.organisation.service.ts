@@ -18,13 +18,14 @@ import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-de
 import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from '../organisation/dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from '../organisation/dto/update-branding.dto';
-import { UpdateDepartmentsDto } from '../organisation/dto/update-departments.dto';
+import { UpdateDepartmentDto } from '../organisation/dto/update-departments.dto';
 import {
   AddDepartmentDto,
   AddDepartmentsDto,
   AddSingleDepartmentDto,
 } from '../organisation/dto/add-department.dto';
 import { AppResponse } from '../../../common/response/app-response';
+import { AuthUtility } from '../../auth/auth.utility';
 
 export type DepartmentView = OrganizationDepartment & {
   headOfDepartmentName: string | null;
@@ -44,6 +45,8 @@ export class SettingsDomainOrganisationService {
     private readonly employeeService: EmployeeService,
     @Inject(EmployeeRepository)
     private readonly employeeRepository: EmployeeRepository,
+    @Inject(AuthUtility)
+    private readonly authUtility: AuthUtility,
   ) {}
 
   /**
@@ -532,16 +535,11 @@ export class SettingsDomainOrganisationService {
       const departments =
         (await this.organizationDepartmentRepository.findByOrganization(
           organizationId,
+          '',
+          search,
         )) ?? [];
 
-      const term = search?.trim().toLowerCase();
-      const filtered = term
-        ? departments.filter((department) =>
-            department.name?.toLowerCase().includes(term),
-          )
-        : departments;
-
-      return await this.enrichDepartments(organizationId, filtered);
+      return await this.enrichDepartments(organizationId, departments);
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.getDepartments.name}`;
       AppResponse.error(error);
@@ -550,24 +548,26 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Persist an organization's departments settings.
-   * The submitted list represents the full desired state. Existing departments
-   * are replaced: every submitted department is created as a fresh document
-   * with a newly generated id — nothing is ever matched or updated, regardless
-   * of name, head of department or parent code. Parent references are
-   * best-effort and never block creation.
+   * @Responsibility: Update a single department matched by its unique code.
+   * Only the fields present in the payload are applied; omitted fields keep
+   * their current values. An explicit null clears headOfDepartmentId /
+   * parentCode. Parent references are resolved against the organization's
+   * existing departments by code or name; an unresolvable or self-referencing
+   * parent never blocks the update and falls back to null.
    *
-   * @param organizationId - The organization to scope the query to
-   * @param dto - The full departments list payload
-   * @returns {Promise<Department[]>}
+   * @param organizationId - The organization to scope the update to
+   * @param code - The unique department code to match
+   * @param dto - Partial department payload
+   * @returns {Promise<OrganizationDepartment>}
    *
    * @throws {400} Duplicate department name
-   * @throws {404} Organization not found
+   * @throws {404} Organization or department not found
    */
   async updateDepartments(
     organizationId: string,
-    dto: UpdateDepartmentsDto,
-  ): Promise<OrganizationDepartment[]> {
+    code: string,
+    dto: UpdateDepartmentDto,
+  ): Promise<OrganizationDepartment> {
     try {
       const found = await this.organizationRepository.findOrg({
         _id: organizationId,
@@ -579,30 +579,90 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      const incoming = (dto.departments ?? []).map((department) => ({
-        name: department.name.trim(),
-        headOfDepartmentId: department.headOfDepartmentId ?? null,
-        parentCode: department.parentCode?.trim() || null,
-      }));
+      const department = await this.organizationDepartmentRepository.findByCode(
+        organizationId,
+        code,
+      );
+      if (!department) {
+        AppResponse.error({
+          message: 'Department not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
 
+      const departmentId = (department!._id as Types.ObjectId).toString();
       const existing =
         (await this.organizationDepartmentRepository.findByOrganization(
           organizationId,
         )) ?? [];
 
-      const resolved = this.buildDepartmentPayload(
+      const update: Partial<OrganizationDepartment> = {};
+
+      if (dto.name !== undefined) {
+        const name = dto.name.trim();
+        if (name.length === 0) {
+          AppResponse.error({
+            message: 'Department name must not be empty.',
+            status: HttpStatus.BAD_REQUEST,
+          });
+        }
+        const collision = existing.find(
+          (dept) =>
+            dept._id?.toString() !== departmentId &&
+            dept.name.toLowerCase() === name.toLowerCase(),
+        );
+        if (collision) {
+          AppResponse.error({
+            message: `A department named "${name}" already exists`,
+            status: HttpStatus.BAD_REQUEST,
+          });
+        }
+        update.name = name;
+      }
+
+      if (dto.headOfDepartmentId !== undefined) {
+        update.headOfDepartmentId = dto.headOfDepartmentId ?? null;
+      }
+
+      if (dto.parentCode !== undefined) {
+        const parentCode = dto.parentCode?.trim() || null;
+        let parentDepartmentId: string | null = null;
+        if (parentCode != null) {
+          const parent = existing.find(
+            (dept) =>
+              dept.code.toLowerCase() === parentCode.toLowerCase() ||
+              dept.name.toLowerCase() === parentCode.toLowerCase(),
+          );
+          if (!parent) {
+            this.logger.warn(
+              `Unresolvable parent code "${parentCode}" for department "${code}" — clearing parent`,
+            );
+          } else if (parent._id?.toString() === departmentId) {
+            this.logger.warn(
+              `Department "${code}" cannot be its own parent — clearing parent`,
+            );
+          } else {
+            parentDepartmentId = parent._id!.toString();
+          }
+        }
+        update.parentDepartmentId = parentDepartmentId;
+      }
+
+      const updated = await this.organizationDepartmentRepository.updateByCode(
         organizationId,
-        incoming,
-        existing,
+        code,
+        update,
       );
 
-      await this.organizationDepartmentRepository.synchronizeDepartments(
-        organizationId,
-        resolved,
-      );
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update department',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
 
-      this.logger.log(`Replaced departments for org ${organizationId}`);
-      return resolved;
+      this.logger.log(`Updated department ${code} for org ${organizationId}`);
+      return updated!;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateDepartments.name}`;
       AppResponse.error(error);
@@ -612,10 +672,10 @@ export class SettingsDomainOrganisationService {
 
   /**
    * @Responsibility: Add one or more new departments additively. Unlike
-   * updateDepartments (which reconciles the full list), this creates fresh
-   * documents for each entry without deleting existing ones. Validates
-   * duplicates against both the payload and the existing collection, and
-   * resolves parent references additively.
+   * updateDepartments (which updates a single department by code), this
+   * creates fresh documents for each entry without deleting existing ones.
+   * Validates duplicates against both the payload and the existing collection,
+   * and resolves parent references additively.
    *
    * @param organizationId - The organization to scope the creation to
    * @param dto - Bulk add payload
@@ -696,97 +756,6 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Validate a departments payload, preserve existing
-   * departments matched by name (case-insensitive) so their ids and codes stay
-   * stable, and assign freshly generated ids only to new departments. Parent
-   * references are resolved against the combined set of existing + incoming
-   * departments; an unresolvable or self-referencing parent never blocks
-   * creation and falls back to null.
-   *
-   * @param organizationId - The organization to scope the query to
-   * @param incoming - The normalized departments payload
-   * @param existing - Existing departments for the organization
-   * @returns {OrganizationDepartment[]}
-   */
-  private buildDepartmentPayload(
-    organizationId: string,
-    incoming: {
-      name: string;
-      headOfDepartmentId: string | null;
-      parentCode: string | null;
-    }[],
-    existing: OrganizationDepartment[] = [],
-  ): OrganizationDepartment[] {
-    const names = new Set<string>();
-    for (const department of incoming) {
-      const nameKey = department.name.toLowerCase();
-      if (names.has(nameKey)) {
-        AppResponse.error({
-          message: `A department named "${department.name}" already exists`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-      }
-      names.add(nameKey);
-    }
-
-    const existingByName = new Map(
-      existing.map((dept) => [dept.name.toLowerCase(), dept]),
-    );
-
-    const rows = incoming.map((department) => {
-      const matched = existingByName.get(department.name.toLowerCase());
-      if (matched) {
-        return {
-          department,
-          id: matched._id as Types.ObjectId,
-          code: matched.code,
-        };
-      }
-      const id = new Types.ObjectId();
-      return { department, id, code: id.toString() };
-    });
-
-    // Combined lookup for parent resolution: existing + incoming (incoming overrides)
-    const combinedByName = new Map<string, { id: Types.ObjectId }>();
-    for (const dept of existing) {
-      combinedByName.set(dept.name.toLowerCase(), {
-        id: dept._id as Types.ObjectId,
-      });
-    }
-    for (const row of rows) {
-      combinedByName.set(row.department.name.toLowerCase(), { id: row.id });
-    }
-
-    return rows.map(({ department, id, code }) => {
-      let parentDepartmentId: string | null = null;
-      const parentCode = department.parentCode;
-      if (parentCode != null) {
-        const parent = combinedByName.get(parentCode.toLowerCase());
-        if (!parent) {
-          this.logger.warn(
-            `Unresolvable parent code "${parentCode}" for department "${department.name}" — ignoring parent`,
-          );
-        } else if (parent.id.toString() === id.toString()) {
-          this.logger.warn(
-            `Department "${department.name}" cannot be its own parent — ignoring parent`,
-          );
-        } else {
-          parentDepartmentId = parent.id.toString();
-        }
-      }
-
-      return {
-        _id: id,
-        organizationId,
-        code,
-        name: department.name,
-        headOfDepartmentId: department.headOfDepartmentId,
-        parentDepartmentId,
-      } as OrganizationDepartment;
-    });
-  }
-
-  /**
    * @Responsibility: Validate an additive departments payload. Unlike
    * buildDepartmentPayload (which preserves existing ids), this always
    * generates fresh ids/codes and rejects duplicates that already exist in
@@ -829,7 +798,8 @@ export class SettingsDomainOrganisationService {
 
     const rows = incoming.map((dept) => {
       const id = new Types.ObjectId();
-      return { department: dept, id, code: id.toString() };
+      const generatedCode = this.authUtility.generateRandomString();
+      return { department: dept, id, code: generatedCode };
     });
 
     // Build parent lookup: existing (by name + by code) + incoming siblings
@@ -919,7 +889,7 @@ export class SettingsDomainOrganisationService {
     );
 
     return departments.map((department) => ({
-      ...(department as OrganizationDepartment),
+      ...department,
       headOfDepartmentName:
         department.headOfDepartmentId != null
           ? (employeeNames.get(department.headOfDepartmentId.toString()) ??

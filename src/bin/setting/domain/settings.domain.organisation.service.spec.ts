@@ -5,6 +5,7 @@ import { OrganizationDepartmentRepository } from '../../organization/repository/
 import { EmployeeService } from '../../employee/employee.service';
 import { EmployeeRepository } from '../../employee/repository/employee.repository';
 import { BusinessType } from '../organisation/enum/organisation.enum';
+import { AuthUtility } from '../../auth/auth.utility';
 import { SettingsDomainOrganisationService } from './settings.domain.organisation.service';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
@@ -23,6 +24,8 @@ describe('SettingsDomainOrganisationService', () => {
   };
   let organizationDepartmentRepository: {
     findByOrganization: jest.Mock<AnyPromiseFn>;
+    findByCode: jest.Mock<AnyPromiseFn>;
+    updateByCode: jest.Mock<AnyPromiseFn>;
     synchronizeDepartments: jest.Mock<AnyPromiseFn>;
   };
   let employeeService: {
@@ -44,6 +47,8 @@ describe('SettingsDomainOrganisationService', () => {
 
     organizationDepartmentRepository = {
       findByOrganization: jest.fn(),
+      findByCode: jest.fn(),
+      updateByCode: jest.fn(),
       synchronizeDepartments: jest.fn(),
     };
 
@@ -68,6 +73,10 @@ describe('SettingsDomainOrganisationService', () => {
         },
         { provide: EmployeeService, useValue: employeeService },
         { provide: EmployeeRepository, useValue: employeeRepository },
+        {
+          provide: AuthUtility,
+          useValue: { generateRandomString: jest.fn(() => 'generated-code') },
+        },
       ],
     }).compile();
 
@@ -730,230 +739,253 @@ describe('SettingsDomainOrganisationService', () => {
     });
   });
 
-  describe('updateDepartments', () => {
-    it('matches existing departments by name, preserving ids and codes', async () => {
-      const existing = [
-        {
-          _id: OPERATIONS_ID,
-          code: 'operations',
-          name: 'Operations',
-          headOfDepartmentId: null,
-          parentDepartmentId: null,
-        },
-        {
-          _id: LEGAL_ID,
-          code: 'legal',
-          name: 'Legal',
-          headOfDepartmentId: null,
-          parentDepartmentId: null,
-        },
-      ];
+  describe('updateDepartments (single update by code)', () => {
+    const CODE = 'IQGLWvbEIi';
+    const FINANCE = {
+      _id: OPERATIONS_ID,
+      code: CODE,
+      name: 'Finance',
+      headOfDepartmentId: null,
+      parentDepartmentId: null,
+    };
+    const LEGAL = {
+      _id: LEGAL_ID,
+      code: 'legal',
+      name: 'Legal',
+      headOfDepartmentId: null,
+      parentDepartmentId: null,
+    };
+    const resetFindMocks = () => {
       organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue(
-        existing,
-      );
-      organizationDepartmentRepository.synchronizeDepartments.mockResolvedValue(
-        undefined,
-      );
-
-      const result = await service.updateDepartments(ORG_ID, {
-        departments: [
-          {
-            name: 'Operations',
-            headOfDepartmentId: null,
-            parentCode: null,
-          },
-          {
-            name: 'Human Resources',
-            headOfDepartmentId: DIRECTOR_ID,
-            parentCode: 'operations',
-          },
-        ],
-      });
-
-      expect(
-        organizationDepartmentRepository.synchronizeDepartments,
-      ).toHaveBeenCalledTimes(1);
-      const [syncedOrgId, syncedDepartments] =
-        organizationDepartmentRepository.synchronizeDepartments.mock.calls[0];
-      expect(syncedOrgId).toBe(ORG_ID);
-      expect(syncedDepartments).toHaveLength(2);
-      expect(syncedDepartments[0]._id.toString()).toBe(OPERATIONS_ID);
-      expect(syncedDepartments[0].code).toBe('operations');
-      expect(syncedDepartments[0].name).toBe('Operations');
-      expect(syncedDepartments[1]._id).toBeDefined();
-      expect(syncedDepartments[1]._id.toString()).not.toBe(OPERATIONS_ID);
-      expect(syncedDepartments[1].parentDepartmentId).toBe(OPERATIONS_ID);
-      expect(organizationRepository.updateById).not.toHaveBeenCalled();
-      expect(result).toEqual(syncedDepartments);
-    });
-
-    it('creates fresh departments for new names without an update', async () => {
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue([]);
-      organizationDepartmentRepository.synchronizeDepartments.mockResolvedValue(
-        undefined,
-      );
-
-      const result = await service.updateDepartments(ORG_ID, {
-        departments: [{ name: 'Finance' }],
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0]._id).toBeDefined();
-      expect(result[0].code).toBe(result[0]._id.toString());
-      expect(result[0].headOfDepartmentId).toBeNull();
-      expect(result[0].parentDepartmentId).toBeNull();
-      expect(
-        organizationDepartmentRepository.synchronizeDepartments,
-      ).toHaveBeenCalledTimes(1);
-    });
-
-    it('creates a department with an existing parent code', async () => {
-      const existing = [
-        {
-          _id: OPERATIONS_ID,
-          code: 'operations',
-          name: 'Operations',
-          headOfDepartmentId: null,
-          parentDepartmentId: null,
-        },
-      ];
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue(
-        existing,
-      );
-      organizationDepartmentRepository.synchronizeDepartments.mockResolvedValue(
-        undefined,
-      );
-
-      const result = await service.updateDepartments(ORG_ID, {
-        departments: [
-          {
-            name: 'Logistics & Distribution',
-            parentCode: 'operations',
-          },
-        ],
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe('Logistics & Distribution');
-      expect(result[0].parentDepartmentId).toBe(OPERATIONS_ID);
-    });
-
-    it('creates a department whose parent is another new department', async () => {
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue([]);
-      organizationDepartmentRepository.synchronizeDepartments.mockResolvedValue(
-        undefined,
-      );
-
-      const result = await service.updateDepartments(ORG_ID, {
-        departments: [
-          { name: 'Operations' },
-          { name: 'Logistics & Distribution', parentCode: 'Operations' },
-        ],
-      });
-
-      expect(result).toHaveLength(2);
-      expect(result[1].parentDepartmentId).toBe(result[0]._id.toString());
-    });
-
-    it('creates a department even when the parent code cannot be resolved', async () => {
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue([]);
-      organizationDepartmentRepository.synchronizeDepartments.mockResolvedValue(
-        undefined,
-      );
-
-      const result = await service.updateDepartments(ORG_ID, {
-        departments: [
-          {
-            name: 'Logistics & Distribution',
-            parentCode: 'missing',
-          },
-        ],
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe('Logistics & Distribution');
-      expect(result[0].parentDepartmentId).toBeNull();
-    });
-
-    it('ignores a self-referencing parent and still creates the department', async () => {
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue([]);
-      organizationDepartmentRepository.synchronizeDepartments.mockResolvedValue(
-        undefined,
-      );
-
-      const result = await service.updateDepartments(ORG_ID, {
-        departments: [
-          {
-            name: 'Logistics & Distribution',
-            parentCode: 'logistics',
-          },
-        ],
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].parentDepartmentId).toBeNull();
-    });
-
-    it('clears departments when the payload is empty', async () => {
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue([]);
-      organizationDepartmentRepository.synchronizeDepartments.mockResolvedValue(
-        undefined,
-      );
-
-      const result = await service.updateDepartments(ORG_ID, {
-        departments: [],
-      });
-
-      expect(
-        organizationDepartmentRepository.synchronizeDepartments,
-      ).toHaveBeenCalledWith(ORG_ID, []);
-      expect(result).toEqual([]);
-    });
-
-    it('rejects duplicate department names', async () => {
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue([]);
-
-      await expect(
-        service.updateDepartments(ORG_ID, {
-          departments: [
-            { name: 'Human Resources' },
-            { name: 'human resources' },
-          ],
-        }),
-      ).rejects.toThrow(AppException);
-
-      expect(
-        organizationDepartmentRepository.synchronizeDepartments,
-      ).not.toHaveBeenCalled();
-    });
+      organizationDepartmentRepository.findByCode.mockResolvedValue(FINANCE);
+      organizationDepartmentRepository.findByOrganization.mockResolvedValue([
+        FINANCE,
+      ]);
+    };
 
     it('throws a 404 when the organization does not exist', async () => {
       organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(
-        service.updateDepartments(ORG_ID, { departments: [] }),
+        service.updateDepartments(ORG_ID, CODE, { name: 'Finance' }),
+      ).rejects.toThrow(AppException);
+
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when no department matches the code', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationDepartmentRepository.findByCode.mockResolvedValue(null);
+
+      await expect(
+        service.updateDepartments(ORG_ID, 'missing', { name: 'Finance' }),
+      ).rejects.toThrow(AppException);
+
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('partially updates only the provided fields', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.updateByCode.mockResolvedValue({
+        ...FINANCE,
+        headOfDepartmentId: DIRECTOR_ID,
+      });
+
+      const result = await service.updateDepartments(ORG_ID, CODE, {
+        headOfDepartmentId: DIRECTOR_ID,
+      });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { headOfDepartmentId: DIRECTOR_ID },
+      );
+      expect(result).toEqual({ ...FINANCE, headOfDepartmentId: DIRECTOR_ID });
+    });
+
+    it('updates the department name', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.updateByCode.mockResolvedValue({
+        ...FINANCE,
+        name: 'Finance & Accounting',
+      });
+
+      await service.updateDepartments(ORG_ID, CODE, {
+        name: 'Finance & Accounting',
+      });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { name: 'Finance & Accounting' },
+      );
+    });
+
+    it('clears the head of department with an explicit null', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.findByCode.mockResolvedValue({
+        ...FINANCE,
+        headOfDepartmentId: DIRECTOR_ID,
+      });
+      organizationDepartmentRepository.findByOrganization.mockResolvedValue([
+        { ...FINANCE, headOfDepartmentId: DIRECTOR_ID },
+      ]);
+      organizationDepartmentRepository.updateByCode.mockResolvedValue({
+        ...FINANCE,
+        headOfDepartmentId: null,
+      });
+
+      await service.updateDepartments(ORG_ID, CODE, {
+        headOfDepartmentId: null,
+      });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { headOfDepartmentId: null },
+      );
+    });
+
+    it('resolves a parent department by code', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.findByOrganization.mockResolvedValue([
+        FINANCE,
+        LEGAL,
+      ]);
+      organizationDepartmentRepository.updateByCode.mockResolvedValue({
+        ...FINANCE,
+        parentDepartmentId: LEGAL_ID,
+      });
+
+      await service.updateDepartments(ORG_ID, CODE, { parentCode: 'legal' });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { parentDepartmentId: LEGAL_ID },
+      );
+    });
+
+    it('resolves a parent department by name', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.findByOrganization.mockResolvedValue([
+        FINANCE,
+        LEGAL,
+      ]);
+      organizationDepartmentRepository.updateByCode.mockResolvedValue({
+        ...FINANCE,
+        parentDepartmentId: LEGAL_ID,
+      });
+
+      await service.updateDepartments(ORG_ID, CODE, { parentCode: 'Legal' });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { parentDepartmentId: LEGAL_ID },
+      );
+    });
+
+    it('clears the parent with an explicit null parentCode', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.findByCode.mockResolvedValue({
+        ...FINANCE,
+        parentDepartmentId: LEGAL_ID,
+      });
+      organizationDepartmentRepository.findByOrganization.mockResolvedValue([
+        { ...FINANCE, parentDepartmentId: LEGAL_ID },
+        LEGAL,
+      ]);
+      organizationDepartmentRepository.updateByCode.mockResolvedValue({
+        ...FINANCE,
+        parentDepartmentId: null,
+      });
+
+      await service.updateDepartments(ORG_ID, CODE, { parentCode: null });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { parentDepartmentId: null },
+      );
+    });
+
+    it('clears the parent when the parent code cannot be resolved', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.updateByCode.mockResolvedValue(FINANCE);
+
+      await service.updateDepartments(ORG_ID, CODE, { parentCode: 'missing' });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { parentDepartmentId: null },
+      );
+    });
+
+    it('clears the parent when the department is set as its own parent', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.updateByCode.mockResolvedValue(FINANCE);
+
+      await service.updateDepartments(ORG_ID, CODE, { parentCode: CODE });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { parentDepartmentId: null },
+      );
+    });
+
+    it('rejects a name that collides with another department', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.findByOrganization.mockResolvedValue([
+        FINANCE,
+        LEGAL,
+      ]);
+
+      await expect(
+        service.updateDepartments(ORG_ID, CODE, { name: 'legal' }),
+      ).rejects.toThrow(AppException);
+
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('keeps the current name without treating itself as a collision', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.updateByCode.mockResolvedValue(FINANCE);
+
+      await service.updateDepartments(ORG_ID, CODE, { name: 'Finance' });
+
+      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        CODE,
+        { name: 'Finance' },
+      );
+    });
+
+    it('throws a 500 when the update returns no document', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.updateByCode.mockResolvedValue(null);
+
+      await expect(
+        service.updateDepartments(ORG_ID, CODE, { name: 'Finance' }),
       ).rejects.toThrow(AppException);
     });
 
-    it('propagates errors thrown while synchronizing departments', async () => {
-      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
-      organizationDepartmentRepository.findByOrganization.mockResolvedValue([]);
-      organizationDepartmentRepository.synchronizeDepartments.mockRejectedValue(
+    it('propagates errors thrown while updating the department', async () => {
+      resetFindMocks();
+      organizationDepartmentRepository.updateByCode.mockRejectedValue(
         new AppException('boom', 500),
       );
 
       await expect(
-        service.updateDepartments(ORG_ID, {
-          departments: [{ name: 'Operations' }],
-        }),
+        service.updateDepartments(ORG_ID, CODE, { name: 'Finance' }),
       ).rejects.toThrow(AppException);
     });
   });

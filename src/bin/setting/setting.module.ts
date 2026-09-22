@@ -18,6 +18,7 @@ import { EmailModule } from '../../email/email.module';
 import { OrganizationModule } from '../organization/organization.module';
 import { EmployeeModule } from '../employee/employee.module';
 import { User, UserSchema } from '../auth/entity/user.schema';
+import { AuthUtility } from '../auth/auth.utility';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { User, UserSchema } from '../auth/entity/user.schema';
     UserRoleRepository,
     InviteeUserRepository,
     { provide: ROLE_SERVICE, useExisting: SettingsDomainAccessControlService },
+    AuthUtility,
   ],
   exports: [
     SettingService,

@@ -23,11 +23,19 @@ export class OrganizationDepartmentRepository {
   async findByOrganization(
     organizationId: string,
     attributes: string = '',
+    search: string = '',
   ): Promise<OrganizationDepartmentDocument[]> {
     try {
+      const query = {
+        organizationId,
+        ...(search && {
+          $or: [{ name: new RegExp(search, 'i') }],
+        }),
+      };
       return await this.organizationDepartmentModel
-        .find({ organizationId })
+        .find(query)
         .select(attributes)
+        .lean()
         .exec();
     } catch (error) {
       throw error;
@@ -94,6 +102,54 @@ export class OrganizationDepartmentRepository {
   }
 
   /**
+   * @Responsibility: Retrieve a single department by its unique code within an
+   * organization.
+   *
+   * @param organizationId - Organization id to scope the query to
+   * @param code - The unique department code to match
+   * @returns {Promise<OrganizationDepartmentDocument | null>}
+   */
+  async findByCode(
+    organizationId: string,
+    code: string,
+  ): Promise<OrganizationDepartmentDocument | null> {
+    try {
+      return await this.organizationDepartmentModel
+        .findOne({ organizationId, code })
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a single department matched by its unique code
+   * within an organization. Only the fields present in the update are applied.
+   *
+   * @param organizationId - Organization id to scope the update to
+   * @param code - The unique department code to match
+   * @param update - The partial update to apply
+   * @returns {Promise<OrganizationDepartmentDocument | null>}
+   */
+  async updateByCode(
+    organizationId: string,
+    code: string,
+    update: Partial<OrganizationDepartment>,
+  ): Promise<OrganizationDepartmentDocument | null> {
+    try {
+      return await this.organizationDepartmentModel
+        .findOneAndUpdate(
+          { organizationId, code },
+          { $set: update },
+          { new: true },
+        )
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Create one or more new department documents additively
    * without reconciling/deleting existing departments. Used by the Add
    * Department feature.
@@ -106,10 +162,9 @@ export class OrganizationDepartmentRepository {
   ): Promise<OrganizationDepartmentDocument[]> {
     try {
       if (departments.length === 0) return [];
-      return (await this.organizationDepartmentModel.insertMany(
-        departments,
-        { ordered: true },
-      )) as OrganizationDepartmentDocument[];
+      return (await this.organizationDepartmentModel.insertMany(departments, {
+        ordered: true,
+      })) as OrganizationDepartmentDocument[];
     } catch (error) {
       throw error;
     }

@@ -1,15 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import {
-  Organization,
-  OrganizationSchema,
-} from './entity/organization.schema';
+import { Organization, OrganizationSchema } from './entity/organization.schema';
 import {
   OrganizationDepartment,
   OrganizationDepartmentSchema,
 } from './entity/organization-department.schema';
 import { OrganizationRepository } from './repository/organization.repository';
 import { OrganizationDepartmentRepository } from './repository/organization-department.repository';
+import { AuthUtility } from '../auth/auth.utility';
 
 @Module({
   imports: [
@@ -21,7 +19,11 @@ import { OrganizationDepartmentRepository } from './repository/organization-depa
       },
     ]),
   ],
-  providers: [OrganizationRepository, OrganizationDepartmentRepository],
+  providers: [
+    OrganizationRepository,
+    OrganizationDepartmentRepository,
+    AuthUtility,
+  ],
   exports: [OrganizationRepository, OrganizationDepartmentRepository],
 })
 export class OrganizationModule {}

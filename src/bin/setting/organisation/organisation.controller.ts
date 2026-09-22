@@ -21,7 +21,10 @@ import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
 import { UpdateLocationsDto } from './dto/update-locations.dto';
 import { UpdateHierarchyDto } from './dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
-import { UpdateDepartmentsDto } from './dto/update-departments.dto';
+import {
+  DepartmentCodeQueryDto,
+  UpdateDepartmentDto,
+} from './dto/update-departments.dto';
 import {
   AddDepartmentDto,
   AddDepartmentsDto,
@@ -233,11 +236,20 @@ export class OrganisationController {
   @HttpCode(HttpStatus.OK)
   async updateDepartments(
     @CurrentUser() user: ICurrentUser,
-    @Body() updateDepartmentsDto: UpdateDepartmentsDto,
+    @Query() { code }: DepartmentCodeQueryDto,
+    @Body() dto: UpdateDepartmentDto,
   ) {
+    if (Array.isArray(dto)) {
+      AppResponse.error({
+        message:
+          'A single department payload is required, not an array of updates.',
+        status: HttpStatus.BAD_REQUEST,
+      });
+    }
     const data = await this.organisationService.updateDepartments(
       user.organizationId!,
-      updateDepartmentsDto,
+      code,
+      dto,
     );
     return AppResponse.success('Departments updated successfully', 200, data);
   }

@@ -1,22 +1,20 @@
 import {
-  IsArray,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
-  ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 
-export class DepartmentDto {
+export class UpdateDepartmentDto {
   @IsString()
   @IsNotEmpty({
-    message: 'Department name is required.',
+    message: 'Department name must not be empty.',
   })
   @MaxLength(120, {
     message: 'Department name must be at most 120 characters.',
   })
-  name: string;
+  @IsOptional()
+  name?: string;
 
   @IsString()
   @IsOptional()
@@ -30,12 +28,13 @@ export class DepartmentDto {
   parentCode?: string | null;
 }
 
-export class UpdateDepartmentsDto {
-  @IsArray({
-    message: 'Departments must be an array.',
+export class DepartmentCodeQueryDto {
+  @IsString()
+  @IsNotEmpty({
+    message: 'Department code is required.',
   })
-  @ValidateNested({ each: true })
-  @Type(() => DepartmentDto)
-  @IsOptional()
-  departments?: DepartmentDto[];
+  @MaxLength(50, {
+    message: 'Department code must be at most 50 characters.',
+  })
+  code: string;
 }
