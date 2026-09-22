@@ -3,12 +3,17 @@ import { Types } from 'mongoose';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
 import { OrganizationDepartmentRepository } from '../../organization/repository/organization-department.repository';
 import {
+  Billing,
   Branding,
   BusinessDetails,
   Location,
   OrganizationDocument,
+  PaymentMethod,
+  Plan,
 } from '../../organization/entity/organization.schema';
 import { OrganizationDepartment } from '../../organization/entity/organization-department.schema';
+import { Invoice } from '../organisation/entity/invoice.schema';
+import { InvoiceRepository } from '../organisation/repository/invoice.repository';
 import { EmployeeRepository } from '../../employee/repository/employee.repository';
 import { EmployeeService } from '../../employee/employee.service';
 import { EmployeeDocument } from '../../employee/entity/employee.schema';
@@ -18,6 +23,7 @@ import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-de
 import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from '../organisation/dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from '../organisation/dto/update-branding.dto';
+import { UpdateBillingDto } from '../organisation/dto/update-billing.dto';
 import { UpdateDepartmentDto } from '../organisation/dto/update-departments.dto';
 import {
   AddDepartmentDto,
@@ -30,6 +36,16 @@ import { AuthUtility } from '../../auth/auth.utility';
 export type DepartmentView = OrganizationDepartment & {
   headOfDepartmentName: string | null;
   parentDepartmentName: string | null;
+};
+
+const DEFAULT_PLAN: Plan = {
+  name: 'Basic plan',
+  interval: 'monthly',
+  description: 'Our most popular plan for small teams.',
+  priceAmount: 10,
+  priceCurrency: 'USD',
+  seatsUsed: 0,
+  seatsLimit: 20,
 };
 
 @Injectable()
@@ -45,6 +61,8 @@ export class SettingsDomainOrganisationService {
     private readonly employeeService: EmployeeService,
     @Inject(EmployeeRepository)
     private readonly employeeRepository: EmployeeRepository,
+    @Inject(InvoiceRepository)
+    private readonly invoiceRepository: InvoiceRepository,
     @Inject(AuthUtility)
     private readonly authUtility: AuthUtility,
   ) {}
@@ -738,6 +756,34 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
+   * @Responsibility: Delete a department.
+   *
+   * @param organizationId - The organization to scope the creation to
+   * @param code - code query param
+   * @returns {Promise<string>}
+   *
+   * @throws {400} Duplicate department name (in payload or already exists)
+   * @throws {404} Organization not found
+   */
+  async deleteDepartments(
+    organizationId: string,
+    code: string,
+  ): Promise<string> {
+    try {
+      await this.organizationDepartmentRepository.deleteOrgDepartment({
+        organizationId,
+        code,
+      });
+
+      return 'Organization department deleted';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deleteDepartments.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Convenience single-add wrapper around addDepartments.
    * Validates and creates a single department document.
    *
@@ -904,30 +950,156 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Placeholder for the Billing settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Retrieve an organization's billing settings. When no
+   * billing sub-document exists yet, the default plan is returned alongside
+   * null payment method and billing email so the UI can render the section.
    *
-   * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to retrieve settings for
+   * @returns {Promise<Billing | null>}
+   *
+   * @throws {404} Organization not found
    */
-  async getBilling(organizationId: string): Promise<unknown> {
-    return this.pendingSection('billing', organizationId);
+  async getBilling(organizationId: string): Promise<Billing | null> {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return (
+        organization!.billing ?? {
+          plan: { ...DEFAULT_PLAN },
+          paymentMethod: null,
+          billingEmail: null,
+        }
+      );
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getBilling.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Placeholder for the Billing settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Update an organization's billing settings.
+   * Editable fields are the payment method details and the billing email.
+   * The plan is read-only (managed externally) and is therefore not part of
+   * the update payload. Editable scalars are merged with existing values so
+   * partial updates are safe and an explicit null billingEmail clears it.
    *
-   * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial billing payload
+   * @returns {Promise<Billing | null>}
+   *
+   * @throws {404} Organization not found
    */
-  async updateBilling(organizationId: string, dto: unknown): Promise<unknown> {
-    return this.pendingSection('billing', organizationId, dto);
+  async updateBilling(
+    organizationId: string,
+    dto: UpdateBillingDto,
+  ): Promise<Billing | null> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current: Billing = found!.billing ?? {
+        plan: { ...DEFAULT_PLAN },
+        paymentMethod: null,
+        billingEmail: null,
+      };
+
+      const merged: Billing = {
+        plan: current.plan ?? { ...DEFAULT_PLAN },
+        paymentMethod: current.paymentMethod
+          ? { ...current.paymentMethod }
+          : null,
+        billingEmail: current.billingEmail,
+      };
+
+      if (dto.billingEmail !== undefined)
+        merged.billingEmail = dto.billingEmail;
+
+      if (dto.paymentMethod !== undefined) {
+        const paymentMethod: PaymentMethod = {
+          brand: merged.paymentMethod?.brand ?? null,
+          last4: merged.paymentMethod?.last4 ?? null,
+          expiry: merged.paymentMethod?.expiry ?? null,
+        };
+        if (dto.paymentMethod.brand !== undefined)
+          paymentMethod.brand = dto.paymentMethod.brand;
+        if (dto.paymentMethod.last4 !== undefined)
+          paymentMethod.last4 = dto.paymentMethod.last4;
+        if (dto.paymentMethod.expiry !== undefined)
+          paymentMethod.expiry = dto.paymentMethod.expiry;
+        merged.paymentMethod = paymentMethod;
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { billing: merged },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization billing',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated billing for org ${organizationId}`);
+      return updated!.billing ?? merged;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateBilling.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Build the standardized placeholder payload for a not-yet-implemented settings section
+   * @Responsibility: Retrieve an organization's invoice history. The invoice
+   * list is read-only within the settings section and can be filtered by a
+   * search term matching the invoice number, plan name or billing date.
+   *
+   * @param organizationId - The organization to scope the query to
+   * @param search - Optional invoice search term
+   * @returns {Promise<Invoice[]>}
+   *
+   * @throws {404} Organization not found
+   */
+  async getInvoices(
+    organizationId: string,
+    search?: string,
+  ): Promise<Invoice[]> {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return (await this.invoiceRepository.findByOrganization(
+        String(organization!._id),
+        search,
+      )) as Invoice[];
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getInvoices.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Build the standardized placeholder payload for a
+   * not-yet-implemented settings section
    *
    * @param section - The settings section identifier
    * @param organizationId - The organization the section belongs to

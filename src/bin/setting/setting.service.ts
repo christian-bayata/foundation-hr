@@ -8,6 +8,7 @@ import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-det
 import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
 import { UpdateHierarchyDto } from './organisation/dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from './organisation/dto/update-branding.dto';
+import { UpdateBillingDto } from './organisation/dto/update-billing.dto';
 import { UpdateDepartmentDto } from './organisation/dto/update-departments.dto';
 import {
   AddDepartmentDto,
@@ -15,12 +16,14 @@ import {
   AddSingleDepartmentDto,
 } from './organisation/dto/add-department.dto';
 import {
+  Billing,
   Branding,
   BusinessDetails,
   Location,
   OrganizationDocument,
 } from '../organization/entity/organization.schema';
 import { OrganizationDepartment } from '../organization/entity/organization-department.schema';
+import { Invoice } from './organisation/entity/invoice.schema';
 import { DepartmentView } from './domain/settings.domain.organisation.service';
 import { EmployeeDocument } from '../employee/entity/employee.schema';
 import { HierarchyTreeNode } from '../employee/interface/employee.interface';
@@ -453,9 +456,9 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's billing settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @returns {Promise<Billing | null>}
    */
-  getOrgBilling(organizationId: string): Promise<unknown> {
+  getOrgBilling(organizationId: string): Promise<Billing | null> {
     return this.organisationDomainService.getBilling(organizationId);
   }
 
@@ -463,10 +466,27 @@ export class SettingService {
    * @Responsibility: Module-level facade to update an organization's billing settings
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param dto - The partial billing payload
+   * @returns {Promise<Billing | null>}
    */
-  updateOrgBilling(organizationId: string, dto: unknown): Promise<unknown> {
+  updateOrgBilling(
+    organizationId: string,
+    dto: UpdateBillingDto,
+  ): Promise<Billing | null> {
     return this.organisationDomainService.updateBilling(organizationId, dto);
+  }
+
+  /**
+   * @Responsibility: Module-level facade to retrieve an organization's invoice history
+   *
+   * @param organizationId - The organization to scope the query to
+   * @param search - Optional invoice search term
+   * @returns {Promise<Invoice[]>}
+   */
+  getOrgInvoices(
+    organizationId: string,
+    search?: string,
+  ): Promise<Invoice[]> {
+    return this.organisationDomainService.getInvoices(organizationId, search);
   }
 }

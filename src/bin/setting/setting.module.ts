@@ -13,6 +13,8 @@ import { OrganisationController } from './organisation/organisation.controller';
 import { RoleRepository } from './access-control/repository/role.repository';
 import { UserRoleRepository } from './access-control/repository/user-role.repository';
 import { InviteeUserRepository } from './access-control/repository/invitee-user.repository';
+import { Invoice, InvoiceSchema } from './organisation/entity/invoice.schema';
+import { InvoiceRepository } from './organisation/repository/invoice.repository';
 import { ROLE_SERVICE } from '../../common/guards/role.guard';
 import { EmailModule } from '../../email/email.module';
 import { OrganizationModule } from '../organization/organization.module';
@@ -26,6 +28,7 @@ import { AuthUtility } from '../auth/auth.utility';
       { name: Role.name, schema: RoleSchema },
       { name: UserRole.name, schema: UserRoleSchema },
       { name: User.name, schema: UserSchema },
+      { name: Invoice.name, schema: InvoiceSchema },
     ]),
     EmailModule,
     OrganizationModule,
@@ -39,6 +42,7 @@ import { AuthUtility } from '../auth/auth.utility';
     RoleRepository,
     UserRoleRepository,
     InviteeUserRepository,
+    InvoiceRepository,
     { provide: ROLE_SERVICE, useExisting: SettingsDomainAccessControlService },
     AuthUtility,
   ],

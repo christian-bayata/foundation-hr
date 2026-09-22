@@ -75,6 +75,54 @@ export class Branding {
   loginPageImages: string[];
 }
 
+@Schema({ _id: false })
+export class PaymentMethod {
+  @Prop({ type: String, default: null })
+  brand: string | null;
+
+  @Prop({ type: String, default: null })
+  last4: string | null;
+
+  @Prop({ type: String, default: null })
+  expiry: string | null;
+}
+
+@Schema({ _id: false })
+export class Plan {
+  @Prop({ type: String, default: null })
+  name: string | null;
+
+  @Prop({ type: String, default: null })
+  interval: string | null;
+
+  @Prop({ type: String, default: null })
+  description: string | null;
+
+  @Prop({ type: Number, default: null })
+  priceAmount: number | null;
+
+  @Prop({ type: String, default: null })
+  priceCurrency: string | null;
+
+  @Prop({ type: Number, default: null })
+  seatsUsed: number | null;
+
+  @Prop({ type: Number, default: null })
+  seatsLimit: number | null;
+}
+
+@Schema({ _id: false })
+export class Billing {
+  @Prop({ type: () => Plan, default: null })
+  plan: Plan | null;
+
+  @Prop({ type: () => PaymentMethod, default: null })
+  paymentMethod: PaymentMethod | null;
+
+  @Prop({ type: String, trim: true, lowercase: true, default: null })
+  billingEmail: string | null;
+}
+
 @Schema({ timestamps: true })
 export class Organization {
   @Prop({ type: String, required: true })
@@ -133,6 +181,9 @@ export class Organization {
 
   @Prop({ type: () => Branding, default: null })
   branding: Branding | null;
+
+  @Prop({ type: () => Billing, default: null })
+  billing: Billing | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

@@ -30,6 +30,7 @@ describe('OrganisationController (integration)', () => {
     updateDepartments: jest.Mock<AnyPromiseFn>;
     getBilling: jest.Mock<AnyPromiseFn>;
     updateBilling: jest.Mock<AnyPromiseFn>;
+    getInvoices: jest.Mock<AnyPromiseFn>;
   };
 
   beforeEach(async () => {
@@ -52,6 +53,7 @@ describe('OrganisationController (integration)', () => {
       updateDepartments: jest.fn(),
       getBilling: jest.fn(),
       updateBilling: jest.fn(),
+      getInvoices: jest.fn(),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -608,7 +610,6 @@ describe('OrganisationController (integration)', () => {
       getter: 'getPolicyManagement',
       updater: 'updatePolicyManagement',
     },
-    { section: 'billing', getter: 'getBilling', updater: 'updateBilling' },
   ])('$section endpoints', ({ section, getter, updater }) => {
     it('retrieves the section and returns the pending placeholder', async () => {
       const placeholder = { section, organizationId: ORG_ID, implemented: false };
@@ -636,6 +637,145 @@ describe('OrganisationController (integration)', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data).toEqual(placeholder);
+    });
+  });
+
+  describe('GET /setting/organization/billing/retrieve', () => {
+    it('retrieves the organization billing settings', async () => {
+      const billing = {
+        plan: {
+          name: 'Basic plan',
+          interval: 'monthly',
+          description: 'Our most popular plan for small teams.',
+          priceAmount: 10,
+          priceCurrency: 'USD',
+          seatsUsed: 14,
+          seatsLimit: 20,
+        },
+        paymentMethod: {
+          brand: 'visa',
+          last4: '1234',
+          expiry: '06/2024',
+        },
+        billingEmail: 'billing@foundation.com',
+      };
+      organisationService.getBilling.mockResolvedValue(billing);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/billing/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(billing);
+      expect(organisationService.getBilling).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('PATCH /setting/organization/billing/update', () => {
+    it('updates the billing settings with a valid payload', async () => {
+      const payload = {
+        billingEmail: 'finance@foundation.com',
+        paymentMethod: { brand: 'visa', last4: '4242', expiry: '12/2026' },
+      };
+      organisationService.updateBilling.mockResolvedValue(payload);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(payload);
+      expect(organisationService.updateBilling).toHaveBeenCalledWith(
+        ORG_ID,
+        payload,
+      );
+    });
+
+    it('clears the billing email with an explicit null', async () => {
+      organisationService.updateBilling.mockResolvedValue({
+        billingEmail: null,
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ billingEmail: null });
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateBilling).toHaveBeenCalledWith(ORG_ID, {
+        billingEmail: null,
+      });
+    });
+
+    it('rejects an invalid billing email', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ billingEmail: 'not-an-email' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBilling).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid payment method last4', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ paymentMethod: { last4: '12' } });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBilling).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid payment method expiry format', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ paymentMethod: { brand: 'visa', expiry: '06-2024' } });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBilling).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/billing/invoices/retrieve', () => {
+    it('retrieves invoices without a search query', async () => {
+      const invoices = [
+        {
+          _id: '64f1b2c3d4e5f678901234e1',
+          organizationId: ORG_ID,
+          invoiceNumber: '007',
+          billingDate: 'Dec 1, 2023',
+          status: 'paid',
+          amount: 10,
+          currency: 'USD',
+          planName: 'Basic plan',
+        },
+      ];
+      organisationService.getInvoices.mockResolvedValue(invoices);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/billing/invoices/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(invoices);
+      expect(organisationService.getInvoices).toHaveBeenCalledWith(
+        ORG_ID,
+        undefined,
+      );
+    });
+
+    it('passes the search query parameter to the service', async () => {
+      organisationService.getInvoices.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/billing/invoices/retrieve?search=007',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getInvoices).toHaveBeenCalledWith(
+        ORG_ID,
+        '007',
+      );
     });
   });
 });

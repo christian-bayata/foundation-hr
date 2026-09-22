@@ -5,6 +5,7 @@ import {
   OrganizationDepartment,
   OrganizationDepartmentDocument,
 } from '../entity/organization-department.schema';
+import { PropDataInput } from '../../../common/util/util.interface';
 
 @Injectable()
 export class OrganizationDepartmentRepository {
@@ -176,6 +177,21 @@ export class OrganizationDepartmentRepository {
     try {
       const created = await this.organizationDepartmentModel.create(department);
       return created as OrganizationDepartmentDocument;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to delete an organization by its code
+   *
+   * @param organizationId - The organization's id
+   * @param code - The organization's code
+   * @returns {Promise<void>}
+   */
+  async deleteOrgDepartment(where: PropDataInput): Promise<void> {
+    try {
+      await this.organizationDepartmentModel.findOneAndDelete(where);
     } catch (error) {
       throw error;
     }

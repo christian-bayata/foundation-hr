@@ -8,3 +8,14 @@ export enum BusinessType {
   GOVERNMENT = 'government',
   OTHER = 'other',
 }
+
+export enum PaymentInterval {
+  MONTHLY = 'monthly',
+  YEARLY = 'yearly',
+}
+
+export enum InvoiceStatus {
+  PAID = 'paid',
+  PENDING = 'pending',
+  FAILED = 'failed',
+}

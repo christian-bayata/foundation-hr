@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -21,6 +22,7 @@ import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
 import { UpdateLocationsDto } from './dto/update-locations.dto';
 import { UpdateHierarchyDto } from './dto/organization-hierarchy.dto';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
+import { UpdateBillingDto } from './dto/update-billing.dto';
 import {
   DepartmentCodeQueryDto,
   UpdateDepartmentDto,
@@ -282,6 +284,20 @@ export class OrganisationController {
     return AppResponse.success('Department added successfully', 201, data);
   }
 
+  @Delete('departments/delete')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async deleteDepartments(
+    @CurrentUser() user: ICurrentUser,
+    @Query() { code }: DepartmentCodeQueryDto,
+  ) {
+    const data = await this.organisationService.deleteDepartments(
+      user.organizationId!,
+      code,
+    );
+    return AppResponse.success('Departments updated successfully', 200, data);
+  }
+
   @Get('billing/retrieve')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   async retrieveBilling(@CurrentUser() user: ICurrentUser) {
@@ -294,11 +310,27 @@ export class OrganisationController {
   @Patch('billing/update')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
-  async updateBilling(@CurrentUser() user: ICurrentUser, @Body() dto: unknown) {
+  async updateBilling(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: UpdateBillingDto,
+  ) {
     const data = await this.organisationService.updateBilling(
       user.organizationId!,
       dto,
     );
     return AppResponse.success('Billing updated successfully', 200, data);
+  }
+
+  @Get('billing/invoices/retrieve')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async retrieveBillingInvoices(
+    @CurrentUser() user: ICurrentUser,
+    @Query('search') search?: string,
+  ) {
+    const data = await this.organisationService.getInvoices(
+      user.organizationId!,
+      search,
+    );
+    return AppResponse.success('Invoices retrieved successfully', 200, data);
   }
 }

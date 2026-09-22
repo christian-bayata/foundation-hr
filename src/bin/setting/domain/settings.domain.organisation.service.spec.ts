@@ -5,6 +5,7 @@ import { OrganizationDepartmentRepository } from '../../organization/repository/
 import { EmployeeService } from '../../employee/employee.service';
 import { EmployeeRepository } from '../../employee/repository/employee.repository';
 import { BusinessType } from '../organisation/enum/organisation.enum';
+import { InvoiceRepository } from '../organisation/repository/invoice.repository';
 import { AuthUtility } from '../../auth/auth.utility';
 import { SettingsDomainOrganisationService } from './settings.domain.organisation.service';
 
@@ -36,6 +37,9 @@ describe('SettingsDomainOrganisationService', () => {
   let employeeRepository: {
     findByOrganization: jest.Mock<AnyPromiseFn>;
   };
+  let invoiceRepository: {
+    findByOrganization: jest.Mock<AnyPromiseFn>;
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -62,6 +66,10 @@ describe('SettingsDomainOrganisationService', () => {
       findByOrganization: jest.fn(),
     };
 
+    invoiceRepository = {
+      findByOrganization: jest.fn(),
+    };
+
     const { Test } = await import('@nestjs/testing');
     const module = await Test.createTestingModule({
       providers: [
@@ -73,6 +81,7 @@ describe('SettingsDomainOrganisationService', () => {
         },
         { provide: EmployeeService, useValue: employeeService },
         { provide: EmployeeRepository, useValue: employeeRepository },
+        { provide: InvoiceRepository, useValue: invoiceRepository },
         {
           provide: AuthUtility,
           useValue: { generateRandomString: jest.fn(() => 'generated-code') },
@@ -990,8 +999,283 @@ describe('SettingsDomainOrganisationService', () => {
     });
   });
 
+  describe('getBilling', () => {
+    it('returns the billing sub-document when present', async () => {
+      const billing = {
+        plan: {
+          name: 'Basic plan',
+          interval: 'monthly',
+          description: 'Our most popular plan for small teams.',
+          priceAmount: 10,
+          priceCurrency: 'USD',
+          seatsUsed: 14,
+          seatsLimit: 20,
+        },
+        paymentMethod: {
+          brand: 'visa',
+          last4: '1234',
+          expiry: '06/2024',
+        },
+        billingEmail: 'billing@foundation.com',
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        billing,
+      });
+
+      const result = await service.getBilling(ORG_ID);
+
+      expect(organizationRepository.findOrg).toHaveBeenCalledWith({
+        _id: ORG_ID,
+      });
+      expect(result).toEqual(billing);
+    });
+
+    it('returns the default plan when billing is not set', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getBilling(ORG_ID);
+
+      expect(result).toEqual({
+        plan: expect.objectContaining({
+          name: 'Basic plan',
+          interval: 'monthly',
+          priceAmount: 10,
+          priceCurrency: 'USD',
+        }),
+        paymentMethod: null,
+        billingEmail: null,
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getBilling(ORG_ID)).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('updateBilling', () => {
+    const existingBilling = {
+      plan: {
+        name: 'Basic plan',
+        interval: 'monthly',
+        description: 'Our most popular plan for small teams.',
+        priceAmount: 10,
+        priceCurrency: 'USD',
+        seatsUsed: 14,
+        seatsLimit: 20,
+      },
+      paymentMethod: {
+        brand: 'visa',
+        last4: '1234',
+        expiry: '06/2024',
+      },
+      billingEmail: 'billing@foundation.com',
+    };
+
+    it('merges a partial payload into the existing billing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        billing: existingBilling,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        billing: {
+          ...existingBilling,
+          billingEmail: 'finance@foundation.com',
+        },
+      });
+
+      const result = await service.updateBilling(ORG_ID, {
+        billingEmail: 'finance@foundation.com',
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          billing: expect.objectContaining({
+            ...existingBilling,
+            billingEmail: 'finance@foundation.com',
+          }),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          ...existingBilling,
+          billingEmail: 'finance@foundation.com',
+        }),
+      );
+    });
+
+    it('merges nested payment method fields without dropping the rest', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        billing: existingBilling,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        billing: {
+          ...existingBilling,
+          paymentMethod: {
+            ...existingBilling.paymentMethod,
+            expiry: '12/2026',
+          },
+        },
+      });
+
+      const result = await service.updateBilling(ORG_ID, {
+        paymentMethod: { expiry: '12/2026' },
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          billing: expect.objectContaining({
+            billingEmail: existingBilling.billingEmail,
+            paymentMethod: expect.objectContaining({
+              brand: 'visa',
+              last4: '1234',
+              expiry: '12/2026',
+            }),
+          }),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          paymentMethod: expect.objectContaining({ expiry: '12/2026' }),
+        }),
+      );
+    });
+
+    it('creates a default plan when billing is absent on the organization', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        billing: {
+          plan: {
+            name: 'Basic plan',
+          },
+          paymentMethod: null,
+          billingEmail: 'finance@foundation.com',
+        },
+      });
+
+      const result = await service.updateBilling(ORG_ID, {
+        billingEmail: 'finance@foundation.com',
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          billing: expect.objectContaining({
+            plan: expect.objectContaining({ name: 'Basic plan' }),
+            paymentMethod: null,
+          }),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({ billingEmail: 'finance@foundation.com' }),
+      );
+    });
+
+    it('clears the billing email when it is explicitly null', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        billing: existingBilling,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        billing: { ...existingBilling, billingEmail: null },
+      });
+
+      const result = await service.updateBilling(ORG_ID, {
+        billingEmail: null,
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({ billingEmail: null }),
+      );
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateBilling(ORG_ID, { billingEmail: 'test@foundation.com' }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 500 when the update fails', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue(null);
+
+      await expect(
+        service.updateBilling(ORG_ID, { billingEmail: 'test@foundation.com' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('getInvoices', () => {
+    it('returns the organization invoices scoped to the organization', async () => {
+      const invoices = [
+        {
+          _id: '64f1b2c3d4e5f678901234e1',
+          organizationId: ORG_ID,
+          invoiceNumber: '007',
+          billingDate: 'Dec 1, 2023',
+          status: 'paid',
+          amount: 10,
+          currency: 'USD',
+          planName: 'Basic plan',
+        },
+        {
+          _id: '64f1b2c3d4e5f678901234e2',
+          organizationId: ORG_ID,
+          invoiceNumber: '006',
+          billingDate: 'Nov 1, 2023',
+          status: 'paid',
+          amount: 10,
+          currency: 'USD',
+          planName: 'Basic plan',
+        },
+      ];
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      invoiceRepository.findByOrganization.mockResolvedValue(invoices);
+
+      const result = await service.getInvoices(ORG_ID);
+
+      expect(invoiceRepository.findByOrganization).toHaveBeenCalledWith(
+        ORG_ID,
+        undefined,
+      );
+      expect(result).toEqual(invoices);
+    });
+
+    it('forwards the search term to the repository', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      invoiceRepository.findByOrganization.mockResolvedValue([]);
+
+      const result = await service.getInvoices(ORG_ID, '007');
+
+      expect(invoiceRepository.findByOrganization).toHaveBeenCalledWith(
+        ORG_ID,
+        '007',
+      );
+      expect(result).toEqual([]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getInvoices(ORG_ID)).rejects.toThrow(AppException);
+      expect(invoiceRepository.findByOrganization).not.toHaveBeenCalled();
+    });
+  });
+
   describe('pending sections', () => {
-    it.each(['getPolicyManagement', 'getBilling'])(
+    it.each(['getPolicyManagement'])(
       '%s returns an unimplemented placeholder',
       async (method) => {
         const result = await (service as any)[method](ORG_ID);
@@ -1005,7 +1289,7 @@ describe('SettingsDomainOrganisationService', () => {
       },
     );
 
-    it.each(['updatePolicyManagement', 'updateBilling'])(
+    it.each(['updatePolicyManagement'])(
       '%s returns an unimplemented placeholder with the payload',
       async (method) => {
         const payload = { key: 'value' };
