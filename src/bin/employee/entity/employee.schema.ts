@@ -235,7 +235,7 @@ export class Employee {
   departmentCode: string | null;
 
   @Prop({ type: String, default: null })
-  jobTitle: string | null;
+  jobTitleCode: string | null;
 
   @Prop({ type: String, default: null })
   supervisor: string | null;
