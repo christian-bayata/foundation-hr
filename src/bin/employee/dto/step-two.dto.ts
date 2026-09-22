@@ -30,9 +30,8 @@ export class StepTwoDto {
   @IsOptional()
   probationPeriod?: ProbationPeriod;
 
-  @IsEnum(Department, { message: 'Invalid department.' })
   @IsNotEmpty({ message: 'Department is required.' })
-  department: Department;
+  departmentCode: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Job title is required.' })

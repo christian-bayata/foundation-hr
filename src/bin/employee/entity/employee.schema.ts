@@ -231,8 +231,8 @@ export class Employee {
   @Prop({ type: String, default: null })
   probationPeriod: string | null;
 
-  @Prop({ type: String, enum: Object.values(Department), default: null })
-  department: Department | null;
+  @Prop({ type: String, default: null })
+  departmentCode: string | null;
 
   @Prop({ type: String, default: null })
   jobTitle: string | null;
