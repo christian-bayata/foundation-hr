@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
 import { OrganizationDepartmentRepository } from '../../organization/repository/organization-department.repository';
+import { JobTitleRepository } from '../../organization/repository/job-title.repository';
 import {
   Billing,
   Branding,
@@ -12,6 +13,7 @@ import {
   Plan,
 } from '../../organization/entity/organization.schema';
 import { OrganizationDepartment } from '../../organization/entity/organization-department.schema';
+import { JobTitle } from '../../organization/entity/job-title.schema';
 import { Invoice } from '../organisation/entity/invoice.schema';
 import { InvoiceRepository } from '../organisation/repository/invoice.repository';
 import { EmployeeRepository } from '../../employee/repository/employee.repository';
@@ -25,6 +27,8 @@ import { UpdateHierarchyDto } from '../organisation/dto/organization-hierarchy.d
 import { UpdateBrandingDto } from '../organisation/dto/update-branding.dto';
 import { UpdateBillingDto } from '../organisation/dto/update-billing.dto';
 import { UpdateDepartmentDto } from '../organisation/dto/update-departments.dto';
+import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
+import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
   AddDepartmentDto,
   AddDepartmentsDto,
@@ -57,6 +61,8 @@ export class SettingsDomainOrganisationService {
     private readonly organizationRepository: OrganizationRepository,
     @Inject(OrganizationDepartmentRepository)
     private readonly organizationDepartmentRepository: OrganizationDepartmentRepository,
+    @Inject(JobTitleRepository)
+    private readonly jobTitleRepository: JobTitleRepository,
     @Inject(EmployeeService)
     private readonly employeeService: EmployeeService,
     @Inject(EmployeeRepository)
@@ -1092,6 +1098,231 @@ export class SettingsDomainOrganisationService {
       )) as Invoice[];
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.getInvoices.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve all job titles belonging to an organization
+   *
+   * @param organizationId - The organization to scope the query to
+   * @param search - Optional job title name search term
+   * @returns {Promise<JobTitle[]>}
+   *
+   * @throws {404} Organization not found
+   */
+  async getJobTitles(
+    organizationId: string,
+    search?: string,
+  ): Promise<JobTitle[]> {
+    try {
+      if (
+        !(await this.organizationRepository.findOrg({ _id: organizationId }))
+      ) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      return (await this.jobTitleRepository.findByOrganization(
+        organizationId,
+        '',
+        search,
+      )) as JobTitle[];
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getJobTitles.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Create a single job title for an organization. The code
+   * is generated server-side and names are unique (case-insensitive) within
+   * the organization.
+   *
+   * @param organizationId - The organization to scope the creation to
+   * @param dto - The job title payload
+   * @returns {Promise<JobTitle>}
+   *
+   * @throws {400} Duplicate job title name
+   * @throws {404} Organization not found
+   */
+  async addJobTitle(
+    organizationId: string,
+    dto: AddJobTitleDto,
+  ): Promise<JobTitle> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const name = dto.name.trim();
+      if (name.length === 0) {
+        AppResponse.error({
+          message: 'Job title name must not be empty.',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const existing =
+        (await this.jobTitleRepository.findByOrganization(organizationId)) ??
+        [];
+      const collision = existing.find(
+        (jobTitle) => jobTitle.name.toLowerCase() === name.toLowerCase(),
+      );
+      if (collision) {
+        AppResponse.error({
+          message: `A job title named "${name}" already exists`,
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const created = await this.jobTitleRepository.create({
+        organizationId,
+        code: this.authUtility.generateRandomString(),
+        name,
+      } as JobTitle);
+
+      this.logger.log(`Added job title "${name}" for org ${organizationId}`);
+      return created as unknown as JobTitle;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addJobTitle.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a single job title matched by its unique code.
+   * Only the fields present in the payload are applied; omitted fields keep
+   * their current values.
+   *
+   * @param organizationId - The organization to scope the update to
+   * @param code - The unique job title code to match
+   * @param dto - Partial job title payload
+   * @returns {Promise<JobTitle>}
+   *
+   * @throws {400} Duplicate job title name
+   * @throws {404} Organization or job title not found
+   */
+  async updateJobTitle(
+    organizationId: string,
+    code: string,
+    dto: UpdateJobTitleDto,
+  ): Promise<JobTitle> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const jobTitle = await this.jobTitleRepository.findByCode(
+        organizationId,
+        code,
+      );
+      if (!jobTitle) {
+        AppResponse.error({
+          message: 'Job title not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const jobTitleId = (jobTitle!._id as Types.ObjectId).toString();
+      const update: Partial<JobTitle> = {};
+
+      if (dto.name !== undefined) {
+        const name = dto.name.trim();
+        if (name.length === 0) {
+          AppResponse.error({
+            message: 'Job title name must not be empty.',
+            status: HttpStatus.BAD_REQUEST,
+          });
+        }
+        const existing =
+          (await this.jobTitleRepository.findByOrganization(organizationId)) ??
+          [];
+        const collision = existing.find(
+          (item) =>
+            item._id?.toString() !== jobTitleId &&
+            item.name.toLowerCase() === name.toLowerCase(),
+        );
+        if (collision) {
+          AppResponse.error({
+            message: `A job title named "${name}" already exists`,
+            status: HttpStatus.BAD_REQUEST,
+          });
+        }
+        update.name = name;
+      }
+
+      const updated = await this.jobTitleRepository.updateByCode(
+        organizationId,
+        code,
+        update,
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update job title',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated job title ${code} for org ${organizationId}`);
+      return updated!;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateJobTitle.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Delete a job title matched by its unique code within an
+   * organization.
+   *
+   * @param organizationId - The organization to scope the deletion to
+   * @param code - The unique job title code to match
+   * @returns {Promise<string>}
+   *
+   * @throws {404} Organization or job title not found
+   */
+  async deleteJobTitle(
+    organizationId: string,
+    code: string,
+  ): Promise<string> {
+    try {
+      const jobTitle = await this.jobTitleRepository.findByCode(
+        organizationId,
+        code,
+      );
+      if (!jobTitle) {
+        AppResponse.error({
+          message: 'Job title not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      await this.jobTitleRepository.deleteWhere({ organizationId, code });
+
+      this.logger.log(`Deleted job title ${code} for org ${organizationId}`);
+      return 'Job title deleted';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deleteJobTitle.name}`;
       AppResponse.error(error);
       throw error;
     }

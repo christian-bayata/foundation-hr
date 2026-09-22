@@ -32,6 +32,11 @@ import {
   AddDepartmentsDto,
   AddSingleDepartmentDto,
 } from './dto/add-department.dto';
+import { AddJobTitleDto } from './dto/add-job-title.dto';
+import {
+  JobTitleCodeQueryDto,
+  UpdateJobTitleDto,
+} from './dto/update-job-title.dto';
 import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
@@ -296,6 +301,63 @@ export class OrganisationController {
       code,
     );
     return AppResponse.success('Departments updated successfully', 200, data);
+  }
+
+  @Get('job-titles/retrieve')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async retrieveJobTitles(
+    @CurrentUser() user: ICurrentUser,
+    @Query('search') search?: string,
+  ) {
+    const data = await this.organisationService.getJobTitles(
+      user.organizationId!,
+      search,
+    );
+    return AppResponse.success('Job titles retrieved successfully', 200, data);
+  }
+
+  @Post('job-titles/add')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  async addJobTitle(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: AddJobTitleDto,
+  ) {
+    const data = await this.organisationService.addJobTitle(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success('Job title added successfully', 201, data);
+  }
+
+  @Patch('job-titles/update')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async updateJobTitle(
+    @CurrentUser() user: ICurrentUser,
+    @Query() { code }: JobTitleCodeQueryDto,
+    @Body() dto: UpdateJobTitleDto,
+  ) {
+    const data = await this.organisationService.updateJobTitle(
+      user.organizationId!,
+      code,
+      dto,
+    );
+    return AppResponse.success('Job title updated successfully', 200, data);
+  }
+
+  @Delete('job-titles/delete')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async deleteJobTitle(
+    @CurrentUser() user: ICurrentUser,
+    @Query() { code }: JobTitleCodeQueryDto,
+  ) {
+    const data = await this.organisationService.deleteJobTitle(
+      user.organizationId!,
+      code,
+    );
+    return AppResponse.success('Job title deleted successfully', 200, data);
   }
 
   @Get('billing/retrieve')
