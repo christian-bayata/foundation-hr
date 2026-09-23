@@ -416,7 +416,7 @@ export class SettingService {
     organizationId: string,
     code: string,
     dto: UpdateDepartmentDto,
-  ): Promise<OrganizationDepartment> {
+  ): Promise<string> {
     return this.organisationDomainService.updateDepartments(
       organizationId,
       code,
@@ -483,10 +483,7 @@ export class SettingService {
    * @param search - Optional invoice search term
    * @returns {Promise<Invoice[]>}
    */
-  getOrgInvoices(
-    organizationId: string,
-    search?: string,
-  ): Promise<Invoice[]> {
+  getOrgInvoices(organizationId: string, search?: string): Promise<Invoice[]> {
     return this.organisationDomainService.getInvoices(organizationId, search);
   }
 }

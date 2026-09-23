@@ -590,8 +590,8 @@ export class SettingsDomainOrganisationService {
   async updateDepartments(
     organizationId: string,
     code: string,
-    dto: UpdateDepartmentDto,
-  ): Promise<OrganizationDepartment> {
+    updateDepartmentDto: UpdateDepartmentDto,
+  ): Promise<string> {
     try {
       const found = await this.organizationRepository.findOrg({
         _id: organizationId,
@@ -603,90 +603,16 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      const department = await this.organizationDepartmentRepository.findByCode(
-        organizationId,
-        code,
-      );
-      if (!department) {
-        AppResponse.error({
-          message: 'Department not found',
-          status: HttpStatus.NOT_FOUND,
-        });
-      }
-
-      const departmentId = (department!._id as Types.ObjectId).toString();
-      const existing =
-        (await this.organizationDepartmentRepository.findByOrganization(
+      await this.organizationDepartmentRepository.updateOrgDept(
+        {
           organizationId,
-        )) ?? [];
-
-      const update: Partial<OrganizationDepartment> = {};
-
-      if (dto.name !== undefined) {
-        const name = dto.name.trim();
-        if (name.length === 0) {
-          AppResponse.error({
-            message: 'Department name must not be empty.',
-            status: HttpStatus.BAD_REQUEST,
-          });
-        }
-        const collision = existing.find(
-          (dept) =>
-            dept._id?.toString() !== departmentId &&
-            dept.name.toLowerCase() === name.toLowerCase(),
-        );
-        if (collision) {
-          AppResponse.error({
-            message: `A department named "${name}" already exists`,
-            status: HttpStatus.BAD_REQUEST,
-          });
-        }
-        update.name = name;
-      }
-
-      if (dto.headOfDepartmentId !== undefined) {
-        update.headOfDepartmentId = dto.headOfDepartmentId ?? null;
-      }
-
-      if (dto.parentCode !== undefined) {
-        const parentCode = dto.parentCode?.trim() || null;
-        let parentDepartmentId: string | null = null;
-        if (parentCode != null) {
-          const parent = existing.find(
-            (dept) =>
-              dept.code.toLowerCase() === parentCode.toLowerCase() ||
-              dept.name.toLowerCase() === parentCode.toLowerCase(),
-          );
-          if (!parent) {
-            this.logger.warn(
-              `Unresolvable parent code "${parentCode}" for department "${code}" — clearing parent`,
-            );
-          } else if (parent._id?.toString() === departmentId) {
-            this.logger.warn(
-              `Department "${code}" cannot be its own parent — clearing parent`,
-            );
-          } else {
-            parentDepartmentId = parent._id!.toString();
-          }
-        }
-        update.parentDepartmentId = parentDepartmentId;
-      }
-
-      const updated = await this.organizationDepartmentRepository.updateByCode(
-        organizationId,
-        code,
-        update,
+          code,
+        },
+        updateDepartmentDto,
       );
-
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update department',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
 
       this.logger.log(`Updated department ${code} for org ${organizationId}`);
-      return updated!;
+      return 'Updated departmen';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateDepartments.name}`;
       AppResponse.error(error);
@@ -1301,10 +1227,7 @@ export class SettingsDomainOrganisationService {
    *
    * @throws {404} Organization or job title not found
    */
-  async deleteJobTitle(
-    organizationId: string,
-    code: string,
-  ): Promise<string> {
+  async deleteJobTitle(organizationId: string, code: string): Promise<string> {
     try {
       const jobTitle = await this.jobTitleRepository.findByCode(
         organizationId,

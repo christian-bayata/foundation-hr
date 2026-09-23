@@ -151,6 +151,28 @@ export class OrganizationDepartmentRepository {
   }
 
   /**
+   * @Responsibility: Update a single department generically
+   * within an organization. Only the fields present in the update are applied.
+   *
+   * @param organizationId - Organization id to scope the update to
+   * @param code - The unique department code to match
+   * @param update - The partial update to apply
+   * @returns {Promise<OrganizationDepartmentDocument | null>}
+   */
+  async updateOrgDept(
+    where: PropDataInput,
+    data: Partial<OrganizationDepartment>,
+  ): Promise<void> {
+    try {
+      await this.organizationDepartmentModel
+        .findOneAndUpdate(where, data, { new: true })
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Create one or more new department documents additively
    * without reconciling/deleting existing departments. Used by the Add
    * Department feature.

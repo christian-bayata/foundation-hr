@@ -15,7 +15,15 @@ export enum JobType {
 
 export enum ContractDuration {
   INDEFINITE = 'indefinite',
-  FIXED_TERM = 'fixed_term',
+  M1 = '1M',
+  M3 = '3M',
+  M6 = '6M',
+  M9 = '9M',
+  Y1 = '1Y',
+  Y2 = '2Y',
+  Y3 = '3Y',
+  Y4 = '4Y',
+  Y5 = '5Y',
 }
 
 export enum ProbationPeriod {
