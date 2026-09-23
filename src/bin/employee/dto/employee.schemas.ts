@@ -42,46 +42,6 @@ export const inviteEmployeesSchema = Joi.object({
   req: Joi.any(),
 });
 
-export const createEmployeeSchema = Joi.object({
-  firstName: Joi.string().required().messages({
-    'any.required': 'First name is required.',
-  }),
-  lastName: Joi.string().required().messages({
-    'any.required': 'Last name is required.',
-  }),
-  email: Joi.string().email().required().messages({
-    'string.email': 'Please provide a valid email address.',
-    'any.required': 'Email is required.',
-  }),
-  department: Joi.string()
-    .valid(...Object.values(Department))
-    .required()
-    .messages({
-      'any.only': 'Invalid department.',
-      'any.required': 'Department is required.',
-    }),
-  role: Joi.string().required().messages({
-    'any.required': 'Role is required.',
-  }),
-  jobType: Joi.string()
-    .valid(...Object.values(JobType))
-    .required()
-    .messages({
-      'any.only': 'Invalid job type.',
-      'any.required': 'Job type is required.',
-    }),
-  supervisor: Joi.string().optional().allow('', null),
-  location: Joi.string().optional().allow('', null),
-  status: Joi.string()
-    .valid(...Object.values(EmployeeStatus))
-    .optional()
-    .messages({
-      'any.only': 'Invalid status.',
-    }),
-  avatarUrl: Joi.string().optional().allow('', null),
-  req: Joi.any(),
-});
-
 const sortableFields = ['name', 'jobTitle', 'department', 'jobType'];
 
 export const listEmployeeQuerySchema = Joi.object({

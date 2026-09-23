@@ -6,8 +6,7 @@ import { EmailService } from '../../email/email.service';
 import { MailDispatcherDto } from '../../email/dto/send-mail.dto';
 import { employeeInviteTemplate } from '../../email/template/employee-invite.template';
 import { passwordResetTemplate } from '../../email/template/password-reset.template';
-import { StepOneDto } from './dto/step-one.dto';
-import { StepTwoDto } from './dto/step-two.dto';
+import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { OnboardingBasicInformationDto } from './dto/onboarding-basic-info.dto';
 import { OnboardingContactsDto } from './dto/onboarding-contacts.dto';
 import { OnboardingFinanceInformationDto } from './dto/onboarding-finance.dto';
@@ -65,28 +64,25 @@ export class EmployeeService {
   ) {}
 
   /**
-   * @Responsibility: Step 1 — Create a new employee draft with basic info, or
-   * complete the basic info of an employee invited via an inviteId link
+   * @Responsibility: Create a new employee draft with any combination of basic
+   * info and contract details, or complete the details of an employee invited
+   * via an inviteId link. All fields are optional.
    *
-   * @param stepOneDto - Basic info: firstName, lastName, middleName(optional),
-   * employeeId, email, employmentDate, inviteId(optional)
+   * @param createEmployeeDto - Basic info: employeeType, firstName, lastName,
+   * middleName(optional), employeeId(optional), email, employmentDate(optional),
+   * inviteId(optional); contract details: contractDuration(optional), jobType(optional),
+   * workMode(optional), probationPeriod(optional), departmentCode(optional),
+   * jobTitleCode(optional), supervisor(optional), salary(optional), salaryCurrency(optional)
    * @returns The created/updated employee draft
    *
-   * @throws {409} Email or employee ID already exists
+   * @throws {409} Email already exists
    */
-  async createBasicInfo(stepOneDto: StepOneDto): Promise<unknown> {
-    const {
-      inviteId,
-      employeeId,
-      employeeType,
-      firstName,
-      lastName,
-      middleName,
-      email,
-      employmentDate,
-    } = stepOneDto;
+  async createEmployee(createEmployeeDto: CreateEmployeeDto): Promise<unknown> {
+    const { inviteId, email } = createEmployeeDto;
 
     try {
+      const payload = this.buildEmployeePayload(createEmployeeDto);
+
       if (inviteId) {
         const invited =
           (await this.employeeRepository.findById(inviteId)) ??
@@ -109,18 +105,12 @@ export class EmployeeService {
           });
         }
 
-        const updated = await this.employeeRepository.updateById(inviteId, {
-          employeeType,
-          firstName,
-          lastName,
-          middleName: middleName ?? null,
-          employeeId: employeeId ?? null,
-          employmentDate: new Date(employmentDate),
-        });
-
-        this.logger.log(
-          `Basic info completed for invited employee: ${inviteId}`,
+        const updated = await this.employeeRepository.updateById(
+          inviteId,
+          payload,
         );
+
+        this.logger.log(`Employee draft updated: ${inviteId}`);
 
         return updated;
       }
@@ -134,14 +124,9 @@ export class EmployeeService {
       }
 
       const employee = await this.employeeRepository.create({
-        employeeType,
-        firstName,
-        lastName,
-        middleName: middleName ?? null,
-        employeeId: employeeId ?? null,
-        email: email.toLowerCase(),
+        ...payload,
+        email: email!.toLowerCase(),
         employeeUniqueId: this.employeeUtility.generateUniqueId(),
-        employmentDate: new Date(employmentDate),
         status: EmployeeStatus.DRAFT,
       });
 
@@ -156,73 +141,7 @@ export class EmployeeService {
           status: HttpStatus.CONFLICT,
         });
       }
-      error.location = `EmployeeServices.${this.createBasicInfo.name} method`;
-      AppResponse.error(error);
-      throw error;
-    }
-  }
-
-  /**
-   * @Responsibility: Step 2 — Save contract details for a draft employee and
-   * mark them active once onboarding is complete
-   *
-   * @param inviteId - Mongo ID of the employee (invite/onboarding reference)
-   * @param stepTwoDto - Contract details: contractDuration, jobType, workMode,
-   * probationPeriod(optional), department, jobTitle, supervisor(optional),
-   * salary(optional), salaryCurrency(optional)
-   * @returns The updated employee
-   *
-   * @throws {404} Employee not found
-   * @throws {400} Employee already finalized
-   */
-  async saveContractDetails(
-    inviteId: string,
-    stepTwoDto: StepTwoDto,
-  ): Promise<unknown> {
-    const {
-      contractDuration,
-      jobType,
-      workMode,
-      probationPeriod,
-      departmentCode,
-      jobTitleCode,
-      supervisor,
-      salary,
-      salaryCurrency,
-    } = stepTwoDto;
-
-    try {
-      const employee =
-        (await this.employeeRepository.findById(inviteId)) ??
-        AppResponse.error({
-          message: `Employee not found`,
-          status: HttpStatus.NOT_FOUND,
-        });
-
-      if (employee.status === EmployeeStatus.ACTIVE) {
-        AppResponse.error({
-          message: `Employee already finalized. Contract details cannot be updated.`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-      }
-
-      const updated = await this.employeeRepository.updateById(inviteId, {
-        contractDuration,
-        jobType,
-        workMode,
-        probationPeriod: probationPeriod ?? null,
-        departmentCode,
-        jobTitleCode,
-        supervisor: supervisor ?? null,
-        salary: salary ?? null,
-        salaryCurrency: salaryCurrency ?? 'NGN',
-      });
-
-      this.logger.log(`Contract details saved for employee: ${inviteId}`);
-
-      return updated;
-    } catch (error: any) {
-      error.location = `EmployeeServices.${this.saveContractDetails.name} method`;
+      error.location = `EmployeeServices.${this.createEmployee.name} method`;
       AppResponse.error(error);
       throw error;
     }
@@ -254,15 +173,20 @@ export class EmployeeService {
   }
 
   /**
-   * @Responsibility: Step 3 (Save draft) — Persist the employee as a draft,
-   * ready to be invited later from the Onboarding page
+   * @Responsibility: Update an existing employee with any combination of basic
+   * info / contract details (all optional) and persist them as a draft. Active
+   * employees keep their ACTIVE status while still accepting field updates.
    *
    * @param inviteId - Mongo ID of the employee (invite/onboarding reference)
-   * @returns The draft employee
+   * @param dto - Optional fields to update (basic info + contract details)
+   * @returns The updated employee
    *
    * @throws {404} Employee not found
    */
-  async saveDraft(inviteId: string): Promise<unknown> {
+  async saveDraft(
+    inviteId: string,
+    dto?: CreateEmployeeDto,
+  ): Promise<unknown> {
     try {
       const employee =
         (await this.employeeRepository.findById(inviteId)) ??
@@ -271,13 +195,15 @@ export class EmployeeService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      if (employee.status === EmployeeStatus.ACTIVE) {
-        return employee;
+      const update: Record<string, any> = dto
+        ? this.buildEmployeePayload(dto)
+        : {};
+
+      if (employee.status !== EmployeeStatus.ACTIVE) {
+        update.status = EmployeeStatus.DRAFT;
       }
 
-      const updated = await this.employeeRepository.updateById(inviteId, {
-        status: EmployeeStatus.DRAFT,
-      });
+      const updated = await this.employeeRepository.updateById(inviteId, update);
 
       this.logger.log(`Employee draft saved: ${inviteId}`);
 
@@ -1074,6 +1000,57 @@ export class EmployeeService {
   private normalize(value: any): any {
     if (value === undefined || value === null || value === '') return null;
     return value;
+  }
+
+  /**
+   * @Responsibility: Build a partial employee payload from a create/update DTO,
+   * skipping fields that were not provided so partial updates never wipe other
+   * persisted values, and coercing blank strings to null for clean persistence
+   */
+  private buildEmployeePayload(
+    dto: CreateEmployeeDto,
+  ): Record<string, any> {
+    const payload: Record<string, any> = {};
+
+    const pickString = (key: keyof CreateEmployeeDto, value: any) => {
+      if (value === undefined) return;
+      payload[String(key)] = this.normalize(value);
+    };
+
+    pickString('employeeType', dto.employeeType);
+    pickString('firstName', dto.firstName);
+    pickString('lastName', dto.lastName);
+    pickString('middleName', dto.middleName);
+    pickString('employeeId', dto.employeeId);
+    pickString('contractDuration', dto.contractDuration);
+    pickString('jobType', dto.jobType);
+    pickString('workMode', dto.workMode);
+    pickString('probationPeriod', dto.probationPeriod);
+    pickString('departmentCode', dto.departmentCode);
+    pickString('jobTitleCode', dto.jobTitleCode);
+    pickString('supervisor', dto.supervisor);
+
+    if (
+      dto.employmentDate !== undefined &&
+      dto.employmentDate !== null &&
+      dto.employmentDate !== ''
+    ) {
+      payload.employmentDate = new Date(dto.employmentDate);
+    }
+
+    if (dto.salary !== undefined && dto.salary !== null) {
+      payload.salary = dto.salary;
+    }
+
+    if (
+      dto.salaryCurrency !== undefined &&
+      dto.salaryCurrency !== null &&
+      dto.salaryCurrency !== ''
+    ) {
+      payload.salaryCurrency = dto.salaryCurrency;
+    }
+
+    return payload;
   }
 
   /**

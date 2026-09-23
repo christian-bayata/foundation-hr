@@ -131,16 +131,21 @@ describe('EmployeeController (integration)', () => {
     await app.close();
   });
 
-  describe('POST /employees/create/step-one', () => {
+  describe('POST /employees/create', () => {
     const payload = {
       employeeType: 'employee',
       firstName: 'Jane',
       lastName: 'Smith',
       email: 'jane@example.com',
       employmentDate: '2024-03-01',
+      contractDuration: 'indefinite',
+      jobType: 'full_time',
+      workMode: 'hybrid',
+      departmentCode: 'engineering',
+      jobTitleCode: 'ENG123',
     };
 
-    it('creates a draft employee', async () => {
+    it('creates a draft employee with basic info and contract details', async () => {
       employeeRepository.findOne.mockResolvedValue(null);
       employeeRepository.create.mockResolvedValue({
         ...payload,
@@ -149,14 +154,20 @@ describe('EmployeeController (integration)', () => {
       });
 
       const res = await request(app.getHttpServer())
-        .post('/employees/create/step-one')
+        .post('/employees/create')
         .send(payload);
 
       expect(res.status).toBe(201);
       expect(res.body.data.status).toBe(EmployeeStatus.DRAFT);
+      expect(employeeRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          departmentCode: 'engineering',
+          jobTitleCode: 'ENG123',
+        }),
+      );
     });
 
-    it('completes basic info for the employee invited via inviteId', async () => {
+    it('completes details for the employee invited via inviteId', async () => {
       employeeRepository.findById.mockResolvedValue({
         _id: INVITE_ID,
         email: 'jane@example.com',
@@ -170,7 +181,7 @@ describe('EmployeeController (integration)', () => {
       });
 
       const res = await request(app.getHttpServer())
-        .post('/employees/create/step-one')
+        .post('/employees/create')
         .send({ ...payload, inviteId: INVITE_ID });
 
       expect(res.status).toBe(201);
@@ -178,6 +189,29 @@ describe('EmployeeController (integration)', () => {
         INVITE_ID,
         expect.objectContaining({ firstName: 'Jane' }),
       );
+    });
+
+    it('accepts a partial payload with only email', async () => {
+      employeeRepository.findOne.mockResolvedValue(null);
+      employeeRepository.create.mockResolvedValue({
+        email: 'jane@example.com',
+        status: EmployeeStatus.DRAFT,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/create')
+        .send({ email: 'jane@example.com' });
+
+      expect(res.status).toBe(201);
+    });
+
+    it('rejects a missing email', async () => {
+      const { email: _, ...payloadWithoutEmail } = payload;
+      const res = await request(app.getHttpServer())
+        .post('/employees/create')
+        .send(payloadWithoutEmail);
+
+      expect(res.status).toBe(400);
     });
 
     it('rejects when the email does not match the invited account', async () => {
@@ -188,7 +222,7 @@ describe('EmployeeController (integration)', () => {
       });
 
       const res = await request(app.getHttpServer())
-        .post('/employees/create/step-one')
+        .post('/employees/create')
         .send({ ...payload, inviteId: INVITE_ID });
 
       expect(res.status).toBe(400);
@@ -196,7 +230,7 @@ describe('EmployeeController (integration)', () => {
 
     it('rejects an invalid email', async () => {
       const res = await request(app.getHttpServer())
-        .post('/employees/create/step-one')
+        .post('/employees/create')
         .send({ ...payload, email: 'not-an-email' });
 
       expect(res.status).toBe(400);
@@ -204,65 +238,15 @@ describe('EmployeeController (integration)', () => {
 
     it('rejects an invalid employee type', async () => {
       const res = await request(app.getHttpServer())
-        .post('/employees/create/step-one')
+        .post('/employees/create')
         .send({ ...payload, employeeType: 'freelancer' });
-
-      expect(res.status).toBe(400);
-    });
-
-    it('rejects a missing employee type', async () => {
-      const { employeeType: _, ...payloadWithoutType } = payload;
-      const res = await request(app.getHttpServer())
-        .post('/employees/create/step-one')
-        .send(payloadWithoutType);
-
-      expect(res.status).toBe(400);
-    });
-  });
-
-  describe('POST /employees/create/step-two/:employeeId', () => {
-    const payload = {
-      contractDuration: 'indefinite',
-      jobType: 'full_time',
-      workMode: 'hybrid',
-      department: 'engineering',
-      jobTitle: 'Backend Engineer',
-    };
-
-    it('saves contract details and activates the employee', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        status: EmployeeStatus.DRAFT,
-      });
-      employeeRepository.updateById.mockResolvedValue({
-        _id: INVITE_ID,
-        ...payload,
-        salaryCurrency: 'NGN',
-        status: EmployeeStatus.ACTIVE,
-      });
-
-      const res = await request(app.getHttpServer())
-        .post(`/employees/create/step-two/${INVITE_ID}`)
-        .send(payload);
-
-      expect(res.status).toBe(200);
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({ status: EmployeeStatus.ACTIVE }),
-      );
-    });
-
-    it('rejects an invalid inviteId', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/employees/create/step-two/not-an-id')
-        .send(payload);
 
       expect(res.status).toBe(400);
     });
 
     it('rejects an invalid contract duration', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/employees/create/step-two/${INVITE_ID}`)
+        .post('/employees/create')
         .send({ ...payload, contractDuration: 'not-a-duration' });
 
       expect(res.status).toBe(400);
@@ -270,23 +254,15 @@ describe('EmployeeController (integration)', () => {
 
     it('rejects an invalid work mode', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/employees/create/step-two/${INVITE_ID}`)
+        .post('/employees/create')
         .send({ ...payload, workMode: 'not-a-mode' });
-
-      expect(res.status).toBe(400);
-    });
-
-    it('rejects a missing job title', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/employees/create/step-two/${INVITE_ID}`)
-        .send({ ...payload, jobTitle: '' });
 
       expect(res.status).toBe(400);
     });
 
     it('rejects an invalid probation period', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/employees/create/step-two/${INVITE_ID}`)
+        .post('/employees/create')
         .send({ ...payload, probationPeriod: '7 years' });
 
       expect(res.status).toBe(400);
@@ -320,25 +296,55 @@ describe('EmployeeController (integration)', () => {
   });
 
   describe('POST /employees/save-draft/:employeeId', () => {
-    it('saves the employee as a draft', async () => {
+    it('updates the employee fields and saves as a draft', async () => {
       employeeRepository.findById.mockResolvedValue({
         _id: INVITE_ID,
         status: EmployeeStatus.DRAFT,
       });
       employeeRepository.updateById.mockResolvedValue({
         _id: INVITE_ID,
+        firstName: 'Jane',
         status: EmployeeStatus.DRAFT,
       });
 
-      const res = await request(app.getHttpServer()).post(
-        `/employees/save-draft/${INVITE_ID}`,
-      );
+      const res = await request(app.getHttpServer())
+        .post(`/employees/save-draft/${INVITE_ID}`)
+        .send({ firstName: 'Jane' });
 
       expect(res.status).toBe(200);
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        { status: EmployeeStatus.DRAFT },
-      );
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(INVITE_ID, {
+        firstName: 'Jane',
+        status: EmployeeStatus.DRAFT,
+      });
+    });
+
+    it('updates fields and preserves ACTIVE status', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        status: EmployeeStatus.ACTIVE,
+      });
+      employeeRepository.updateById.mockResolvedValue({
+        _id: INVITE_ID,
+        firstName: 'Jane',
+        status: EmployeeStatus.ACTIVE,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post(`/employees/save-draft/${INVITE_ID}`)
+        .send({ firstName: 'Jane' });
+
+      expect(res.status).toBe(200);
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(INVITE_ID, {
+        firstName: 'Jane',
+      });
+    });
+
+    it('rejects an invalid inviteId', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/employees/save-draft/not-an-id')
+        .send({ firstName: 'Jane' });
+
+      expect(res.status).toBe(400);
     });
   });
 

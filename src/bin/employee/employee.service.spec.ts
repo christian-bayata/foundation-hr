@@ -117,40 +117,50 @@ describe('EmployeeService', () => {
     service = module.get<EmployeeService>(EmployeeService);
   });
 
-  describe('createBasicInfo', () => {
+  describe('createEmployee', () => {
     const dto = {
       employeeType: 'employee',
       firstName: 'John',
       lastName: 'Doe',
       email: 'john@example.com',
       employmentDate: '2024-01-15',
+      contractDuration: 'indefinite',
+      jobType: 'full_time',
+      workMode: 'hybrid',
+      departmentCode: 'engineering',
+      jobTitleCode: 'ENG123',
     };
 
-    it('creates a draft employee', async () => {
+    it('creates a draft employee with basic info and contract details', async () => {
       employeeRepository.findOne.mockResolvedValue(null);
       employeeRepository.create.mockResolvedValue({
         ...dto,
+        employmentDate: new Date(dto.employmentDate),
         status: EmployeeStatus.DRAFT,
       });
 
-      const result = await service.createBasicInfo(dto as any);
+      const result = await service.createEmployee(dto as any);
 
       expect(employeeRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           employeeType: 'employee',
           firstName: 'John',
           lastName: 'Doe',
-          middleName: null,
-          employeeUniqueId: 'UNIQUEID123',
           email: 'john@example.com',
+          employeeUniqueId: 'UNIQUEID123',
           employmentDate: expect.any(Date),
+          contractDuration: 'indefinite',
+          jobType: 'full_time',
+          workMode: 'hybrid',
+          departmentCode: 'engineering',
+          jobTitleCode: 'ENG123',
           status: EmployeeStatus.DRAFT,
         }),
       );
       expect(result.status).toBe(EmployeeStatus.DRAFT);
     });
 
-    it('completes the basics of an invited employee when inviteId is provided', async () => {
+    it('completes the details of an invited employee when inviteId is provided', async () => {
       const invited = {
         _id: INVITE_ID,
         email: 'john@example.com',
@@ -163,7 +173,10 @@ describe('EmployeeService', () => {
         employmentDate: new Date(dto.employmentDate),
       });
 
-      const result = await service.createBasicInfo({ ...dto, inviteId: INVITE_ID } as any);
+      const result = await service.createEmployee({
+        ...dto,
+        inviteId: INVITE_ID,
+      } as any);
 
       expect(employeeRepository.updateById).toHaveBeenCalledWith(
         INVITE_ID,
@@ -171,6 +184,7 @@ describe('EmployeeService', () => {
           firstName: 'John',
           employeeType: 'employee',
           employmentDate: expect.any(Date),
+          departmentCode: 'engineering',
         }),
       );
       expect(result.firstName).toBe('John');
@@ -184,7 +198,7 @@ describe('EmployeeService', () => {
       });
 
       await expect(
-        service.createBasicInfo({ ...dto, inviteId: INVITE_ID } as any),
+        service.createEmployee({ ...dto, inviteId: INVITE_ID } as any),
       ).rejects.toThrow(AppException);
     });
 
@@ -196,14 +210,14 @@ describe('EmployeeService', () => {
       });
 
       await expect(
-        service.createBasicInfo({ ...dto, inviteId: INVITE_ID } as any),
+        service.createEmployee({ ...dto, inviteId: INVITE_ID } as any),
       ).rejects.toThrow(AppException);
     });
 
     it('throws 409 when the email already exists', async () => {
       employeeRepository.findOne.mockResolvedValue({ email: dto.email });
 
-      await expect(service.createBasicInfo(dto as any)).rejects.toThrow(
+      await expect(service.createEmployee(dto as any)).rejects.toThrow(
         AppException,
       );
     });
@@ -212,63 +226,9 @@ describe('EmployeeService', () => {
       employeeRepository.findOne.mockResolvedValue(null);
       employeeRepository.create.mockRejectedValue({ code: 11000 });
 
-      await expect(service.createBasicInfo(dto as any)).rejects.toThrow(
+      await expect(service.createEmployee(dto as any)).rejects.toThrow(
         AppException,
       );
-    });
-  });
-
-  describe('saveContractDetails', () => {
-    const dto = {
-      contractDuration: 'indefinite',
-      jobType: 'full-time',
-      workMode: 'hybrid',
-      department: 'engineering',
-      jobTitle: 'Backend Engineer',
-    };
-
-    it('updates contract details on a draft employee and activates it', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        status: EmployeeStatus.DRAFT,
-      });
-      employeeRepository.updateById.mockResolvedValue({
-        _id: INVITE_ID,
-        ...dto,
-        status: EmployeeStatus.ACTIVE,
-      });
-
-      const result = await service.saveContractDetails(INVITE_ID, dto as any);
-
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({
-          ...dto,
-          salaryCurrency: 'NGN',
-          status: EmployeeStatus.ACTIVE,
-        }),
-      );
-      expect(result.jobTitle).toBe('Backend Engineer');
-      expect(result.status).toBe(EmployeeStatus.ACTIVE);
-    });
-
-    it('throws 404 when the employee is not found', async () => {
-      employeeRepository.findById.mockResolvedValue(null);
-
-      await expect(
-        service.saveContractDetails(INVITE_ID, dto as any),
-      ).rejects.toThrow(AppException);
-    });
-
-    it('throws 400 when the employee is already active', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        status: EmployeeStatus.ACTIVE,
-      });
-
-      await expect(
-        service.saveContractDetails(INVITE_ID, dto as any),
-      ).rejects.toThrow(AppException);
     });
   });
 
@@ -293,29 +253,55 @@ describe('EmployeeService', () => {
   });
 
   describe('saveDraft', () => {
-    it('persists the employee as a draft', async () => {
+    it('persists the provided fields and marks the employee as a draft', async () => {
       employeeRepository.findById.mockResolvedValue({
         _id: INVITE_ID,
         status: EmployeeStatus.DRAFT,
       });
       employeeRepository.updateById.mockResolvedValue({
         _id: INVITE_ID,
+        firstName: 'Jane',
         status: EmployeeStatus.DRAFT,
       });
 
-      const result = await service.saveDraft(INVITE_ID);
+      const result = await service.saveDraft(INVITE_ID, {
+        firstName: 'Jane',
+      } as any);
 
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        { status: EmployeeStatus.DRAFT },
-      );
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(INVITE_ID, {
+        firstName: 'Jane',
+        status: EmployeeStatus.DRAFT,
+      });
       expect(result.status).toBe(EmployeeStatus.DRAFT);
+    });
+
+    it('updates fields but preserves ACTIVE status', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        status: EmployeeStatus.ACTIVE,
+      });
+      employeeRepository.updateById.mockResolvedValue({
+        _id: INVITE_ID,
+        firstName: 'Jane',
+        status: EmployeeStatus.ACTIVE,
+      });
+
+      const result = await service.saveDraft(INVITE_ID, {
+        firstName: 'Jane',
+      } as any);
+
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(INVITE_ID, {
+        firstName: 'Jane',
+      });
+      expect(result.status).toBe(EmployeeStatus.ACTIVE);
     });
 
     it('throws 404 when not found', async () => {
       employeeRepository.findById.mockResolvedValue(null);
 
-      await expect(service.saveDraft(INVITE_ID)).rejects.toThrow(AppException);
+      await expect(
+        service.saveDraft(INVITE_ID, {} as any),
+      ).rejects.toThrow(AppException);
     });
   });
 

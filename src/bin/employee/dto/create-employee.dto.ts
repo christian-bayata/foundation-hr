@@ -1,50 +1,87 @@
 import {
+  IsDateString,
   IsEmail,
   IsEnum,
+  IsNumber,
   IsOptional,
   IsString,
-  IsNotEmpty,
 } from 'class-validator';
 import { IRequest } from '../../../common';
-import { Department, EmployeeStatus, JobType } from '../enum/employee.enum';
+import {
+  ContractDuration,
+  EmployeeType,
+  JobType,
+  ProbationPeriod,
+  WorkMode,
+} from '../enum/employee.enum';
 
 export class CreateEmployeeDto {
-  @IsString()
-  @IsNotEmpty({ message: 'First name is required.' })
-  firstName: string;
+  @IsOptional()
+  @IsEnum(EmployeeType, { message: 'Invalid employee type.' })
+  employeeType?: EmployeeType;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Last name is required.' })
-  lastName: string;
+  firstName?: string;
 
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @IsOptional()
+  @IsString()
+  middleName?: string;
+
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
-  @IsEnum(Department, { message: 'Invalid department.' })
-  department: Department;
+  @IsOptional()
+  @IsDateString()
+  employmentDate?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Role is required.' })
-  role: string;
+  inviteId?: string;
 
-  @IsEnum(JobType, { message: 'Invalid job type.' })
-  jobType: JobType;
+  @IsOptional()
+  @IsEnum(ContractDuration, { message: 'Invalid contract duration.' })
+  contractDuration?: ContractDuration;
+
+  @IsOptional()
+  @IsEnum(JobType, { message: 'Invalid employment type.' })
+  jobType?: JobType;
+
+  @IsOptional()
+  @IsEnum(WorkMode, { message: 'Invalid work mode.' })
+  workMode?: WorkMode;
+
+  @IsOptional()
+  probationPeriod?: ProbationPeriod;
+
+  @IsOptional()
+  @IsString()
+  departmentCode?: string;
+
+  @IsOptional()
+  @IsString()
+  jobTitleCode?: string;
 
   @IsOptional()
   @IsString()
   supervisor?: string;
 
   @IsOptional()
-  @IsString()
-  location?: string;
-
-  @IsOptional()
-  @IsEnum(EmployeeStatus, { message: 'Invalid status.' })
-  status?: EmployeeStatus;
+  @IsNumber()
+  salary?: number;
 
   @IsOptional()
   @IsString()
-  avatarUrl?: string;
+  salaryCurrency?: string;
 
   req?: IRequest;
 }

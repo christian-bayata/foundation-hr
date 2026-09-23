@@ -17,8 +17,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser, IRequest } from '../../common';
 import { EmployeeService } from './employee.service';
-import { StepOneDto } from './dto/step-one.dto';
-import { StepTwoDto } from './dto/step-two.dto';
+import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { OnboardingBasicInformationDto } from './dto/onboarding-basic-info.dto';
 import { OnboardingContactsDto } from './dto/onboarding-contacts.dto';
 import { OnboardingFinanceInformationDto } from './dto/onboarding-finance.dto';
@@ -37,8 +36,10 @@ import {
   employeeLoginSchema,
   employeeRefreshTokenSchema,
 } from './dto/employee-auth.schemas';
-import { stepOneSchema } from './dto/step-one.schema';
-import { stepTwoSchema } from './dto/step-two.schema';
+import {
+  createEmployeeSchema,
+  updateEmployeeSchema,
+} from './dto/create-employee.schema';
 import { onboardingBasicInformationSchema } from './dto/onboarding-basic-info.schema';
 import { onboardingContactsSchema } from './dto/onboarding-contacts.schema';
 import { onboardingFinanceInformationSchema } from './dto/onboarding-finance.schema';
@@ -55,41 +56,17 @@ import { SystemRole } from '../auth/enum/role.enum';
 export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 
-  @Post('/create/step-one')
+  @Post('/create')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  @UsePipes(new JoiValidationPipe(stepOneSchema))
-  async createBasicInfo(@Req() req: IRequest, @Body() stepOneDto: StepOneDto) {
-    stepOneDto.req = req;
-    const data = await this.employeeService.createBasicInfo(stepOneDto);
-
-    return AppResponse.success(
-      'Employee draft created successfully',
-      201,
-      data,
-    );
-  }
-
-  @Post('/create/step-two/:employeeId')
-  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  @HttpCode(HttpStatus.OK)
-  async saveContractDetails(
+  @UsePipes(new JoiValidationPipe(createEmployeeSchema))
+  async createEmployee(
     @Req() req: IRequest,
-    @Param('employeeId', new JoiValidationPipe(inviteIdParamSchema))
-    employeeId: string,
-    @Body(new JoiValidationPipe(stepTwoSchema))
-    stepTwoDto: StepTwoDto,
+    @Body() createEmployeeDto: CreateEmployeeDto,
   ) {
-    stepTwoDto.req = req;
-    const data = await this.employeeService.saveContractDetails(
-      employeeId,
-      stepTwoDto,
-    );
+    createEmployeeDto.req = req;
+    const data = await this.employeeService.createEmployee(createEmployeeDto);
 
-    return AppResponse.success(
-      'Contract details saved successfully',
-      200,
-      data,
-    );
+    return AppResponse.success('Employee draft created successfully', 201, data);
   }
 
   @Get('/retrieve/all')
@@ -116,10 +93,17 @@ export class EmployeeController {
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
   async saveDraft(
+    @Req() req: IRequest,
     @Param('employeeId', new JoiValidationPipe(inviteIdParamSchema))
     employeeId: string,
+    @Body(new JoiValidationPipe(updateEmployeeSchema))
+    createEmployeeDto: CreateEmployeeDto,
   ) {
-    const data = await this.employeeService.saveDraft(employeeId);
+    createEmployeeDto.req = req;
+    const data = await this.employeeService.saveDraft(
+      employeeId,
+      createEmployeeDto,
+    );
 
     return AppResponse.success('Employee draft saved successfully', 200, data);
   }
