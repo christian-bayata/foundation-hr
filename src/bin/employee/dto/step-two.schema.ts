@@ -36,15 +36,15 @@ export const stepTwoSchema = Joi.object({
     .messages({
       'any.only': 'Invalid probation period.',
     }),
-  department: Joi.string()
+  departmentCode: Joi.string()
     .valid(...Object.values(Department))
     .required()
     .messages({
       'any.only': 'Invalid department.',
-      'any.required': 'Department is required.',
+      'any.required': 'Department code is required.',
     }),
-  jobTitle: Joi.string().trim().required().messages({
-    'any.required': 'Job title is required.',
+  jobTitleCode: Joi.string().trim().required().messages({
+    'any.required': 'Job title code is required.',
   }),
   supervisor: Joi.string().trim().optional().allow('', null),
   salary: Joi.number().optional().allow(null),
