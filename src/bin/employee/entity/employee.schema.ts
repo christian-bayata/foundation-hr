@@ -207,6 +207,9 @@ export class Employee {
   middleName: string | null;
 
   @Prop({ type: String, trim: true, default: null })
+  employeeId: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
   employeeUniqueId: string | null;
 
   @Prop({ type: String, required: true, trim: true, lowercase: true })

@@ -16,6 +16,7 @@ export const stepOneSchema = Joi.object({
     'any.required': 'Last name is required.',
   }),
   middleName: Joi.string().trim().optional().allow('', null),
+  employeeId: Joi.string().trim().optional().allow('', null),
   email: Joi.string().email().required().messages({
     'string.email': 'Please provide a valid email address.',
     'any.required': 'Email is required.',

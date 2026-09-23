@@ -26,6 +26,10 @@ export class StepOneDto {
   @IsString()
   middleName?: string;
 
+  @IsOptional()
+  @IsString()
+  employeeId: string;
+
   @IsEmail()
   @IsNotEmpty({ message: 'Email is required.' })
   email: string;

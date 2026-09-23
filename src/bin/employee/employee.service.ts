@@ -77,6 +77,7 @@ export class EmployeeService {
   async createBasicInfo(stepOneDto: StepOneDto): Promise<unknown> {
     const {
       inviteId,
+      employeeId,
       employeeType,
       firstName,
       lastName,
@@ -113,6 +114,7 @@ export class EmployeeService {
           firstName,
           lastName,
           middleName: middleName ?? null,
+          employeeId: employeeId ?? null,
           employmentDate: new Date(employmentDate),
         });
 
@@ -136,6 +138,7 @@ export class EmployeeService {
         firstName,
         lastName,
         middleName: middleName ?? null,
+        employeeId: employeeId ?? null,
         email: email.toLowerCase(),
         employeeUniqueId: this.employeeUtility.generateUniqueId(),
         employmentDate: new Date(employmentDate),
