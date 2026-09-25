@@ -25,6 +25,7 @@ import { SettingService } from '../setting/setting.service';
 import { Product } from './enum/product.enum';
 import { UserType } from './enum/user.enum';
 import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -182,6 +183,7 @@ export class AuthService {
     const { password } = signInDto;
 
     try {
+      // console.log(crypto.randomBytes(32).toString('base64'));
       const existing = await this.userRepository.findUser({ email });
       const user =
         existing ??
@@ -205,8 +207,10 @@ export class AuthService {
         });
       }
 
-      const organization =
-        await this.organizationRepository.findOrganizationByOwner(user?._id);
+      const organization = await this.organizationRepository.findOrg({
+        ownerId: user?._id.toString(),
+      });
+      console.log(organization);
 
       const organizationId =
         organization?._id?.toString() ??
@@ -251,6 +255,7 @@ export class AuthService {
         organizationId,
       };
     } catch (error: any) {
+      console.log(error);
       error.location = `AuthServices.${this.signIn.name} method`;
       AppResponse.error(error);
     }
@@ -294,8 +299,9 @@ export class AuthService {
         });
       }
 
-      const refreshOrg =
-        await this.organizationRepository.findOrganizationByOwner(user?._id);
+      const refreshOrg = await this.organizationRepository.findOrg({
+        ownerId: user?._id.toString(),
+      });
 
       user.refreshTokens =
         user?.refreshTokens?.filter(
@@ -443,9 +449,12 @@ export class AuthService {
    */
   async userProfile(userId: string): Promise<unknown> {
     try {
-      const existing = await this.userRepository.findUser({
-        _id: userId,
-      });
+      const existing = await this.userRepository.findUser(
+        {
+          _id: userId,
+        },
+        '-refreshTokens',
+      );
       const user =
         existing ??
         AppResponse.error({
@@ -453,10 +462,15 @@ export class AuthService {
           status: HttpStatus.NOT_FOUND,
         });
 
+      const orgDetails = await this.organizationRepository.findOrg({
+        ownerId: userId,
+      });
+
       const { password: _password, ...newUser } = user.toObject();
 
-      return newUser;
+      return { ...newUser, orgDetails };
     } catch (error: any) {
+      console.log(error);
       error.location = `AuthServices.${this.userProfile.name} method`;
       AppResponse.error(error);
     }
@@ -547,7 +561,7 @@ export class AuthService {
           size: organisationSize,
           country,
           slug: `oRg-${uuidv4()}`,
-          owner: owner?._id,
+          ownerId: owner?._id.toString(),
           products: [],
           marketingOptIn,
           termsAcceptedAt: new Date(),
@@ -594,8 +608,9 @@ export class AuthService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      const organization =
-        await this.organizationRepository.findOrganizationByOwner(owner?._id);
+      const organization = await this.organizationRepository.findOrg({
+        ownerId: owner?._id.toString(),
+      });
 
       if (!organization) {
         AppResponse.error({

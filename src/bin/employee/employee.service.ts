@@ -183,10 +183,7 @@ export class EmployeeService {
    *
    * @throws {404} Employee not found
    */
-  async saveDraft(
-    inviteId: string,
-    dto?: CreateEmployeeDto,
-  ): Promise<unknown> {
+  async saveDraft(inviteId: string, dto?: CreateEmployeeDto): Promise<unknown> {
     try {
       const employee =
         (await this.employeeRepository.findById(inviteId)) ??
@@ -203,7 +200,10 @@ export class EmployeeService {
         update.status = EmployeeStatus.DRAFT;
       }
 
-      const updated = await this.employeeRepository.updateById(inviteId, update);
+      const updated = await this.employeeRepository.updateById(
+        inviteId,
+        update,
+      );
 
       this.logger.log(`Employee draft saved: ${inviteId}`);
 
@@ -1007,9 +1007,7 @@ export class EmployeeService {
    * skipping fields that were not provided so partial updates never wipe other
    * persisted values, and coercing blank strings to null for clean persistence
    */
-  private buildEmployeePayload(
-    dto: CreateEmployeeDto,
-  ): Record<string, any> {
+  private buildEmployeePayload(dto: CreateEmployeeDto): Record<string, any> {
     const payload: Record<string, any> = {};
 
     const pickString = (key: keyof CreateEmployeeDto, value: any) => {
@@ -1061,8 +1059,9 @@ export class EmployeeService {
     inviteExpiresAt: Date,
     organizationDetails: any,
   ): Promise<void> {
+    const encryptedEmail = this.employeeUtility.encrypt(email);
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-    const inviteLink = `${frontendUrl}/auth/invite?orgSlug=${organizationDetails?.slug}`;
+    const inviteLink = `${frontendUrl}/auth/create-account/employee?orgSlug=${organizationDetails?.slug}&eId=${encryptedEmail}`;
     const organizationName = organizationDetails?.name;
     const expiryDate = inviteExpiresAt
       ? new Date(inviteExpiresAt)

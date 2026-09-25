@@ -37,7 +37,7 @@ export class OrganizationRepository {
    * @returns {Promise<OrganizationDocument | null>}
    */
   async findOrganizationByOwner(
-    owner: Types.ObjectId | string,
+    owner: string,
   ): Promise<OrganizationDocument | null> {
     try {
       return await this.organizationModel.findOne({ owner });
@@ -71,7 +71,7 @@ export class OrganizationRepository {
     attributes: string = '',
   ): Promise<OrganizationDocument | null> {
     try {
-      return await this.organizationModel.findById(where).select(attributes);
+      return await this.organizationModel.findOne(where).select(attributes);
     } catch (error) {
       throw error;
     }

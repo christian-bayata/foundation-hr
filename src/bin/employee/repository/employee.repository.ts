@@ -215,6 +215,7 @@ export class EmployeeRepository {
           .sort(sort)
           .skip(skip)
           .limit(pageSize)
+          .select('-refreshTokens')
           .exec(),
         this.employeeModel.countDocuments(where).exec(),
       ]);

@@ -66,14 +66,22 @@ export class EmployeeController {
     createEmployeeDto.req = req;
     const data = await this.employeeService.createEmployee(createEmployeeDto);
 
-    return AppResponse.success('Employee draft created successfully', 201, data);
+    return AppResponse.success(
+      'Employee draft created successfully',
+      201,
+      data,
+    );
   }
 
   @Get('/retrieve/all')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  @UsePipes(new JoiValidationPipe(listEmployeeQuerySchema))
-  async listEmployees(@Query() query: ListEmployeeQuery) {
-    const data = await this.employeeService.listEmployees(query);
+  // @UsePipes(new JoiValidationPipe(listEmployeeQuerySchema))
+  async listEmployees(
+    @Req() req: IRequest,
+    @Query() listEmployeeQuery: ListEmployeeQuery,
+  ) {
+    listEmployeeQuery.organizationId = req.user?.organizationId;
+    const data = await this.employeeService.listEmployees(listEmployeeQuery);
 
     return AppResponse.success('Employees retrieved successfully', 200, data);
   }

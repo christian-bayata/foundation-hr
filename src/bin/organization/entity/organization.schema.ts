@@ -137,8 +137,8 @@ export class Organization {
   @Prop({ type: String, required: true })
   slug: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  owner: Types.ObjectId;
+  @Prop({ type: String, required: true })
+  ownerId: string;
 
   @Prop({ type: [String], enum: Object.values(Product), default: [] })
   products: Product[];
@@ -188,6 +188,6 @@ export class Organization {
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);
 OrganizationSchema.index(
-  { owner: 1 },
+  { ownerId: 1 },
   { name: 'organization_owner_idx', unique: true },
 );
