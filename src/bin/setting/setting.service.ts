@@ -2,6 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { SettingsDomainAccessControlService } from './domain/settings.domain.access-control.service';
 import { SettingsDomainOrganisationService } from './domain/settings.domain.organisation.service';
 import { CreateRoleDto } from './access-control/dto/create-role.dto';
+import {
+  AddCompanyAdminDto,
+  UpdateCompanyAdminRoleDto,
+} from './access-control/dto/company-admin.dto';
+import {
+  CompanyAdminRow,
+  ListCompanyAdminQuery,
+  PaginatedResult,
+} from './access-control/interface/company-admin.interface';
 import { RoleDocument } from './access-control/entity/role.schema';
 import { UpdateGeneralInfoDto } from './organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-details.dto';
@@ -28,6 +37,7 @@ import { DepartmentView } from './domain/settings.domain.organisation.service';
 import { EmployeeDocument } from '../employee/entity/employee.schema';
 import { HierarchyTreeNode } from '../employee/interface/employee.interface';
 import { SystemRole } from '../auth/enum/role.enum';
+import { UserRoleFlag } from './organisation/enum/organisation.enum';
 
 @Injectable()
 export class SettingService {
@@ -218,6 +228,73 @@ export class SettingService {
    */
   findOrganizationForUser(userId: string): Promise<string | null> {
     return this.accessControlDomainService.findOrganizationForUser(userId);
+  }
+
+  /**
+   * @Responsibility: Module-level facade to add a new company admin to an organization
+   *
+   * @param organizationId - The organization the admin is added to
+   * @param addedById - The user id of the actor creating the assignment
+   * @param dto - The company admin creation payload
+   * @returns {Promise<CompanyAdminRow>}
+   */
+  addCompanyAdmin(
+    organizationId: string,
+    addedById: string,
+    addCompanyAdminDto: AddCompanyAdminDto,
+  ): Promise<CompanyAdminRow> {
+    return this.accessControlDomainService.addCompanyAdmin(
+      organizationId,
+      addedById,
+      addCompanyAdminDto,
+    );
+  }
+
+  /**
+   * @Responsibility: Module-level facade to list the company admins of an organization
+   * with search, filtering, sorting and pagination
+   *
+   * @param organizationId - The organization to scope the listing to
+   * @param query - The search, filter, sort and pagination criteria
+   * @returns {Promise<PaginatedResult<CompanyAdminRow>>}
+   */
+  listCompanyAdmins(
+    organizationId: string,
+    query: ListCompanyAdminQuery,
+  ): Promise<PaginatedResult<CompanyAdminRow>> {
+    return this.accessControlDomainService.listCompanyAdmins(
+      organizationId,
+      query,
+    );
+  }
+
+  /**
+   * @Responsibility: Module-level facade to change the role held by a company admin
+   *
+   * @param organizationId - The organization that owns the assignment
+   * @param id - The company admin assignment id
+   * @param dto - The new role id
+   * @returns {Promise<CompanyAdminRow>}
+   */
+  updateCompanyAdminRole(
+    roleId: string,
+    updateCompanyAdminRoleDto: UpdateCompanyAdminRoleDto,
+  ): Promise<string> {
+    return this.accessControlDomainService.updateCompanyAdminRole(
+      roleId,
+      updateCompanyAdminRoleDto,
+    );
+  }
+
+  /**
+   * @Responsibility: Module-level facade to activate a user role assignment
+   *
+   * @param flag - The flag
+   * @param roleId - The user role assignment id
+   * @returns {Promise<void>}
+   */
+  activateUserRole(roleId: string, flag: UserRoleFlag): Promise<any> {
+    return this.accessControlDomainService.activateUserRole(roleId, flag);
   }
 
   /**

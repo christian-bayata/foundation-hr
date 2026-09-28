@@ -21,11 +21,30 @@ const config: Config = {
         tsconfig: {
           rootDir: '.',
           isolatedModules: true,
+          // The root tsconfig targets `nodenext`, which makes ts-jest emit ESM for
+          // ESM-only packages (@nestjs/* v12). Jest runs this suite as CommonJS,
+          // so pin the transform output to CommonJS regardless of package type.
+          module: 'commonjs',
+          moduleResolution: 'node10',
+          resolvePackageJsonExports: false,
+          ignoreDeprecations: '6.0',
+          // Without this ts-jest passes .js through untouched, so the ESM-only
+          // @nestjs/* sources would reach Jest untransformed.
+          allowJs: true,
         },
       },
     ],
   },
-  moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
+  moduleNameMapper: {
+    // Uses `import.meta.url`, which TypeScript cannot downlevel to CommonJS.
+    // Nest imports it by relative path, so match on the path suffix.
+    '.*[\\\\/]utils[\\\\/]load-package\\.util\\.js$':
+      '<rootDir>/test/mocks/load-package.util.cjs',
+    ...pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
+  },
+  // @nestjs/* v12 ships as ESM-only. ts-jest has to transpile it to CommonJS
+  // because the test files and the rest of the suite are CommonJS.
+  transformIgnorePatterns: ['/node_modules/(?!@nestjs/)'],
   collectCoverageFrom: [
     'src/**/*.(t|j)s',
     'libs/**/*.(t|j)s',

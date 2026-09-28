@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UserRole, UserRoleDocument } from '../entity/user-role.schema';
+import { ListCompanyAdminFilters } from '../interface/company-admin.interface';
+import { PropDataInput } from '../../../../common/util/util.interface';
+import { Role } from '../entity/role.schema';
+import { UpdateCompanyAdminRoleDto } from '../dto/company-admin.dto';
 
 @Injectable()
 export class UserRoleRepository {
@@ -89,6 +93,110 @@ export class UserRoleRepository {
   }
 
   /**
+   * @Responsibility: Repo to retrieve every role assignment matching a company admin
+   * filter, with each assignment's role document populated. Sorting and pagination
+   * are applied by the domain service because the admin set is small and the
+   * sort keys (name, status) span the User and UserRole collections.
+   *
+   * @param filters - Scoped filter criteria
+   * @returns {Promise<UserRoleDocument[]>}
+   */
+  async findByFilters(
+    filters: ListCompanyAdminFilters,
+  ): Promise<UserRoleDocument[]> {
+    try {
+      return await this.userRoleModel
+        .find(this.buildWhereClause(filters))
+        .populate('roleId')
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to build the Mongo filter for a company admin listing,
+   * combining the role scope with the optional status, addedById, date created
+   * range, resolved userId and job title constraints
+   */
+  private buildWhereClause(
+    filters: ListCompanyAdminFilters,
+  ): Record<string, unknown> {
+    const where: Record<string, unknown> = {
+      organizationId: filters.organizationId,
+      roleId: { $in: filters.roleIds },
+    };
+
+    if (filters.status) where.status = filters.status;
+    if (filters.addedById) where.addedById = filters.addedById;
+    if (filters.userIds) where.userId = { $in: filters.userIds };
+    if (filters.dateCreatedRange) {
+      where.createdAt = {
+        $gte: filters.dateCreatedRange.from,
+        $lt: filters.dateCreatedRange.to,
+      };
+    }
+
+    if (filters.jobTitleCodes?.length || filters.jobTitleUserIds?.length) {
+      const or: Record<string, unknown>[] = [];
+      if (filters.jobTitleCodes?.length) {
+        or.push({ jobTitleCode: { $in: filters.jobTitleCodes } });
+      }
+      if (filters.jobTitleUserIds?.length) {
+        or.push({ userId: { $in: filters.jobTitleUserIds } });
+      }
+      where.$or = or;
+    }
+
+    return where;
+  }
+
+  /**
+   * @Responsibility: Repo to retrieve a single role assignment by its id within an
+   * organization, across every role tier, with each assignment's role document
+   * populated. Scoping by organizationId is what keeps a guessed id from reaching
+   * another tenant's assignment.
+   *
+   * @param id - The role assignment id to look up
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<UserRoleDocument | null>}
+   */
+  async findByIdAndOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<UserRoleDocument | null> {
+    try {
+      return await this.userRoleModel
+        .findOne({ _id: id, organizationId })
+        .populate('roleId')
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to partially update a role assignment by its id
+   *
+   * @param id - The role assignment id to update
+   * @param data - Fields to update on the assignment
+   * @returns {Promise<UserRoleDocument | null>}
+   */
+  async updateById(
+    id: string,
+    data: Partial<UserRole>,
+  ): Promise<UserRoleDocument | null> {
+    try {
+      return await this.userRoleModel
+        .findByIdAndUpdate(id, { $set: data }, { new: true })
+        .populate('roleId')
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to persist a new user-role assignment
    *
    * @param data - User-role assignment fields to save
@@ -139,6 +247,24 @@ export class UserRoleRepository {
   ): Promise<void> {
     try {
       await this.userRoleModel.deleteMany({ userId, organizationId });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to partially update an existing user role
+   *
+   * @param roleId - The role id to update
+   * @param data - Fields to update on the role
+   * @returns {Promise<RoleDocument | null>}
+   */
+  async updateUserRole(
+    where: PropDataInput,
+    data: Partial<UpdateCompanyAdminRoleDto>,
+  ): Promise<void | null> {
+    try {
+      await this.userRoleModel.findOneAndUpdate(where, data, { new: true });
     } catch (error) {
       throw error;
     }

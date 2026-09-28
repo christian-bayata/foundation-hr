@@ -19,3 +19,9 @@ export enum InvoiceStatus {
   PENDING = 'pending',
   FAILED = 'failed',
 }
+
+export enum UserRoleFlag {
+  ACTIVATE = 'activate',
+  DE_ACTIVATE = 'de_activate',
+  SUSPEND = 'suspend',
+}

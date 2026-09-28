@@ -3,6 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JobTitle, JobTitleDocument } from '../entity/job-title.schema';
 
+/**
+ * Escapes user-supplied input before it is embedded in a RegExp so a job title
+ * containing regex metacharacters cannot alter the match.
+ */
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 @Injectable()
 export class JobTitleRepository {
   constructor(
@@ -55,6 +62,55 @@ export class JobTitleRepository {
     try {
       return await this.jobTitleModel
         .findOne({ organizationId, code })
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve a single job title matched by either its unique code
+   * or its name (case-insensitive) within an organization.
+   *
+   * @param organizationId - Organization id to scope the query to
+   * @param value - The job title code or name to match
+   * @returns {Promise<JobTitleDocument | null>}
+   */
+  async findByCodeOrName(
+    organizationId: string,
+    value: string,
+  ): Promise<JobTitleDocument | null> {
+    try {
+      return await this.jobTitleModel
+        .findOne({
+          organizationId,
+          $or: [{ code: value }, { name: new RegExp(`^${escapeRegex(value)}$`, 'i') }],
+        })
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve every job title of an organization that holds any of
+   * the given codes, used to resolve stored codes back to display names.
+   *
+   * @param organizationId - Organization id to scope the query to
+   * @param codes - The job title codes to match
+   * @returns {Promise<JobTitleDocument[]>}
+   */
+  async findByCodes(
+    organizationId: string,
+    codes: string[],
+  ): Promise<JobTitleDocument[]> {
+    try {
+      if (codes.length === 0) {
+        return [];
+      }
+      return await this.jobTitleModel
+        .find({ organizationId, code: { $in: codes } })
+        .lean()
         .exec();
     } catch (error) {
       throw error;

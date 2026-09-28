@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { REQUIRES_SYSTEM_SETTINGS_KEY } from '../decorators/requires-system-settings.decorator';
 import { SystemRole } from '../../bin/auth/enum/role.enum';
 import { CurrentUser, IRequest } from '../interfaces/request.interface';
 
@@ -18,6 +19,10 @@ export interface IRoleService {
     organizationId: string,
   ): Promise<SystemRole[]>;
   findOrganizationForUser(userId: string): Promise<string | null>;
+  hasSystemSettingsAccess(
+    userId: string,
+    organizationId: string,
+  ): Promise<boolean>;
 }
 
 @Injectable()
@@ -34,8 +39,13 @@ export class RoleGuard implements CanActivate {
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const requiresSystemSettings = this.reflector.getAllAndOverride<boolean>(
+      REQUIRES_SYSTEM_SETTINGS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    const needsRoles = Boolean(requiredRoles?.length);
 
-    if (!requiredRoles || requiredRoles.length === 0) {
+    if (!needsRoles && !requiresSystemSettings) {
       return true;
     }
 
@@ -60,20 +70,34 @@ export class RoleGuard implements CanActivate {
         return false;
       }
 
-      const userRoles = await this.roleService.getUserSystemRoles(
-        user.userId,
-        organizationId,
-      );
-
-      const hasRole = requiredRoles.some((role) => userRoles.includes(role));
-
-      if (!hasRole) {
-        this.logger.warn(
-          `RoleGuard: User ${user.userId} lacks required roles [${requiredRoles.join(', ')}] in org ${user.organizationId}`,
+      if (needsRoles) {
+        const userRoles = await this.roleService.getUserSystemRoles(
+          user.userId,
+          organizationId,
         );
+
+        if (!requiredRoles!.some((role) => userRoles.includes(role))) {
+          this.logger.warn(
+            `RoleGuard: User ${user.userId} lacks required roles [${requiredRoles!.join(', ')}] in org ${user.organizationId}`,
+          );
+          return false;
+        }
       }
 
-      return hasRole;
+      if (
+        requiresSystemSettings &&
+        !(await this.roleService.hasSystemSettingsAccess(
+          user.userId,
+          organizationId,
+        ))
+      ) {
+        this.logger.warn(
+          `RoleGuard: User ${user.userId} lacks system settings access in org ${organizationId}`,
+        );
+        return false;
+      }
+
+      return true;
     } catch (error) {
       this.logger.error(`RoleGuard: Error checking roles`, error);
       return false;

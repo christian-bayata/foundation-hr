@@ -8,11 +8,13 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RoleGuard } from '../../common/guards/role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequiresSystemSettings } from '../../common/decorators/requires-system-settings.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser } from '../../common';
 import { SystemRole } from '../auth/enum/role.enum';
@@ -22,10 +24,17 @@ import {
   AssignRoleDto,
   RemoveRoleDto,
 } from './access-control/dto/assign-role.dto';
+import {
+  AddCompanyAdminDto,
+  UpdateCompanyAdminRoleDto,
+} from './access-control/dto/company-admin.dto';
+import type { ListCompanyAdminQuery } from './access-control/interface/company-admin.interface';
 import { AppResponse } from '../../common/response/app-response';
+import { UserRoleFlag } from './organisation/enum/organisation.enum';
 
 @Controller('setting')
 @UseGuards(JwtAuthGuard, RoleGuard)
+@RequiresSystemSettings()
 export class SettingController {
   constructor(private readonly settingService: SettingService) {}
 
@@ -118,5 +127,70 @@ export class SettingController {
       user.organizationId!,
     );
     return AppResponse.success('Role removed successfully', 200);
+  }
+
+  @Get('access-control/company-admin/retrieve/all')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async retrieveAllCompanyAdmins(
+    @CurrentUser() user: ICurrentUser,
+    @Query() query: ListCompanyAdminQuery,
+  ) {
+    const data = await this.settingService.listCompanyAdmins(
+      user.organizationId!,
+      query,
+    );
+    return AppResponse.success(
+      'Company admins retrieved successfully',
+      200,
+      data,
+    );
+  }
+
+  @Post('access-control/company-admin/create')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  async addCompanyAdmin(
+    @CurrentUser() user: ICurrentUser,
+    @Body() addCompanyAdminDto: AddCompanyAdminDto,
+  ) {
+    const data = await this.settingService.addCompanyAdmin(
+      user.organizationId!,
+      user.userId,
+      addCompanyAdminDto,
+    );
+    return AppResponse.success('Company admin added successfully', 201, data);
+  }
+
+  @Patch('access-control/company-admin/update')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async updateCompanyAdminRole(
+    @CurrentUser() user: ICurrentUser,
+    @Query('roleId') roleId: string,
+    @Body() updateCompanyAdminRoleDto: UpdateCompanyAdminRoleDto,
+  ) {
+    const data = await this.settingService.updateCompanyAdminRole(
+      roleId,
+      updateCompanyAdminRoleDto,
+    );
+    return AppResponse.success(
+      'Company admin role updated successfully',
+      200,
+      data,
+    );
+  }
+
+  @Patch('access-control/user-role/actions')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async activateUserRole(
+    @CurrentUser() user: ICurrentUser,
+    @Query('roleId') roleId: string,
+    @Query('flag') flag: UserRoleFlag,
+  ) {
+    const data = await this.settingService.activateUserRole(roleId, flag);
+    return AppResponse.success(
+      'User role actions updated successfully',
+      200,
+      data,
+    );
   }
 }

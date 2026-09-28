@@ -21,6 +21,13 @@ import { OrganizationModule } from '../organization/organization.module';
 import { EmployeeModule } from '../employee/employee.module';
 import { User, UserSchema } from '../auth/entity/user.schema';
 import { AuthUtility } from '../auth/auth.utility';
+import { JobTitleRepository } from '../organization/repository/job-title.repository';
+import { EmployeeRepository } from '../employee/repository/employee.repository';
+import {
+  JobTitle,
+  JobTitleSchema,
+} from '../organization/entity/job-title.schema';
+import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
 
 @Module({
   imports: [
@@ -29,6 +36,8 @@ import { AuthUtility } from '../auth/auth.utility';
       { name: UserRole.name, schema: UserRoleSchema },
       { name: User.name, schema: UserSchema },
       { name: Invoice.name, schema: InvoiceSchema },
+      { name: JobTitle.name, schema: JobTitleSchema },
+      { name: Employee.name, schema: EmployeeSchema },
     ]),
     EmailModule,
     OrganizationModule,
@@ -43,8 +52,12 @@ import { AuthUtility } from '../auth/auth.utility';
     UserRoleRepository,
     InviteeUserRepository,
     InvoiceRepository,
+    JobTitleRepository,
+    EmployeeRepository,
     { provide: ROLE_SERVICE, useExisting: SettingsDomainAccessControlService },
     AuthUtility,
+    JobTitleRepository,
+    EmployeeRepository,
   ],
   exports: [
     SettingService,

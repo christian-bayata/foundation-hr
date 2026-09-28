@@ -227,7 +227,68 @@ export class EmployeeRepository {
   }
 
   /**
-   * @Responsibility: Build a Mongo filter query from list filters, combining
+   * @Responsibility: Repo to retrieve the distinct emails of employees belonging to
+   * an organization that hold any of the given job title codes. Used to bridge
+   * employee job titles onto auth users, which share no id with this collection.
+   *
+   * @param organizationId - Organization id to scope the query to
+   * @param jobTitleCodes - The job title codes to match
+   * @returns {Promise<string[]>}
+   */
+  async findEmailsByOrganizationJobTitleCodes(
+    organizationId: string,
+    jobTitleCodes: string[],
+  ): Promise<string[]> {
+    try {
+      if (jobTitleCodes.length === 0) {
+        return [];
+      }
+      const emails = await this.employeeModel
+        .find({ organizationId, jobTitleCode: { $in: jobTitleCodes } })
+        .select('email')
+        .lean()
+        .exec();
+
+      return [
+        ...new Set(
+          emails
+            .map((employee) => employee.email)
+            .filter((email): email is string => Boolean(email)),
+        ),
+      ];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to retrieve employees belonging to any of the given
+   * organizations that hold any of the given emails. Used to resolve job titles
+   * onto auth users, which share no id with this collection.
+   *
+   * @param emails - The emails to match
+   * @param organizationIds - The organizations to scope the query to
+   * @returns {Promise<EmployeeDocument[]>}
+   */
+  async findByOrganizationEmails(
+    emails: string[],
+    organizationIds: string[],
+  ): Promise<EmployeeDocument[]> {
+    try {
+      if (emails.length === 0 || organizationIds.length === 0) {
+        return [];
+      }
+      return await this.employeeModel
+        .find({ email: { $in: emails }, organizationId: { $in: organizationIds } })
+        .select('firstName lastName email jobTitleCode organizationId')
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to build a Mongo filter query from list filters, combining
    * free-text search across name/email/employeeId with exact-match filters
    */
   private buildWhereClause(

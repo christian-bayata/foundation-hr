@@ -13,6 +13,7 @@ import {
 import { AppResponse, JoiValidationPipe, Roles } from '../../../common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RoleGuard } from '../../../common/guards/role.guard';
+import { RequiresSystemSettings } from '../../../common/decorators/requires-system-settings.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser } from '../../../common';
 import { SystemRole } from '../../auth/enum/role.enum';
@@ -44,6 +45,7 @@ import {
 
 @Controller('setting/organization')
 @UseGuards(JwtAuthGuard, RoleGuard)
+@RequiresSystemSettings()
 export class OrganisationController {
   constructor(
     private readonly organisationService: SettingsDomainOrganisationService,

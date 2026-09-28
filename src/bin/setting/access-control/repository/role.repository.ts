@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Role, RoleDocument } from '../entity/role.schema';
 import { PropDataInput } from '../../../../common/util/util.interface';
+import { SystemRole } from '../../../auth/enum/role.enum';
 
 @Injectable()
 export class RoleRepository {
@@ -49,11 +50,11 @@ export class RoleRepository {
    * @returns {Promise<RoleDocument | null>}
    */
   async findByOrganizationAndName(
-    organizationId: string,
-    name: string,
+    where: PropDataInput,
+    attributes: string = '',
   ): Promise<RoleDocument | null> {
     try {
-      return await this.roleModel.findOne({ organizationId, name });
+      return await this.roleModel.findOne(where).select(attributes);
     } catch (error) {
       throw error;
     }
@@ -70,6 +71,28 @@ export class RoleRepository {
       return await this.roleModel.find({
         organizationId,
         isSystemRole: true,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to retrieve the roles of an organization whose parent
+   * system role matches any of the given system roles
+   *
+   * @param organizationId - The organization to scope the query to
+   * @param systemRoles - The system roles to match against
+   * @returns {Promise<RoleDocument[]>}
+   */
+  async findByOrganizationAndParentSystemRoles(
+    organizationId: string,
+    systemRoles: SystemRole[],
+  ): Promise<RoleDocument[]> {
+    try {
+      return await this.roleModel.find({
+        organizationId,
+        parentSystemRole: { $in: systemRoles },
       });
     } catch (error) {
       throw error;
@@ -112,16 +135,12 @@ export class RoleRepository {
    * @param data - Fields to update on the role
    * @returns {Promise<RoleDocument | null>}
    */
-  async update(
-    roleId: string,
+  async updateRole(
+    where: PropDataInput,
     data: Partial<Role>,
   ): Promise<RoleDocument | null> {
     try {
-      return await this.roleModel.findByIdAndUpdate(
-        roleId,
-        { $set: data },
-        { new: true },
-      );
+      return await this.roleModel.findOneAndUpdate(where, data, { new: true });
     } catch (error) {
       throw error;
     }

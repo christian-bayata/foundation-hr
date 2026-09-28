@@ -210,7 +210,6 @@ export class AuthService {
       const organization = await this.organizationRepository.findOrg({
         ownerId: user?._id.toString(),
       });
-      console.log(organization);
 
       const organizationId =
         organization?._id?.toString() ??
@@ -255,7 +254,6 @@ export class AuthService {
         organizationId,
       };
     } catch (error: any) {
-      console.log(error);
       error.location = `AuthServices.${this.signIn.name} method`;
       AppResponse.error(error);
     }
@@ -470,7 +468,6 @@ export class AuthService {
 
       return { ...newUser, orgDetails };
     } catch (error: any) {
-      console.log(error);
       error.location = `AuthServices.${this.userProfile.name} method`;
       AppResponse.error(error);
     }
