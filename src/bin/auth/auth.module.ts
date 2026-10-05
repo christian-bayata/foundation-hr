@@ -11,18 +11,32 @@ import { AuthUtility } from './auth.utility';
 import { EmailModule } from '../../email/email.module';
 import { OrganizationModule } from '../organization/organization.module';
 import { SettingModule } from '../setting/setting.module';
+import { EmployeeRepository } from '../employee/repository/employee.repository';
+import {
+  Employee,
+  EmployeeSchema,
+} from '../employee/entity/employee.schema';
 
 @Module({
   imports: [
     ConfigModule,
     JwtModule.register({ global: true }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: Employee.name, schema: EmployeeSchema },
+    ]),
     EmailModule,
     OrganizationModule,
     SettingModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, TokenService, UserRepository, AuthUtility],
+  providers: [
+    AuthService,
+    TokenService,
+    UserRepository,
+    AuthUtility,
+    EmployeeRepository,
+  ],
   exports: [AuthService, TokenService, AuthUtility],
 })
 export class AuthModule {}

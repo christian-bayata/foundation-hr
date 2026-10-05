@@ -27,15 +27,8 @@ import { EmployeeUtility } from './repository/employee.utility';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
 import { EmployeeAcceptInviteDto } from './dto/invite-employees.dto';
 import { EmployeeSetPasswordDto } from './dto/set-password.dto';
-import { EmployeeLoginDto } from './dto/login.dto';
-import { EmployeeForgotPasswordDto } from './dto/forgot-password.dto';
-import { EmployeeResetPasswordDto } from './dto/reset-password.dto';
-import { EmployeeRefreshTokenDto } from './dto/refresh-token.dto';
-import { TokenService } from '../auth/token.service';
-import { AuthUtility } from '../auth/auth.utility';
-import { SystemRole } from '../auth/enum/role.enum';
-import { RefreshTokenEntry } from '../auth/interface/auth.interface';
-import { compare, hash } from 'bcryptjs';
+import { UserRepository } from '../auth/repository/user.repository';
+import { hash } from 'bcryptjs';
 import moment from 'moment';
 
 interface MongooseDuplicateError {
@@ -59,8 +52,8 @@ export class EmployeeService {
     private readonly emailService: EmailService,
     @Inject(ConfigService)
     private readonly configService: ConfigService,
-    @Inject(TokenService) private readonly tokenService: TokenService,
-    @Inject(AuthUtility) private readonly authUtility: AuthUtility,
+    @Inject(UserRepository)
+    private readonly userRepository: UserRepository,
   ) {}
 
   /**
@@ -447,9 +440,13 @@ export class EmployeeService {
         hasJoinedOrg: true,
         organizationId: employee.organizationId ?? organizationId,
         onboarding: {
-          startedAt: moment().toDate(),
+          ...(employee.onboarding ?? {}),
+          startedAt: employee.onboarding?.startedAt ?? moment().toDate(),
         },
       });
+
+      /* Keep one password across every identity the invitee holds */
+      await this.syncPasswordToAdminUser(normalizedEmail, hashedPassword);
 
       this.logger.log(`Password set for invited employee: ${normalizedEmail}`);
 
@@ -462,301 +459,39 @@ export class EmployeeService {
   }
 
   /**
-   * @Responsibility: Authenticate an employee with email and password, issuing
-   * a JWT access/refresh token pair. Mirrors the admin auth sign-in flow.
+   * @Responsibility: Mirror a password hash onto the invitee's admin user record
    *
-   * @param employeeLoginDto - Email and password credentials
-   * @returns accessToken, refreshToken, role, organizationId and employee status
+   * An invitee who also holds an admin identity must end up with the same
+   * password on both records, so that a later reset or sign-in agrees across
+   * the pair. No-op when the email has no admin user record.
    *
-   * @throws {400} Invalid email or password (account missing or password unset)
+   * @param email - Lowercased email of the invitee
+   * @param hashedPassword - The bcrypt hash to store
    */
-  async employeeLogin(employeeLoginDto: EmployeeLoginDto): Promise<unknown> {
-    const email = employeeLoginDto.email.toLowerCase();
-    const { password } = employeeLoginDto;
-
+  private async syncPasswordToAdminUser(
+    email: string,
+    hashedPassword: string,
+  ): Promise<void> {
     try {
-      const existing =
-        await this.employeeRepository.findByEmailWithPassword(email);
-      const employee =
-        existing ??
-        AppResponse.error({
-          message: `Invalid email or password`,
-          status: HttpStatus.BAD_REQUEST,
-        });
+      const adminUser = await this.userRepository.findUser({ email });
 
-      if (!employee?.password) {
-        AppResponse.error({
-          message: `Invalid email or password`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-      }
+      if (!adminUser) return;
 
-      const passwordValid = await compare(password, employee?.password ?? '');
-      if (!passwordValid) {
-        AppResponse.error({
-          message: `Invalid email or password`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-      }
-
-      const organizationId = employee?.organizationId ?? undefined;
-
-      const payload = {
-        sub: employee?._id?.toString(),
-        email: employee?.email,
-        userType: 'employee',
-        organizationId,
-      };
-      const tokens = await this.tokenService?.generateTokenPair(payload);
-
-      const refreshTokens: RefreshTokenEntry[] = [
-        ...(employee?.refreshTokens ?? []),
+      await this.userRepository.updateUser(
+        { _id: adminUser._id.toString() },
         {
-          tokenHash: this.authUtility.hash(tokens?.refreshToken),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          createdAt: new Date(),
+          password: hashedPassword,
+          isEmailVerified: true,
+          resetToken: null,
         },
-      ];
-
-      await this.employeeRepository.updateById(employee._id.toString(), {
-        refreshTokens,
-      });
-
-      this.logger.log(`Employee signed in: ${email}`);
-
-      return {
-        accessToken: tokens?.accessToken,
-        refreshToken: tokens?.refreshToken,
-        role: [SystemRole.EMPLOYEE],
-        organizationId,
-        status: employee.status,
-      };
-    } catch (error: any) {
-      error.location = `EmployeeServices.${this.employeeLogin.name} method`;
-      AppResponse.error(error);
-      throw error;
-    }
-  }
-
-  /**
-   * @Responsibility: Refresh an expired employee access token using a valid
-   * refresh token, rotating the refresh token. Mirrors the admin refresh flow.
-   *
-   * @param employeeRefreshTokenDto - Refresh token to validate and rotate
-   * @returns New JWT access and refresh token pair
-   *
-   * @throws {400} Invalid refresh token, or employee not found
-   */
-  async employeeRefresh(
-    employeeRefreshTokenDto: EmployeeRefreshTokenDto,
-  ): Promise<unknown> {
-    const { refreshToken } = employeeRefreshTokenDto;
-
-    try {
-      const payload = await this.tokenService?.verifyRefreshToken(refreshToken);
-
-      const existing = await this.employeeRepository.findById(payload?.sub);
-      const employee =
-        existing ??
-        AppResponse.error({
-          message: `Employee not found`,
-          status: HttpStatus.NOT_FOUND,
-        });
-
-      const tokenHash = this.authUtility.hash(refreshToken);
-      const tokenExists = employee?.refreshTokens?.some(
-        (t: RefreshTokenEntry) => t?.tokenHash === tokenHash,
       );
-      if (!tokenExists) {
-        AppResponse.error({
-          message: `Invalid refresh token`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-      }
 
-      const refreshTokens: RefreshTokenEntry[] =
-        employee?.refreshTokens?.filter(
-          (t: RefreshTokenEntry) => t?.tokenHash !== tokenHash,
-        ) ?? [];
-
-      const newPayload = {
-        sub: employee?._id?.toString(),
-        email: employee?.email,
-        userType: 'employee',
-        organizationId: employee?.organizationId ?? undefined,
-      };
-      const tokens = await this.tokenService?.generateTokenPair(newPayload);
-
-      refreshTokens.push({
-        tokenHash: this.authUtility.hash(tokens?.refreshToken),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        createdAt: new Date(),
-      });
-
-      await this.employeeRepository.updateById(employee._id.toString(), {
-        refreshTokens,
-      });
-
-      return {
-        accessToken: tokens?.accessToken,
-        refreshToken: tokens?.refreshToken,
-      };
-    } catch (error: any) {
-      error.location = `EmployeeServices.${this.employeeRefresh.name} method`;
-      AppResponse.error(error);
-      throw error;
-    }
-  }
-
-  /**
-   * @Responsibility: Generate a password reset token for a joined employee and
-   * send the reset link via email. Returns a generic success message so the
-   * response never reveals whether the account exists.
-   *
-   * @param employeeForgotPasswordDto - Email address requesting a reset
-   * @returns Generic confirmation message
-   */
-  async employeeForgotPassword(
-    employeeForgotPasswordDto: EmployeeForgotPasswordDto,
-  ): Promise<unknown> {
-    const email = employeeForgotPasswordDto.email.toLowerCase();
-
-    try {
-      const employee = await this.employeeRepository.findByEmail(email);
-
-      if (employee?.hasJoinedOrg) {
-        const rawToken = this.authUtility.randomToken();
-        const tokenHash = this.authUtility.hash(rawToken);
-        const resetTokenTtlMinutes =
-          Number(this.configService.get<string>('RESET_TOKEN_TTL')) || 30;
-
-        await this.employeeRepository.updateById(employee._id.toString(), {
-          resetToken: {
-            tokenHash,
-            expiresAt: new Date(Date.now() + resetTokenTtlMinutes * 60 * 1000),
-          },
-        });
-
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-        const resetLink = `${frontendUrl}/auth/reset-password?token=${rawToken}`;
-
-        function emailDispatcherPayload(): MailDispatcherDto {
-          return {
-            to: `${employee?.email}`,
-            from: 'Foundation HR <no-reply@foundationhr.com>',
-            subject: 'Password Token Request',
-            html: passwordResetTemplate(employee?.email as string, resetLink),
-          };
-        }
-
-        await this.emailService.brevoEmailDispatcher(emailDispatcherPayload());
-        this.logger.log(`Password reset link sent to: ${email}`);
-      }
-
-      return `If this email is registered, a reset link has been sent`;
-    } catch (error: any) {
-      error.location = `EmployeeServices.${this.employeeForgotPassword.name} method`;
-      AppResponse.error(error);
-      throw error;
-    }
-  }
-
-  /**
-   * @Responsibility: Reset an employee's password using a valid reset token.
-   * Invalidates all existing sessions by clearing stored refresh tokens.
-   *
-   * @param employeeResetPasswordDto - Reset token and new password
-   * @returns Success message after password reset
-   *
-   * @throws {400} Invalid or expired reset token
-   */
-  async employeeResetPassword(
-    employeeResetPasswordDto: EmployeeResetPasswordDto,
-  ): Promise<unknown> {
-    const { token, password } = employeeResetPasswordDto;
-
-    try {
-      const tokenHash = this.authUtility.hash(token);
-      const existing = await this.employeeRepository.findOne({
-        'resetToken.tokenHash': tokenHash,
-      });
-      const employee =
-        existing ??
-        AppResponse.error({
-          message: `Invalid or expired reset token`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-
-      if (
-        employee?.resetToken?.expiresAt &&
-        new Date() > new Date(employee?.resetToken?.expiresAt)
-      ) {
-        AppResponse.error({
-          message: `Reset token has expired`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-      }
-
-      const hashedPassword = await hash(password, 10);
-
-      await this.employeeRepository.updateById(employee._id.toString(), {
-        password: hashedPassword,
-        resetToken: null,
-        refreshTokens: [],
-      });
-
-      this.logger.log(`Password reset successful for: ${employee?.email}`);
-
-      return `Password reset successful for: ${employee?.email}`;
-    } catch (error: any) {
-      error.location = `EmployeeServices.${this.employeeResetPassword.name} method`;
-      AppResponse.error(error);
-      throw error;
-    }
-  }
-
-  /**
-   * @Responsibility: Log an employee out by revoking their refresh token(s)
-   *
-   * @param employeeId - Mongo ID of the authenticated employee
-   * @param refreshToken - Optional refresh token to revoke; when omitted, all sessions are cleared
-   * @returns Success confirmation
-   *
-   * @throws {404} Employee not found
-   */
-  async employeeLogout(
-    employeeId: string,
-    refreshToken?: string,
-  ): Promise<unknown> {
-    try {
-      const existing = await this.employeeRepository.findById(employeeId);
-      const employee =
-        existing ??
-        AppResponse.error({
-          message: `Employee not found`,
-          status: HttpStatus.NOT_FOUND,
-        });
-
-      let revoked: RefreshTokenEntry[];
-      if (refreshToken) {
-        const tokenHash = this.authUtility.hash(refreshToken);
-        revoked =
-          employee?.refreshTokens?.filter(
-            (t: RefreshTokenEntry) => t?.tokenHash !== tokenHash,
-          ) ?? [];
-      } else {
-        revoked = [];
-      }
-
-      await this.employeeRepository.updateById(employeeId, {
-        refreshTokens: revoked,
-      });
-
-      return 'Logged out successfully';
-    } catch (error: any) {
-      error.location = `EmployeeServices.${this.employeeLogout.name} method`;
-      AppResponse.error(error);
-      throw error;
+      this.logger.log(`Password synced to admin record for: ${email}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync password to admin record for: ${email}`,
+        error,
+      );
     }
   }
 

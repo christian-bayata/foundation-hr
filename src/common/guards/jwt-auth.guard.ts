@@ -8,11 +8,15 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { PrincipalType } from '../../bin/auth/enum/principal-type.enum';
 
 export interface JwtPayload {
   sub: string;
   email: string;
   userType?: string;
+  principalType?: PrincipalType;
+  employeeId?: string;
+  adminUserId?: string;
   organizationId?: string;
 }
 
@@ -49,6 +53,9 @@ export class JwtAuthGuard implements CanActivate {
         userId: payload.sub,
         email: payload.email,
         userType: payload.userType,
+        principalType: payload.principalType,
+        employeeId: payload.employeeId,
+        adminUserId: payload.adminUserId,
         organizationId: payload.organizationId,
       };
     } catch {

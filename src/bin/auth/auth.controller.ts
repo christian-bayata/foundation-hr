@@ -86,6 +86,7 @@ export class AuthController {
 
   @Public()
   @Post('/login')
+  @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UsePipes(new JoiValidationPipe(signInSchema))
   async login(@Req() req: IRequest, @Body() signInDto: SignInDto) {
@@ -97,6 +98,7 @@ export class AuthController {
 
   @Public()
   @Post('/refresh')
+  @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   @UsePipes(new JoiValidationPipe(refreshTokenSchema))
   async refresh(
@@ -111,6 +113,7 @@ export class AuthController {
 
   @Public()
   @Post('/forgot-password')
+  @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @UsePipes(new JoiValidationPipe(forgotPasswordSchema))
   async forgotPassword(
@@ -125,6 +128,7 @@ export class AuthController {
 
   @Public()
   @Post('/reset-password')
+  @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   // @UsePipes(new JoiValidationPipe(resetPasswordSchema))
   async resetPassword(
@@ -170,20 +174,20 @@ export class AuthController {
   @Get('/me')
   @UseGuards(JwtAuthGuard)
   async userProfile(@Req() req: IRequest) {
-    const userId = req.user?.userId || '';
-    const data = await this.authService.userProfile(userId);
+    const data = await this.authService.userProfile(req.user?.email ?? '');
 
     return success('Successfully retrieved user profile', 200, data);
   }
 
   @Post('/logout')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   async logout(
     @Req() req: IRequest,
     @Body() logoutDto: { refreshToken?: string },
   ) {
     const data = await this.authService.logout(
-      req.user?.userId ?? '',
+      req.user?.email ?? '',
       logoutDto?.refreshToken,
     );
 

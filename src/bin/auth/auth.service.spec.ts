@@ -1,104 +1,167 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  jest,
-} from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { ConfigService } from '@nestjs/config';
+import { AppException } from '../../common/response/app-exception';
+import { EmailService } from '../../email/email.service';
+import { AuthService } from './auth.service';
+import { TokenService } from './token.service';
+import { AuthUtility } from './auth.utility';
+import { UserRepository } from './repository/user.repository';
+import { OrganizationRepository } from '../organization/repository/organization.repository';
+import { SettingService } from '../setting/setting.service';
+import { EmployeeRepository } from '../employee/repository/employee.repository';
+import { PrincipalType } from './enum/principal-type.enum';
+import { SystemRole } from './enum/role.enum';
 
-const mockHash = jest.fn();
-const mockCompare = jest.fn();
-const mockGenerateOtp = jest.fn();
-const mockCryptoHash = jest.fn();
-const mockRandomToken = jest.fn();
-
-jest.unstable_mockModule('bcryptjs', () => ({
-  hash: mockHash,
-  compare: mockCompare,
+jest.mock('bcryptjs', () => ({
+  hash: jest.fn(async (value: string) => `hashed:${value}`),
+  compare: jest.fn(
+    async (plain: string, hashed: string) => hashed === `hashed:${plain}`,
+  ),
 }));
 
-const mockAuthUtility = {
-  generateOtp: mockGenerateOtp,
-  hash: mockCryptoHash,
-  randomToken: mockRandomToken,
-};
+type AnyPromiseFn = (...args: any[]) => Promise<any>;
 
-jest.unstable_mockModule('./auth.utility', () => ({
-  AuthUtility: jest.fn().mockImplementation(() => mockAuthUtility),
-}));
+const EMPLOYEE_ID = '64f1b2c3d4e5f678901234ab';
+const ADMIN_ID = '64f1b2c3d4e5f678901234ac';
+const ORG_ID = '64f1b2c3d4e5f678901234ad';
+const EMAIL = 'john@example.com';
 
-const { AuthService } = await import('./auth.service');
-const { TokenService } = await import('./token.service');
-const { UserRepository } = await import('./repository/user.repository');
-const { EmailService } = await import('../email/email.service');
-const { AuthUtility } = await import('./auth.utility');
-const { ConfigService } = await import('@nestjs/config');
-
-function makeUser(overrides: Partial<User> = {}): any {
-  return {
-    _id: { toString: () => '507f1f77bcf86cd799439011' },
-    email: 'johndoe@gmail.com',
-    password: 'hashedPassword',
-    isEmailVerified: false,
-    userType: undefined,
-    otp: null,
-    otpAttempts: 0,
-    resetToken: null,
-    refreshTokens: [],
-    save: jest.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
-
-describe('AuthService', () => {
-  let service: AuthService;
+describe('AuthService (unified principal flow)', () => {
+  let service: any;
   let userRepository: {
-    findUser: jest.Mock;
-    createUser: jest.Mock;
-    save: jest.Mock;
+    findUser: jest.Mock<AnyPromiseFn>;
+    createUser: jest.Mock<AnyPromiseFn>;
+    updateUser: jest.Mock<AnyPromiseFn>;
+  };
+  let employeeRepository: {
+    findByEmailWithPassword: jest.Mock<AnyPromiseFn>;
+    findByEmail: jest.Mock<AnyPromiseFn>;
+    findOne: jest.Mock<AnyPromiseFn>;
+    findById: jest.Mock<AnyPromiseFn>;
+    updateById: jest.Mock<AnyPromiseFn>;
   };
   let tokenService: {
-    generateAccessToken: jest.Mock;
-    generateRefreshToken: jest.Mock;
-    generateTokenPair: jest.Mock;
-    verifyRefreshToken: jest.Mock;
+    generateTokenPair: jest.Mock<AnyPromiseFn>;
+    generateAccessToken: jest.Mock<AnyPromiseFn>;
+    generateRefreshToken: jest.Mock<AnyPromiseFn>;
+    verifyRefreshToken: jest.Mock<AnyPromiseFn>;
   };
-  let emailService: { emailDispatcher: jest.Mock };
-  let configService: { get: jest.Mock };
+  let authUtility: {
+    hash: jest.Mock<(value: string) => string>;
+    randomToken: jest.Mock<() => string>;
+  };
+  let emailService: { brevoEmailDispatcher: jest.Mock<AnyPromiseFn> };
+  let organizationRepository: { findOrg: jest.Mock<AnyPromiseFn> };
+  let settingService: {
+    getUserSystemRoles: jest.Mock<AnyPromiseFn>;
+    findOrganizationForUser: jest.Mock<AnyPromiseFn>;
+  };
+  let configService: { get: jest.Mock<(key: string) => string | undefined> };
+
+  const employee = (overrides: Record<string, any> = {}) => ({
+    _id: { toString: () => EMPLOYEE_ID },
+    email: EMAIL,
+    firstName: 'John',
+    lastName: 'Doe',
+    status: 'active',
+    organizationId: ORG_ID,
+    hasJoinedOrg: true,
+    isEmailVerified: true,
+    password: `hashed:secret123`,
+    refreshTokens: [],
+    onboarding: { completedSteps: [] },
+    toObject: () => ({
+      _id: EMPLOYEE_ID,
+      email: EMAIL,
+      firstName: 'John',
+      status: 'active',
+      password: `hashed:secret123`,
+      refreshTokens: [],
+      resetToken: { tokenHash: 'leak', expiresAt: new Date() },
+      __v: 0,
+    }),
+    ...overrides,
+  });
+
+  const adminUser = (overrides: Record<string, any> = {}) => ({
+    _id: { toString: () => ADMIN_ID },
+    email: EMAIL,
+    firstName: 'John',
+    lastName: 'Doe',
+    isEmailVerified: true,
+    userType: 'company',
+    password: `hashed:secret123`,
+    refreshTokens: [],
+    toObject: () => ({
+      _id: ADMIN_ID,
+      email: EMAIL,
+      firstName: 'John',
+      isEmailVerified: true,
+      userType: 'company',
+      password: `hashed:secret123`,
+      refreshTokens: [],
+      resetToken: { tokenHash: 'leak', expiresAt: new Date() },
+      emailVerificationToken: { tokenHash: 'leak', expiresAt: new Date() },
+      __v: 0,
+    }),
+    ...overrides,
+  });
+
+  const organization = () => ({
+    _id: { toString: () => ORG_ID },
+    name: 'Acme',
+    products: ['hr'],
+    topInterest: 'hr',
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockHash.mockResolvedValue('hashed-password');
-    mockCompare.mockResolvedValue(false);
-    mockGenerateOtp.mockReturnValue('1234');
-    mockCryptoHash.mockImplementation((v: string) => `hashed-${v}`);
-    mockRandomToken.mockReturnValue('raw-reset-token');
 
     userRepository = {
-      findUser: jest.fn(),
-      createUser: jest.fn(),
-      save: jest.fn(),
+      findUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+      createUser: jest.fn<AnyPromiseFn>(),
+      updateUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+    };
+    employeeRepository = {
+      findByEmailWithPassword: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+      findByEmail: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+      findOne: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+      findById: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+      updateById: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
     };
     tokenService = {
-      generateAccessToken: jest.fn().mockResolvedValue('access-token'),
-      generateRefreshToken: jest.fn().mockResolvedValue('refresh-token'),
-      generateTokenPair: jest.fn().mockResolvedValue({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-      }),
-      verifyRefreshToken: jest.fn(),
+      generateTokenPair: jest
+        .fn<AnyPromiseFn>()
+        .mockResolvedValue({
+          accessToken: 'access-token',
+          refreshToken: 'refresh-token',
+        }),
+      generateAccessToken: jest.fn<AnyPromiseFn>(),
+      generateRefreshToken: jest.fn<AnyPromiseFn>(),
+      verifyRefreshToken: jest.fn<AnyPromiseFn>(),
+    };
+    authUtility = {
+      hash: jest.fn<(value: string) => string>((value) => `hashed-${value}`),
+      randomToken: jest.fn<() => string>(() => 'raw-reset-token'),
     };
     emailService = {
-      emailDispatcher: jest.fn().mockResolvedValue(undefined),
+      brevoEmailDispatcher: jest.fn<AnyPromiseFn>().mockResolvedValue(undefined),
+    };
+    organizationRepository = {
+      findOrg: jest.fn<AnyPromiseFn>().mockResolvedValue(organization()),
+    };
+    settingService = {
+      getUserSystemRoles: jest
+        .fn<AnyPromiseFn>()
+        .mockResolvedValue([SystemRole.COMPANY_OWNER]),
+      findOrganizationForUser: jest.fn<AnyPromiseFn>().mockResolvedValue(ORG_ID),
     };
     configService = {
-      get: jest.fn((key: string) => {
+      get: jest.fn<(key: string) => string | undefined>((key) => {
         const map: Record<string, string> = {
-          OTP_TTL: '10',
-          OTP_MAX_ATTEMPTS: '5',
-          RESET_TOKEN_TTL: '30',
-          JWT_REFRESH_EXPIRES_IN: '7d',
           FRONTEND_URL: 'http://localhost:3000',
+          RESET_TOKEN_TTL: '30',
+          EMAIL_USER: 'no-reply@foundationhr.com',
         };
         return map[key];
       }),
@@ -109,184 +172,496 @@ describe('AuthService', () => {
       providers: [
         AuthService,
         { provide: UserRepository, useValue: userRepository },
+        { provide: EmployeeRepository, useValue: employeeRepository },
         { provide: TokenService, useValue: tokenService },
+        { provide: AuthUtility, useValue: authUtility },
         { provide: EmailService, useValue: emailService },
         { provide: ConfigService, useValue: configService },
-        { provide: AuthUtility, useValue: mockAuthUtility },
+        { provide: OrganizationRepository, useValue: organizationRepository },
+        { provide: SettingService, useValue: settingService },
       ],
     }).compile();
 
-    service = module.get<AuthService>(AuthService);
-  });
-
-  describe('signUp', () => {
-    it('should throw when email already exists', async () => {
-      userRepository.findUser.mockResolvedValue(makeUser());
-      await expect(
-        service.signUp({ email: 'johndoe@gmail.com', password: 'password1' }),
-      ).rejects.toThrow('already exists');
-    });
-
-    it('should create a hashed user and send OTP email', async () => {
-      userRepository.findUser.mockResolvedValue(null);
-      const created = makeUser();
-      userRepository.createUser.mockResolvedValue(created);
-
-      const result = await service.signUp({
-        email: 'JohnDoe@gmail.com',
-        password: 'password1',
-      });
-
-      expect(userRepository.createUser).toHaveBeenCalledWith({
-        email: 'johndoe@gmail.com',
-        password: 'hashed-password',
-        isEmailVerified: false,
-      });
-      expect(userRepository.save).toHaveBeenCalled();
-      expect(emailService.emailDispatcher).toHaveBeenCalled();
-      expect(result).toEqual({
-        email: 'johndoe@gmail.com',
-        isEmailVerified: false,
-      });
-    });
-  });
-
-  describe('verifyEmail', () => {
-    it('should verify with correct OTP', async () => {
-      const user = makeUser({
-        otp: { codeHash: 'hashed-1234', expiresAt: new Date(Date.now() + 600000) },
-      });
-      userRepository.findUser.mockResolvedValue(user);
-
-      const result = await service.verifyEmail({
-        email: 'johndoe@gmail.com',
-        otp: '1234',
-      });
-
-      expect(user.isEmailVerified).toBe(true);
-      expect(user.otp).toBeNull();
-      expect(result).toEqual({ email: 'johndoe@gmail.com' });
-    });
-
-    it('should throw on wrong OTP and increment attempts', async () => {
-      const user = makeUser({
-        otp: { codeHash: 'hashed-1234', expiresAt: new Date(Date.now() + 600000) },
-      });
-      userRepository.findUser.mockResolvedValue(user);
-      mockCryptoHash.mockImplementation((v: string) => `other-${v}`);
-
-      await expect(
-        service.verifyEmail({ email: 'johndoe@gmail.com', otp: '9999' }),
-      ).rejects.toThrow('Invalid verification code');
-      expect(user.otpAttempts).toBe(1);
-    });
-
-    it('should throw on expired OTP', async () => {
-      const user = makeUser({
-        otp: { codeHash: 'hashed-1234', expiresAt: new Date(Date.now() - 1000) },
-      });
-      userRepository.findUser.mockResolvedValue(user);
-      await expect(
-        service.verifyEmail({ email: 'johndoe@gmail.com', otp: '1234' }),
-      ).rejects.toThrow('has expired');
-    });
+    service = module.get(AuthService);
   });
 
   describe('signIn', () => {
-    it('should reject unverified users', async () => {
-      const user = makeUser({ isEmailVerified: false });
-      userRepository.findUser.mockResolvedValue(user);
-      mockCompare.mockResolvedValue(true);
-      await expect(
-        service.signIn({ email: 'johndoe@gmail.com', password: 'password1' }),
-      ).rejects.toThrow('verify your email');
-    });
+    it('returns only employeeAuth for an employee-only person', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
 
-    it('should reject wrong password', async () => {
-      const user = makeUser({ isEmailVerified: true });
-      userRepository.findUser.mockResolvedValue(user);
-      mockCompare.mockResolvedValue(false);
-      await expect(
-        service.signIn({ email: 'johndoe@gmail.com', password: 'wrongpass1' }),
-      ).rejects.toThrow('Invalid email or password');
-    });
-
-    it('should return tokens on success', async () => {
-      const user = makeUser({ isEmailVerified: true });
-      userRepository.findUser.mockResolvedValue(user);
-      mockCompare.mockResolvedValue(true);
-
-      const result = await service.signIn({
-        email: 'johndoe@gmail.com',
-        password: 'password1',
+      const result: any = await service.signIn({
+        email: 'John@Example.com',
+        password: 'secret123',
       });
 
-      expect(result.accessToken).toBe('access-token');
-      expect(result.refreshToken).toBe('refresh-token');
-      expect(userRepository.save).toHaveBeenCalled();
+      expect(result.employeeAuth).toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        role: [SystemRole.EMPLOYEE],
+        organizationId: ORG_ID,
+        status: 'active',
+        employeeId: EMPLOYEE_ID,
+      });
+      expect(result.adminAuth).toBeUndefined();
+    });
+
+    it('returns only adminAuth for an admin-only person', async () => {
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      const result: any = await service.signIn({
+        email: EMAIL,
+        password: 'secret123',
+      });
+
+      expect(result.employeeAuth).toBeUndefined();
+      expect(result.adminAuth).toMatchObject({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        role: [SystemRole.COMPANY_OWNER],
+        organizationId: ORG_ID,
+        adminUserId: ADMIN_ID,
+      });
+    });
+
+    it('returns both blocks sharing one token pair for a dual-identity person', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      const result: any = await service.signIn({
+        email: EMAIL,
+        password: 'secret123',
+      });
+
+      expect(result.employeeAuth).toBeDefined();
+      expect(result.adminAuth).toBeDefined();
+      expect(result.employeeAuth.accessToken).toBe(result.adminAuth.accessToken);
+      expect(result.employeeAuth.refreshToken).toBe(
+        result.adminAuth.refreshToken,
+      );
+      expect(result.employeeAuth.role).toEqual([SystemRole.EMPLOYEE]);
+      expect(result.adminAuth.role).toEqual([SystemRole.COMPANY_OWNER]);
+    });
+
+    it('stamps the admin user id as sub and both ids as claims', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      await service.signIn({ email: EMAIL, password: 'secret123' });
+
+      const [payload] = tokenService.generateTokenPair.mock.calls[0] as [
+        Record<string, any>,
+      ];
+      expect(payload.sub).toBe(ADMIN_ID);
+      expect(payload.principalType).toBe(PrincipalType.BOTH);
+      expect(payload.employeeId).toBe(EMPLOYEE_ID);
+      expect(payload.adminUserId).toBe(ADMIN_ID);
+    });
+
+    it('stamps the employee id as sub when there is no admin record', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+
+      await service.signIn({ email: EMAIL, password: 'secret123' });
+
+      const [payload] = tokenService.generateTokenPair.mock.calls[0] as [
+        Record<string, any>,
+      ];
+      expect(payload.sub).toBe(EMPLOYEE_ID);
+      expect(payload.principalType).toBe(PrincipalType.EMPLOYEE);
+    });
+
+    it('stores the refresh hash on both records for a dual-identity person', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      await service.signIn({ email: EMAIL, password: 'secret123' });
+
+      const [, employeeUpdate] = employeeRepository.updateById.mock.calls[0] as [
+        string,
+        Record<string, any>,
+      ];
+      const [where, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      expect(employeeUpdate.refreshTokens[0].tokenHash).toBe(
+        'hashed-refresh-token',
+      );
+      expect(adminUpdate.refreshTokens[0].tokenHash).toBe(
+        'hashed-refresh-token',
+      );
+      expect(where).toEqual({ _id: ADMIN_ID });
+    });
+
+    it('fails without consulting the admin record when the employee password mismatches', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ password: 'hashed:someemployeepassword' }),
+      );
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      await expect(
+        service.signIn({ email: EMAIL, password: 'secret123' }),
+      ).rejects.toThrow(AppException);
+
+      expect(tokenService.generateTokenPair).not.toHaveBeenCalled();
+      expect(employeeRepository.updateById).not.toHaveBeenCalled();
+      expect(userRepository.updateUser).not.toHaveBeenCalled();
+    });
+
+    it('blocks sign-in when only the admin email is unverified', async () => {
+      userRepository.findUser.mockResolvedValue(
+        adminUser({ isEmailVerified: false }),
+      );
+
+      await expect(
+        service.signIn({ email: EMAIL, password: 'secret123' }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('does not require email verification for an employee-only person', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ isEmailVerified: false }),
+      );
+
+      const result: any = await service.signIn({
+        email: EMAIL,
+        password: 'secret123',
+      });
+      expect(result.employeeAuth).toBeDefined();
+    });
+
+    it('rejects when the employee has no password set', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ password: null }),
+      );
+
+      await expect(
+        service.signIn({ email: EMAIL, password: 'secret123' }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws 404 when no record exists for the email', async () => {
+      await expect(
+        service.signIn({ email: EMAIL, password: 'secret123' }),
+      ).rejects.toThrow(AppException);
     });
   });
 
   describe('refresh', () => {
-    it('should reject an unknown refresh token', async () => {
-      tokenService.verifyRefreshToken.mockResolvedValue({ sub: '507f1f77bcf86cd799439011' });
-      userRepository.findUser.mockResolvedValue(makeUser({ refreshTokens: [] }));
-      await expect(
-        service.refresh({ refreshToken: 'some-refresh-token' }),
-      ).rejects.toThrow();
+    const dto = { refreshToken: 'old-refresh-token' };
+
+    it('rotates the token hash across both records', async () => {
+      tokenService.verifyRefreshToken.mockResolvedValue({
+        sub: ADMIN_ID,
+        email: EMAIL,
+        principalType: PrincipalType.BOTH,
+      });
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({
+          refreshTokens: [{ tokenHash: 'hashed-old-refresh-token' }],
+        }),
+      );
+      userRepository.findUser.mockResolvedValue(
+        adminUser({
+          refreshTokens: [{ tokenHash: 'hashed-old-refresh-token' }],
+        }),
+      );
+
+      const result: any = await service.refresh(dto);
+
+      expect(result).toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      });
+
+      const [, employeeUpdate] = employeeRepository.updateById.mock.calls[0] as [
+        string,
+        Record<string, any>,
+      ];
+      const [, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      for (const update of [employeeUpdate, adminUpdate]) {
+        expect(update.refreshTokens).toHaveLength(1);
+        expect(update.refreshTokens[0].tokenHash).toBe('hashed-refresh-token');
+      }
     });
 
-    it('should rotate and issue a new pair', async () => {
-      mockCryptoHash.mockImplementation((v: string) => `hashed-${v}`);
-      const user = makeUser({
-        isEmailVerified: true,
-        refreshTokens: [
-          {
-            tokenHash: 'hashed-refresh-token',
-            expiresAt: new Date(Date.now() + 1000000),
-            createdAt: new Date(),
-          },
-        ],
+    it('preserves organizationId for a non-owner admin', async () => {
+      tokenService.verifyRefreshToken.mockResolvedValue({
+        sub: ADMIN_ID,
+        email: EMAIL,
+        principalType: PrincipalType.ADMIN,
       });
-      tokenService.verifyRefreshToken.mockResolvedValue({ sub: user._id.toString() });
-      userRepository.findUser.mockResolvedValue(user);
+      organizationRepository.findOrg.mockResolvedValue(null);
+      userRepository.findUser.mockResolvedValue(
+        adminUser({ refreshTokens: [{ tokenHash: 'hashed-old-refresh-token' }] }),
+      );
 
-      const result = await service.refresh({ refreshToken: 'refresh-token' });
-      expect(result.accessToken).toBe('access-token');
-      expect(userRepository.save).toHaveBeenCalled();
+      await service.refresh(dto);
+
+      const [payload] = tokenService.generateTokenPair.mock.calls[0] as [
+        Record<string, any>,
+      ];
+      expect(payload.organizationId).toBe(ORG_ID);
+    });
+
+    it('rejects a token whose hash is on no record', async () => {
+      tokenService.verifyRefreshToken.mockResolvedValue({
+        sub: ADMIN_ID,
+        email: EMAIL,
+        principalType: PrincipalType.BOTH,
+      });
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ refreshTokens: [] }),
+      );
+      userRepository.findUser.mockResolvedValue(
+        adminUser({ refreshTokens: [] }),
+      );
+
+      await expect(service.refresh(dto)).rejects.toThrow(AppException);
+      expect(tokenService.generateTokenPair).not.toHaveBeenCalled();
     });
   });
 
-  describe('forgotPassword + resetPassword', () => {
-    it('forgotPassword sends reset link for verified user', async () => {
-      const user = makeUser({ isEmailVerified: true });
-      userRepository.findUser.mockResolvedValue(user);
-      const result = await service.forgotPassword({ email: 'johndoe@gmail.com' });
-      expect(userRepository.save).toHaveBeenCalled();
-      expect(emailService.emailDispatcher).toHaveBeenCalled();
-      expect(result).toEqual({ email: 'johndoe@gmail.com' });
+  describe('forgotPassword', () => {
+    it('writes the same reset token to both records and emails once', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      const result: any = await service.forgotPassword({ email: EMAIL });
+
+      expect(result).toBe(
+        'If this email is registered, a reset link has been sent',
+      );
+
+      const [, employeeUpdate] = employeeRepository.updateById.mock.calls[0] as [
+        string,
+        Record<string, any>,
+      ];
+      const [, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      expect(employeeUpdate.resetToken.tokenHash).toBe(
+        'hashed-raw-reset-token',
+      );
+      expect(adminUpdate.resetToken.tokenHash).toBe('hashed-raw-reset-token');
+      expect(emailService.brevoEmailDispatcher).toHaveBeenCalledTimes(1);
     });
 
-    it('resetPassword errors on invalid token', async () => {
-      userRepository.findUser.mockResolvedValue(null);
-      await expect(
-        service.resetPassword({ token: 'bad-token', password: 'newpass1' }),
-      ).rejects.toThrow('Invalid or expired reset token');
+    it('sends the link for an eligible employee-only person', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ hasJoinedOrg: true }),
+      );
+
+      await service.forgotPassword({ email: EMAIL });
+
+      expect(userRepository.updateUser).not.toHaveBeenCalled();
+      expect(emailService.brevoEmailDispatcher).toHaveBeenCalledTimes(1);
     });
 
-    it('resetPassword resets password and clears sessions', async () => {
-      const user = makeUser({
-        isEmailVerified: true,
-        resetToken: { tokenHash: 'hashed-raw-reset-token', expiresAt: new Date(Date.now() + 1000000) },
-        refreshTokens: [{ tokenHash: 'x', expiresAt: new Date(), createdAt: new Date() }],
+    it('sends nothing when neither record is eligible', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ hasJoinedOrg: false }),
+      );
+      userRepository.findUser.mockResolvedValue(
+        adminUser({ isEmailVerified: false }),
+      );
+
+      const result: any = await service.forgotPassword({ email: EMAIL });
+
+      expect(result).toBe(
+        'If this email is registered, a reset link has been sent',
+      );
+      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    const dto = { token: 'raw-reset-token', password: 'brandnew123' };
+
+    it('writes the same password hash to both records and clears sessions', async () => {
+      employeeRepository.findOne.mockResolvedValue({
+        email: EMAIL,
+        resetToken: { tokenHash: 'hashed-raw-reset-token', expiresAt: null },
       });
-      userRepository.findUser.mockResolvedValue(user);
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ refreshTokens: [{ tokenHash: 'old' }] }),
+      );
+      userRepository.findUser.mockResolvedValue(
+        adminUser({ refreshTokens: [{ tokenHash: 'old' }] }),
+      );
 
-      const result = await service.resetPassword({ token: 'raw-reset-token', password: 'newpass1' });
-      expect(user.password).toBe('hashed-password');
-      expect(user.resetToken).toBeNull();
-      expect(user.refreshTokens).toEqual([]);
-      expect(result).toContain('johndoe@gmail.com');
+      const result: any = await service.resetPassword(dto);
+
+      expect(result).toBe(`Password reset successful for: ${EMAIL}`);
+
+      const [, employeeUpdate] = employeeRepository.updateById.mock.calls[0] as [
+        string,
+        Record<string, any>,
+      ];
+      const [, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      expect(employeeUpdate.password).toBe('hashed:brandnew123');
+      expect(adminUpdate.password).toBe(employeeUpdate.password);
+      for (const update of [employeeUpdate, adminUpdate]) {
+        expect(update.resetToken).toBeNull();
+        expect(update.refreshTokens).toEqual([]);
+      }
+    });
+
+    it('resolves the token held on the admin record alone', async () => {
+      employeeRepository.findOne.mockResolvedValue(null);
+      userRepository.findUser.mockResolvedValue(
+        adminUser({
+          resetToken: {
+            tokenHash: 'hashed-raw-reset-token',
+            expiresAt: null,
+          },
+        }),
+      );
+
+      await service.resetPassword(dto);
+
+      const [, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      expect(adminUpdate.password).toBe('hashed:brandnew123');
+    });
+
+    it('rejects an unknown token', async () => {
+      await expect(service.resetPassword(dto)).rejects.toThrow(AppException);
+    });
+
+    it('rejects an expired token', async () => {
+      employeeRepository.findOne.mockResolvedValue({
+        email: EMAIL,
+        resetToken: {
+          tokenHash: 'hashed-raw-reset-token',
+          expiresAt: new Date(Date.now() - 1000),
+        },
+      });
+
+      await expect(service.resetPassword(dto)).rejects.toThrow(AppException);
+      expect(employeeRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('userProfile', () => {
+    it('returns both blocks for a dual-identity person', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      const result: any = await service.userProfile('John@Example.com');
+
+      expect(result.employeeData).toMatchObject({ email: EMAIL, firstName: 'John' });
+      expect(result.adminData).toMatchObject({
+        email: EMAIL,
+        role: [SystemRole.COMPANY_OWNER],
+      });
+      expect(result.adminData.orgDetails).toMatchObject({ name: 'Acme' });
+    });
+
+    it('omits adminData for an employee-only person', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+
+      const result: any = await service.userProfile(EMAIL);
+
+      expect(result.employeeData).toBeDefined();
+      expect(result.adminData).toBeUndefined();
+    });
+
+    it('omits employeeData for an admin-only person', async () => {
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      const result: any = await service.userProfile(EMAIL);
+
+      expect(result.employeeData).toBeUndefined();
+      expect(result.adminData).toBeDefined();
+    });
+
+    it('strips passwords, sessions and token hashes from both blocks', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(employee());
+      userRepository.findUser.mockResolvedValue(adminUser());
+
+      const result: any = await service.userProfile(EMAIL);
+
+      expect(result.employeeData).not.toHaveProperty('password');
+      expect(result.employeeData).not.toHaveProperty('refreshTokens');
+      expect(result.employeeData).not.toHaveProperty('resetToken');
+      expect(result.adminData).not.toHaveProperty('password');
+      expect(result.adminData).not.toHaveProperty('refreshTokens');
+      expect(result.adminData).not.toHaveProperty('resetToken');
+      expect(result.adminData).not.toHaveProperty('emailVerificationToken');
+    });
+
+    it('throws 404 when no record matches', async () => {
+      await expect(service.userProfile(EMAIL)).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('logout', () => {
+    it('clears sessions on both records when no token is supplied', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({ refreshTokens: [{ tokenHash: 'a' }] }),
+      );
+      userRepository.findUser.mockResolvedValue(
+        adminUser({ refreshTokens: [{ tokenHash: 'a' }] }),
+      );
+
+      const result: any = await service.logout(EMAIL);
+
+      expect(result).toBe('Logged out successfully');
+      const [, employeeUpdate] = employeeRepository.updateById.mock.calls[0] as [
+        string,
+        Record<string, any>,
+      ];
+      const [, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      expect(employeeUpdate.refreshTokens).toEqual([]);
+      expect(adminUpdate.refreshTokens).toEqual([]);
+    });
+
+    it('revokes only the supplied token on both records', async () => {
+      employeeRepository.findByEmailWithPassword.mockResolvedValue(
+        employee({
+          refreshTokens: [
+            { tokenHash: 'hashed-goodbye' },
+            { tokenHash: 'hashed-keepme' },
+          ],
+        }),
+      );
+      userRepository.findUser.mockResolvedValue(
+        adminUser({
+          refreshTokens: [
+            { tokenHash: 'hashed-goodbye' },
+            { tokenHash: 'hashed-keepme' },
+          ],
+        }),
+      );
+
+      await service.logout(EMAIL, 'goodbye');
+
+      const [, employeeUpdate] = employeeRepository.updateById.mock.calls[0] as [
+        string,
+        Record<string, any>,
+      ];
+      const [, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      expect(employeeUpdate.refreshTokens).toEqual([
+        { tokenHash: 'hashed-keepme' },
+      ]);
+      expect(adminUpdate.refreshTokens).toEqual([
+        { tokenHash: 'hashed-keepme' },
+      ]);
     });
   });
 });

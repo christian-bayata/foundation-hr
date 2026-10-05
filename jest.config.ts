@@ -42,9 +42,9 @@ const config: Config = {
       '<rootDir>/test/mocks/load-package.util.cjs',
     ...pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
   },
-  // @nestjs/* v12 ships as ESM-only. ts-jest has to transpile it to CommonJS
-  // because the test files and the rest of the suite are CommonJS.
-  transformIgnorePatterns: ['/node_modules/(?!@nestjs/)'],
+  // @nestjs/* v12 and uuid ship as ESM-only. ts-jest has to transpile them to
+  // CommonJS because the test files and the rest of the suite are CommonJS.
+  transformIgnorePatterns: ['/node_modules/(?!@nestjs/|uuid)'],
   collectCoverageFrom: [
     'src/**/*.(t|j)s',
     'libs/**/*.(t|j)s',

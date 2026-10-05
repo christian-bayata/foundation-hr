@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthUtility } from './auth.utility';
 import { UserRepository } from './repository/user.repository';
 import { TokenService } from './token.service';
+import { AccessTokenPayload } from './token.service';
 import { EmailService } from '../../email/email.service';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
@@ -16,16 +17,43 @@ import { ProductChoiceDto } from './dto/product-choice.dto';
 import { AppResponse } from '../../common/response/app-response';
 import { hash, compare } from 'bcryptjs';
 import { MailDispatcherDto } from '../../email/dto/send-mail.dto';
-import { RefreshTokenEntry } from './interface/auth.interface';
+import {
+  AdminAuthBlock,
+  AuthPrincipals,
+  AuthProfileResponse,
+  EmployeeAuthBlock,
+  LoginResponse,
+  RefreshTokenEntry,
+} from './interface/auth.interface';
 import { passwordResetTemplate } from '../../email/template/password-reset.template';
 import { emailVerificationTemplate } from '../../email/template/email-verification.template';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
 import { OrganizationDocument } from '../organization/entity/organization.schema';
 import { SettingService } from '../setting/setting.service';
+import { EmployeeRepository } from '../employee/repository/employee.repository';
+import { PrincipalType } from './enum/principal-type.enum';
+import { SystemRole } from './enum/role.enum';
 import { Product } from './enum/product.enum';
 import { UserType } from './enum/user.enum';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
+
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const EMPLOYEE_PRIVATE_FIELDS = [
+  'password',
+  'refreshTokens',
+  'resetToken',
+  '__v',
+];
+
+const ADMIN_PRIVATE_FIELDS = [
+  'password',
+  'refreshTokens',
+  'resetToken',
+  'emailVerificationToken',
+  '__v',
+];
 
 @Injectable()
 export class AuthService {
@@ -40,6 +68,8 @@ export class AuthService {
     @Inject(OrganizationRepository)
     private readonly organizationRepository: OrganizationRepository,
     @Inject(SettingService) private readonly settingService: SettingService,
+    @Inject(EmployeeRepository)
+    private readonly employeeRepository: EmployeeRepository,
   ) {}
 
   /**
@@ -167,39 +197,53 @@ export class AuthService {
   }
 
   /**
-   * @Responsibility: Authenticate user and issue JWT access/refresh tokens
+   * @Responsibility: Authenticate a person who may hold an employee record, an
+   * admin user record, or both, and issue a single JWT access/refresh token pair
    *
-   * @param signInDto - User credentials (email and password)
-   * @returns JWT access token and refresh token pair
+   * @param signInDto - Credentials (email and password)
+   * @returns employeeAuth and/or adminAuth blocks, each omitting the one that does not apply
    *
-   * Validates email exists, checks email verification status,
-   * compares password against stored hash, and generates token pair.
+   * Both records are resolved by email. Credential lookup is strictly
+   * employee-first: when an employee record exists the supplied password is
+   * checked against it and a mismatch fails without consulting the admin record.
+   * Email verification is only enforced for the admin user record, since
+   * employees have no such flag. The issued token pair is shared by both
+   * blocks and its refresh hash is stored on every matching record so that a
+   * rotation or revocation applies to the whole person.
    *
-   * @throws {400} Invalid email or password, or email not verified
-   * @throws {404} Email not found
+   * @throws {404} No employee or admin user record for the email
+   * @throws {400} Admin email unverified, or invalid email or password
    */
   async signIn(signInDto: SignInDto): Promise<unknown> {
     const email = signInDto.email.toLowerCase();
     const { password } = signInDto;
 
     try {
-      // console.log(crypto.randomBytes(32).toString('base64'));
-      const existing = await this.userRepository.findUser({ email });
-      const user =
-        existing ??
+      const { employee, adminUser } = await this.resolvePrincipals(email);
+
+      if (!employee && !adminUser) {
         AppResponse.error({
           message: `User not found`,
           status: HttpStatus.NOT_FOUND,
         });
+      }
 
-      if (!user?.isEmailVerified) {
+      if (adminUser && !adminUser.isEmailVerified) {
         AppResponse.error({
           message: `Please verify your email to sign in`,
           status: HttpStatus.BAD_REQUEST,
         });
       }
 
-      const passwordValid = await compare(password, user?.password);
+      const credentialHolder = employee ?? adminUser;
+      if (!credentialHolder?.password) {
+        AppResponse.error({
+          message: `Invalid email or password`,
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const passwordValid = await compare(password, credentialHolder.password);
       if (!passwordValid) {
         AppResponse.error({
           message: `Invalid email or password`,
@@ -207,52 +251,24 @@ export class AuthService {
         });
       }
 
-      const organization = await this.organizationRepository.findOrg({
-        ownerId: user?._id.toString(),
-      });
+      const organizationId = await this.resolveOrganizationId(
+        employee,
+        adminUser,
+      );
+      const tokens = await this.tokenService.generateTokenPair(
+        this.buildTokenPayload({ employee, adminUser }, email, organizationId),
+      );
 
-      const organizationId =
-        organization?._id?.toString() ??
-        (await this.settingService.findOrganizationForUser(
-          user?._id?.toString(),
-        )) ??
-        undefined;
+      await this.appendRefreshToken(
+        { employee, adminUser },
+        tokens.refreshToken,
+      );
 
-      const roles = organizationId
-        ? await this.settingService.getUserSystemRoles(
-            user?._id?.toString() ?? '',
-            organizationId,
-          )
-        : [];
-
-      const payload = {
-        sub: user?._id?.toString(),
-        email: user?.email,
-        userType: user?.userType,
+      return this.buildLoginResponse(
+        { employee, adminUser },
+        tokens,
         organizationId,
-      };
-      const tokens = await this.tokenService?.generateTokenPair(payload);
-
-      user.refreshTokens = [
-        ...(user?.refreshTokens ?? []),
-        {
-          tokenHash: this.authUtility.hash(tokens?.refreshToken),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          createdAt: new Date(),
-        },
-      ];
-
-      await user.save();
-
-      const kyc = this.getIncompleteKycFields(user, organization);
-
-      return {
-        accessToken: tokens?.accessToken,
-        refreshToken: tokens?.refreshToken,
-        kyc,
-        role: roles,
-        organizationId,
-      };
+      );
     } catch (error: any) {
       error.location = `AuthServices.${this.signIn.name} method`;
       AppResponse.error(error);
@@ -260,35 +276,46 @@ export class AuthService {
   }
 
   /**
-   * @Responsibility: Refresh expired access token using valid refresh token
+   * @Responsibility: Refresh an expired access token using a valid refresh token
    *
    * @param refreshTokenDto - Refresh token to validate and rotate
    * @returns New JWT access and refresh token pair
    *
-   * Verifies refresh token JWT, finds user by ID, validates token exists
-   * in user's active sessions, rotates token (removes old, issues new pair).
+   * Verifies the refresh token JWT, resolves every record sharing the token's
+   * email, validates the token hash is present on at least one of them, then
+   * rotates the hash across all of them and reissues a pair. The organization
+   * and roles are re-resolved exactly as they are at sign-in, so a refreshed
+   * token carries the same claims the original did.
    *
-   * @throws {400} Invalid refresh token, or user not found
+   * @throws {400} Invalid refresh token, or no matching record
    */
   async refresh(refreshTokenDto: RefreshTokenDto): Promise<unknown> {
     const { refreshToken } = refreshTokenDto;
 
     try {
-      const payload = await this.tokenService?.verifyRefreshToken(refreshToken);
+      const payload = await this.tokenService.verifyRefreshToken(refreshToken);
+      const email = payload.email?.toLowerCase() ?? '';
 
-      const existing = await this.userRepository.findUser({
-        _id: payload?.sub,
-      });
-      const user =
-        existing ??
+      if (!email) {
+        AppResponse.error({
+          message: `Invalid refresh token`,
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const { employee, adminUser } = await this.resolvePrincipals(email);
+
+      if (!employee && !adminUser) {
         AppResponse.error({
           message: `User not found`,
           status: HttpStatus.NOT_FOUND,
         });
+      }
 
       const tokenHash = this.authUtility.hash(refreshToken);
-      const tokenExists = user?.refreshTokens?.some(
-        (t: RefreshTokenEntry) => t?.tokenHash === tokenHash,
+      const tokenExists = this.hasRefreshToken(
+        { employee, adminUser },
+        tokenHash,
       );
       if (!tokenExists) {
         AppResponse.error({
@@ -297,37 +324,23 @@ export class AuthService {
         });
       }
 
-      const refreshOrg = await this.organizationRepository.findOrg({
-        ownerId: user?._id.toString(),
-      });
+      const organizationId = await this.resolveOrganizationId(
+        employee,
+        adminUser,
+      );
+      const tokens = await this.tokenService.generateTokenPair(
+        this.buildTokenPayload({ employee, adminUser }, email, organizationId),
+      );
 
-      user.refreshTokens =
-        user?.refreshTokens?.filter(
-          (t: RefreshTokenEntry) => t?.tokenHash !== tokenHash,
-        ) ?? [];
-
-      const newPayload = {
-        sub: user?._id?.toString(),
-        email: user?.email,
-        userType: user?.userType,
-        organizationId: refreshOrg?._id?.toString(),
-      };
-      const tokens = await this.tokenService?.generateTokenPair(newPayload);
-
-      user.refreshTokens = [
-        ...(user?.refreshTokens ?? []),
-        {
-          tokenHash: this.authUtility.hash(tokens?.refreshToken),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          createdAt: new Date(),
-        },
-      ];
-
-      await user.save();
+      await this.replaceRefreshToken(
+        { employee, adminUser },
+        tokenHash,
+        tokens.refreshToken,
+      );
 
       return {
-        accessToken: tokens?.accessToken,
-        refreshToken: tokens?.refreshToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
       };
     } catch (error: any) {
       error.location = `AuthServices.${this.refresh.name} method`;
@@ -336,42 +349,45 @@ export class AuthService {
   }
 
   /**
-   * @Responsibility: Generate password reset token and send reset link via email
+   * @Responsibility: Generate a password reset token and send the reset link via email
    *
-   * @param forgotPasswordDto - Email address of user requesting password reset
-   * @returns Generic success message (never reveals whether the email exists)
+   * @param forgotPasswordDto - Email address of the person requesting a reset
+   * @returns Generic success message (never reveals whether the account exists)
    *
-   * If the email is registered and verified, a hashed reset token is stored
-   * (30-minute expiry) and the reset link is emailed.
+   * A single reset token is written to every record sharing the email — the
+   * employee record and/or the admin user record — so a single link resets every
+   * identity the person holds. The link is emailed once.
    */
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<unknown> {
     const email = forgotPasswordDto.email.toLowerCase();
 
     try {
-      const user = await this.userRepository.findUser({ email });
+      const { employee, adminUser } = await this.resolvePrincipals(email);
 
-      if (user?.isEmailVerified) {
+      const eligible = Boolean(
+        adminUser?.isEmailVerified || employee?.hasJoinedOrg,
+      );
+
+      if (eligible) {
         const rawToken = this.authUtility.randomToken();
         const tokenHash = this.authUtility.hash(rawToken);
         const resetTokenTtlMinutes =
           Number(this.configService.get<string>('RESET_TOKEN_TTL')) || 30;
+        const expiresAt = new Date(
+          Date.now() + resetTokenTtlMinutes * 60 * 1000,
+        );
 
-        user.resetToken = {
-          tokenHash,
-          expiresAt: new Date(Date.now() + resetTokenTtlMinutes * 60 * 1000),
-        };
-
-        await user.save();
+        await this.setResetToken({ employee, adminUser }, tokenHash, expiresAt);
 
         const frontendUrl = this.configService.get<string>('FRONTEND_URL');
         const resetLink = `${frontendUrl}/auth/reset-password?token=${rawToken}`;
 
         function emailDispatcherPayload(): MailDispatcherDto {
           return {
-            to: `${user?.email}`,
+            to: `${email}`,
             from: 'Foundation HR <no-reply@foundationhr.com>',
             subject: 'Password Token Request',
-            html: passwordResetTemplate(user?.email as string, resetLink),
+            html: passwordResetTemplate(email, resetLink),
           };
         }
         /* Send email to user */
@@ -386,14 +402,16 @@ export class AuthService {
   }
 
   /**
-   * @Responsibility: Reset user password using valid reset token
+   * @Responsibility: Reset the password of a person who may hold both an employee
+   * record and an admin user record
    *
    * @param resetPasswordDto - Reset token and new password
    * @returns Success message after password reset
    *
-   * Finds user by hashed reset token, validates token expiry,
-   * hashes and updates password, clears reset token and all
-   * existing refresh tokens (invalidates all sessions).
+   * Finds whichever record holds the token, derives the email from it, then
+   * writes the same new hash to every record sharing that email and clears the
+   * reset token plus all sessions on each of them. This keeps one password
+   * across both identities.
    *
    * @throws {400} Invalid or expired reset token
    */
@@ -402,33 +420,47 @@ export class AuthService {
 
     try {
       const tokenHash = this.authUtility.hash(token);
-      const existing = await this.userRepository.findUser({
-        'resetToken.tokenHash': tokenHash,
-      });
-      const account =
-        existing ??
+
+      const [employeeWithToken, adminUserWithToken] = await Promise.all([
+        this.employeeRepository.findOne({ 'resetToken.tokenHash': tokenHash }),
+        this.userRepository.findUser({
+          'resetToken.tokenHash': tokenHash,
+        }),
+      ]);
+
+      if (!employeeWithToken && !adminUserWithToken) {
         AppResponse.error({
           message: `Invalid or expired reset token`,
           status: HttpStatus.BAD_REQUEST,
         });
+      }
 
-      if (
-        account?.resetToken?.expiresAt &&
-        new Date() > new Date(account?.resetToken?.expiresAt)
-      ) {
+      const holders = { employeeWithToken, adminUserWithToken };
+
+      if (this.isResetTokenExpired(holders)) {
         AppResponse.error({
           message: `Reset token has expired`,
           status: HttpStatus.BAD_REQUEST,
         });
       }
 
-      account.password = await hash(password, 10);
-      account.resetToken = null;
-      account.refreshTokens = [];
+      const email = (
+        employeeWithToken?.email ??
+        adminUserWithToken?.email ??
+        ''
+      ).toLowerCase();
+      const { employee, adminUser } = await this.resolvePrincipals(email);
 
-      await account.save();
+      const hashedPassword = await hash(password, 10);
 
-      return `Password reset successful for: ${account?.email}`;
+      await this.writePasswordAndClearSessions(
+        { employee, adminUser },
+        hashedPassword,
+      );
+
+      this.logger.log(`Password reset successful for: ${email}`);
+
+      return `Password reset successful for: ${email}`;
     } catch (error: any) {
       error.location = `AuthServices.${this.resetPassword.name} method`;
       AppResponse.error(error);
@@ -436,37 +468,70 @@ export class AuthService {
   }
 
   /**
-   * @Responsibility: Retrieve the authenticated user's profile
+   * @Responsibility: Retrieve the profile of the authenticated person, covering
+   * both the employee identity and the admin identity
    *
-   * @param userId - ID of the authenticated user
-   * @returns User profile data without sensitive fields
+   * @param email - Email of the authenticated person
+   * @returns employeeData and/or adminData blocks, each omitting the one that does not apply
    *
-   * Finds user by ID and returns email, verification status, and user type.
+   * Resolves both records by email. adminData carries the resolved system roles
+   * and organization details. Passwords, refresh tokens and token hashes are
+   * stripped from both blocks.
    *
-   * @throws {404} User not found
+   * @throws {404} No employee or admin user record for the email
    */
-  async userProfile(userId: string): Promise<unknown> {
+  async userProfile(email: string): Promise<unknown> {
     try {
-      const existing = await this.userRepository.findUser(
-        {
-          _id: userId,
-        },
-        '-refreshTokens',
-      );
-      const user =
-        existing ??
+      const normalizedEmail = email?.toLowerCase();
+      const { employee, adminUser } =
+        await this.resolvePrincipals(normalizedEmail);
+
+      if (!employee && !adminUser) {
         AppResponse.error({
           message: `User not found`,
           status: HttpStatus.NOT_FOUND,
         });
+      }
 
-      const orgDetails = await this.organizationRepository.findOrg({
-        ownerId: userId,
-      });
+      const response: AuthProfileResponse = {};
 
-      const { password: _password, ...newUser } = user.toObject();
+      if (employee) {
+        response.employeeData = this.toPlainObject(
+          employee,
+          EMPLOYEE_PRIVATE_FIELDS,
+        );
+      }
 
-      return { ...newUser, orgDetails };
+      if (adminUser) {
+        const adminUserId = adminUser._id.toString();
+        const organizationId = await this.resolveOrganizationId(
+          null,
+          adminUser,
+        );
+
+        const organization =
+          (await this.organizationRepository.findOrg({
+            ownerId: adminUserId,
+          })) ??
+          (organizationId
+            ? await this.organizationRepository.findOrg({
+                _id: organizationId,
+              })
+            : null);
+
+        response.adminData = {
+          ...this.toPlainObject(adminUser, ADMIN_PRIVATE_FIELDS),
+          role: organizationId
+            ? await this.settingService.getUserSystemRoles(
+                adminUserId,
+                organizationId,
+              )
+            : [],
+          orgDetails: organization,
+        };
+      }
+
+      return response;
     } catch (error: any) {
       error.location = `AuthServices.${this.userProfile.name} method`;
       AppResponse.error(error);
@@ -474,38 +539,31 @@ export class AuthService {
   }
 
   /**
-   * @Responsibility: Log out a user by revoking their refresh token(s)
+   * @Responsibility: Log a person out by revoking their refresh token(s) on every
+   * identity they hold
    *
-   * @param userId - ID of the authenticated user
+   * @param email - Email of the authenticated person
    * @param refreshToken - Optional refresh token to revoke; when omitted, all sessions are cleared
    * @returns Success confirmation
    *
-   * Finds user by ID, removes the specified refresh token (or all sessions
-   * when no token is provided), and persists the change.
-   *
-   * @throws {404} User not found
+   * @throws {404} No employee or admin user record for the email
    */
-  async logout(userId: string, refreshToken?: string): Promise<unknown> {
+  async logout(email: string, refreshToken?: string): Promise<unknown> {
     try {
-      const existing = await this.userRepository.findUser({ _id: userId });
-      const user =
-        existing ??
+      const principals = await this.resolvePrincipals(email?.toLowerCase());
+
+      if (!principals.employee && !principals.adminUser) {
         AppResponse.error({
           message: `User not found`,
           status: HttpStatus.NOT_FOUND,
         });
-
-      if (refreshToken) {
-        const tokenHash = this.authUtility.hash(refreshToken);
-        user.refreshTokens =
-          user?.refreshTokens?.filter(
-            (t: RefreshTokenEntry) => t?.tokenHash !== tokenHash,
-          ) ?? [];
-      } else {
-        user.refreshTokens = [];
       }
 
-      await user.save();
+      const tokenHash = refreshToken
+        ? this.authUtility.hash(refreshToken)
+        : undefined;
+
+      await this.removeRefreshToken(principals, tokenHash);
 
       return 'Logged out successfully';
     } catch (error: any) {
@@ -631,6 +689,343 @@ export class AuthService {
       error.location = `AuthServices.${this.productChoice.name} method`;
       AppResponse.error(error);
     }
+  }
+
+  /**
+   * @Responsibility: Resolve every identity a person holds for a given email
+   *
+   * @param email - Lowercased email address
+   * @returns The employee record (with password selected) and/or the admin user record
+   *
+   * `users` and `employees` share no id, so email is the only join key. Both
+   * lookups run together and either may be absent.
+   */
+  private async resolvePrincipals(
+    email: string,
+  ): Promise<Required<AuthPrincipals>> {
+    const [employee, adminUser] = await Promise.all([
+      this.employeeRepository.findByEmailWithPassword(email),
+      this.userRepository.findUser({ email }, '-refreshTokens'),
+    ]);
+
+    return { employee, adminUser };
+  }
+
+  /**
+   * @Responsibility: Determine which identities a resolved principal set holds
+   */
+  private determinePrincipalType({
+    employee,
+    adminUser,
+  }: AuthPrincipals): PrincipalType {
+    if (employee && adminUser) return PrincipalType.BOTH;
+    return adminUser ? PrincipalType.ADMIN : PrincipalType.EMPLOYEE;
+  }
+
+  /**
+   * @Responsibility: Resolve the organization a principal set belongs to
+   *
+   * The admin identity is preferred because the token's `sub` is the admin user
+   * id and the role guard resolves roles against the admin's organization. The
+   * employee's own organization is the fallback.
+   *
+   * @returns The organization id, or undefined when the person belongs to none
+   */
+  private async resolveOrganizationId(
+    employee: any | null,
+    adminUser: any | null,
+  ): Promise<string | undefined> {
+    if (adminUser) {
+      const adminUserId = adminUser._id?.toString();
+      const owned = await this.organizationRepository.findOrg({
+        ownerId: adminUserId,
+      });
+
+      const adminOrganizationId =
+        owned?._id?.toString() ??
+        (await this.settingService.findOrganizationForUser(adminUserId));
+
+      if (adminOrganizationId) return adminOrganizationId;
+    }
+
+    return employee?.organizationId ?? undefined;
+  }
+
+  /**
+   * @Responsibility: Build the JWT access token payload for a principal set
+   *
+   * `sub` prefers the admin user id so that role-gated endpoints keep resolving
+   * for people who hold both identities; the employee id rides along separately.
+   */
+  private buildTokenPayload(
+    principals: AuthPrincipals,
+    email: string,
+    organizationId?: string,
+  ): AccessTokenPayload {
+    const { employee, adminUser } = principals;
+
+    return {
+      sub: adminUser?._id?.toString() ?? employee?._id?.toString(),
+      email,
+      userType: adminUser?.userType,
+      principalType: this.determinePrincipalType(principals),
+      employeeId: employee?._id?.toString(),
+      adminUserId: adminUser?._id?.toString(),
+      organizationId,
+    };
+  }
+
+  /**
+   * @Responsibility: Shape the login response into the identity blocks that apply
+   *
+   * Both blocks carry the same token pair because one session covers every
+   * identity the person holds; they differ in roles, organization and status.
+   */
+  private async buildLoginResponse(
+    principals: AuthPrincipals,
+    tokens: { accessToken: string; refreshToken: string },
+    organizationId?: string,
+  ): Promise<LoginResponse> {
+    const { employee, adminUser } = principals;
+    const response: LoginResponse = {};
+
+    if (employee) {
+      const employeeAuth: EmployeeAuthBlock = {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        role: [SystemRole.EMPLOYEE],
+        organizationId,
+        status: employee.status,
+        employeeId: employee._id.toString(),
+      };
+      response.employeeAuth = employeeAuth;
+    }
+
+    if (adminUser) {
+      const adminUserId = adminUser._id.toString();
+      const organization =
+        (await this.organizationRepository.findOrg({ ownerId: adminUserId })) ??
+        (organizationId
+          ? await this.organizationRepository.findOrg({
+              _id: organizationId,
+            })
+          : null);
+
+      const adminAuth: AdminAuthBlock = {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        role: organizationId
+          ? await this.settingService.getUserSystemRoles(
+              adminUserId,
+              organizationId,
+            )
+          : [],
+        organizationId,
+        kyc: this.getIncompleteKycFields(adminUser, organization),
+        adminUserId,
+      };
+      response.adminAuth = adminAuth;
+    }
+
+    return response;
+  }
+
+  /**
+   * @Responsibility: Convert a principal document to a plain object without the
+   * given sensitive fields
+   */
+  private toPlainObject(
+    document: any,
+    privateFields: string[],
+  ): Record<string, any> {
+    const plain =
+      typeof document?.toObject === 'function'
+        ? document.toObject()
+        : { ...document };
+
+    for (const field of privateFields) {
+      delete plain[field];
+    }
+
+    return plain;
+  }
+
+  /**
+   * @Responsibility: Report whether a refresh token hash is active on any of the
+   * principal's records
+   */
+  private hasRefreshToken(
+    principals: AuthPrincipals,
+    tokenHash: string,
+  ): boolean {
+    const { employee, adminUser } = principals;
+
+    return [employee, adminUser].some((document) =>
+      (document?.refreshTokens ?? []).some(
+        (entry: RefreshTokenEntry) => entry?.tokenHash === tokenHash,
+      ),
+    );
+  }
+
+  /**
+   * @Responsibility: Append a refresh token hash to every principal record so
+   * that revocation and rotation apply to the whole person
+   */
+  private async appendRefreshToken(
+    principals: AuthPrincipals,
+    refreshToken: string,
+  ): Promise<void> {
+    const entry = this.buildRefreshTokenEntry(refreshToken);
+
+    await this.persistRefreshTokens(principals, (current) => [
+      ...current,
+      entry,
+    ]);
+  }
+
+  /**
+   * @Responsibility: Swap one refresh token hash for a new one across every
+   * principal record, dropping any other copy of the stale hash
+   */
+  private async replaceRefreshToken(
+    principals: AuthPrincipals,
+    staleTokenHash: string,
+    refreshToken: string,
+  ): Promise<void> {
+    const entry = this.buildRefreshTokenEntry(refreshToken);
+
+    await this.persistRefreshTokens(principals, (current) => [
+      ...current.filter((token) => token?.tokenHash !== staleTokenHash),
+      entry,
+    ]);
+  }
+
+  /**
+   * @Responsibility: Revoke a single refresh token, or every session when no
+   * token hash is supplied, across all principal records
+   */
+  private async removeRefreshToken(
+    principals: AuthPrincipals,
+    tokenHash?: string,
+  ): Promise<void> {
+    await this.persistRefreshTokens(principals, (current) =>
+      tokenHash
+        ? current.filter((token) => token?.tokenHash !== tokenHash)
+        : [],
+    );
+  }
+
+  /**
+   * @Responsibility: Build the stored refresh token entry for a raw token
+   */
+  private buildRefreshTokenEntry(refreshToken: string): RefreshTokenEntry {
+    return {
+      tokenHash: this.authUtility.hash(refreshToken),
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      createdAt: new Date(),
+    };
+  }
+
+  /**
+   * @Responsibility: Apply a refresh token mutation to every principal record,
+   * reading the current entries first so concurrent sessions are preserved
+   */
+  private async persistRefreshTokens(
+    principals: AuthPrincipals,
+    mutate: (current: RefreshTokenEntry[]) => RefreshTokenEntry[],
+  ): Promise<void> {
+    const { employee, adminUser } = principals;
+
+    await Promise.all([
+      employee
+        ? this.employeeRepository.updateById(employee._id.toString(), {
+            refreshTokens: mutate(employee.refreshTokens ?? []),
+          })
+        : Promise.resolve(null),
+      adminUser
+        ? this.userRepository.updateUser(
+            { _id: adminUser._id.toString() },
+            { refreshTokens: mutate(adminUser.refreshTokens ?? []) },
+          )
+        : Promise.resolve(null),
+    ]);
+  }
+
+  /**
+   * @Responsibility: Write one reset token onto every principal record
+   */
+  private async setResetToken(
+    principals: AuthPrincipals,
+    tokenHash: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    const { employee, adminUser } = principals;
+    const resetToken = { tokenHash, expiresAt };
+
+    await Promise.all([
+      employee
+        ? this.employeeRepository.updateById(employee._id.toString(), {
+            resetToken,
+          })
+        : Promise.resolve(null),
+      adminUser
+        ? this.userRepository.updateUser(
+            { _id: adminUser._id.toString() },
+            { resetToken },
+          )
+        : Promise.resolve(null),
+    ]);
+  }
+
+  /**
+   * @Responsibility: Report whether any record holding the reset token has
+   * already expired it
+   */
+  private isResetTokenExpired({
+    employeeWithToken,
+    adminUserWithToken,
+  }: {
+    employeeWithToken: any | null;
+    adminUserWithToken: any | null;
+  }): boolean {
+    const now = new Date();
+
+    return [employeeWithToken, adminUserWithToken].some(
+      (document) =>
+        document?.resetToken?.expiresAt &&
+        now > new Date(document.resetToken.expiresAt),
+    );
+  }
+
+  /**
+   * @Responsibility: Write the same password hash to every principal record and
+   * invalidate all of their sessions
+   *
+   * This is what keeps one password across both identities: a reset always
+   * leaves the employee record and the admin user record in agreement.
+   */
+  private async writePasswordAndClearSessions(
+    principals: AuthPrincipals,
+    hashedPassword: string,
+  ): Promise<void> {
+    const { employee, adminUser } = principals;
+    const update = {
+      password: hashedPassword,
+      resetToken: null,
+      refreshTokens: [],
+    };
+
+    await Promise.all([
+      employee
+        ? this.employeeRepository.updateById(employee._id.toString(), update)
+        : Promise.resolve(null),
+      adminUser
+        ? this.userRepository.updateUser(
+            { _id: adminUser._id.toString() },
+            update,
+          )
+        : Promise.resolve(null),
+    ]);
   }
 
   /**

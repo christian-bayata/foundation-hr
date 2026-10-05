@@ -17,8 +17,7 @@ import { EmployeeService } from './employee.service';
 import { EmployeeRepository } from './repository/employee.repository';
 import { EmployeeUtility } from './repository/employee.utility';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
-import { TokenService } from '../auth/token.service';
-import { AuthUtility } from '../auth/auth.utility';
+import { UserRepository } from '../auth/repository/user.repository';
 import { EmployeeStatus } from './enum/employee.enum';
 
 const INVITE_ID = '64f1b2c3d4e5f678901234ab';
@@ -45,13 +44,10 @@ describe('EmployeeController (integration)', () => {
     findOrg: jest.Mock<AnyPromiseFn>;
     findBySlug: jest.Mock<AnyPromiseFn>;
   };
-  let tokenService: {
-    generateTokenPair: jest.Mock<AnyPromiseFn>;
-    generateAccessToken: jest.Mock<AnyPromiseFn>;
-    generateRefreshToken: jest.Mock<AnyPromiseFn>;
-    verifyRefreshToken: jest.Mock<AnyPromiseFn>;
+  let userRepository: {
+    findUser: jest.Mock<AnyPromiseFn>;
+    updateUser: jest.Mock<AnyPromiseFn>;
   };
-  let authUtility: { hash: jest.Mock; randomToken: jest.Mock };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -77,19 +73,9 @@ describe('EmployeeController (integration)', () => {
       findOrg: jest.fn<AnyPromiseFn>(),
       findBySlug: jest.fn<AnyPromiseFn>(),
     };
-    tokenService = {
-      generateTokenPair: jest
-        .fn<AnyPromiseFn>()
-        .mockResolvedValue({ accessToken: 'access-token', refreshToken: 'refresh-token' }),
-      generateAccessToken: jest.fn<AnyPromiseFn>(),
-      generateRefreshToken: jest.fn<AnyPromiseFn>(),
-      verifyRefreshToken: jest
-        .fn<AnyPromiseFn>()
-        .mockResolvedValue({ sub: INVITE_ID }),
-    };
-    authUtility = {
-      hash: jest.fn((value: string) => `hashed-${value}`),
-      randomToken: jest.fn(() => 'raw-token'),
+    userRepository = {
+      findUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+      updateUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -105,8 +91,7 @@ describe('EmployeeController (integration)', () => {
           provide: ConfigService,
           useValue: { get: () => 'http://localhost:3000' },
         },
-        { provide: TokenService, useValue: tokenService },
-        { provide: AuthUtility, useValue: authUtility },
+        { provide: UserRepository, useValue: userRepository },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -600,297 +585,6 @@ describe('EmployeeController (integration)', () => {
 
       expect(res.status).toBe(410);
       expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('POST /employees/login', () => {
-    it('returns a token pair for valid credentials', async () => {
-      const hashedPassword = await hash('secret123', 4);
-      employeeRepository.findByEmailWithPassword.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        password: hashedPassword,
-        organizationId: ORG_ID,
-        refreshTokens: [],
-        status: EmployeeStatus.ACTIVE,
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/login')
-        .send({ email: 'jane@example.com', password: 'secret123' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.data.accessToken).toBe('access-token');
-      expect(res.body.data.role).toEqual(['employee']);
-      expect(employeeRepository.findByEmailWithPassword).toHaveBeenCalledWith(
-        'jane@example.com',
-      );
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({ refreshTokens: expect.any(Array) }),
-      );
-    });
-
-    it('rejects invalid credentials', async () => {
-      const hashedPassword = await hash('secret123', 4);
-      employeeRepository.findByEmailWithPassword.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        password: hashedPassword,
-        organizationId: ORG_ID,
-        refreshTokens: [],
-        status: EmployeeStatus.ACTIVE,
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/login')
-        .send({ email: 'jane@example.com', password: 'wrong-password' });
-
-      expect(res.status).toBe(400);
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-
-    it('rejects an account with no password set', async () => {
-      employeeRepository.findByEmailWithPassword.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        password: null,
-        refreshTokens: [],
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/login')
-        .send({ email: 'jane@example.com', password: 'secret123' });
-
-      expect(res.status).toBe(400);
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-
-    it('rejects an invalid email', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/employees/login')
-        .send({ email: 'not-an-email', password: 'secret123' });
-
-      expect(res.status).toBe(400);
-    });
-  });
-
-  describe('POST /employees/forgot-password', () => {
-    it('sends a reset email for a joined employee', async () => {
-      employeeRepository.findByEmail.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        organizationId: ORG_ID,
-        hasJoinedOrg: true,
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/forgot-password')
-        .send({ email: 'jane@example.com' });
-
-      expect(res.status).toBe(200);
-      expect(emailService.brevoEmailDispatcher).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: 'jane@example.com',
-          subject: 'Password Token Request',
-          html: expect.stringContaining('token=raw-token'),
-        }),
-      );
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({
-          resetToken: expect.objectContaining({
-            tokenHash: 'hashed-raw-token',
-          }),
-        }),
-      );
-    });
-
-    it('returns a generic message without emailing unknown accounts', async () => {
-      employeeRepository.findByEmail.mockResolvedValue(null);
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/forgot-password')
-        .send({ email: 'jane@example.com' });
-
-      expect(res.status).toBe(200);
-      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-
-    it('does not email un-accepted invitees', async () => {
-      employeeRepository.findByEmail.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        hasJoinedOrg: false,
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/forgot-password')
-        .send({ email: 'jane@example.com' });
-
-      expect(res.status).toBe(200);
-      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
-    });
-
-    it('rejects an invalid email', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/employees/forgot-password')
-        .send({ email: 'not-an-email' });
-
-      expect(res.status).toBe(400);
-    });
-  });
-
-  describe('POST /employees/reset-password?token', () => {
-    it('resets the password and clears sessions', async () => {
-      employeeRepository.findOne.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        resetToken: {
-          tokenHash: 'hashed-raw-token',
-          expiresAt: new Date(Date.now() + 3600000),
-        },
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/reset-password?token=raw-token')
-        .send({ password: 'newsecret123' });
-
-      expect(res.status).toBe(200);
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({
-          password: expect.any(String),
-          resetToken: null,
-          refreshTokens: [],
-        }),
-      );
-    });
-
-    it('rejects an invalid token', async () => {
-      employeeRepository.findOne.mockResolvedValue(null);
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/reset-password?token=bad-token')
-        .send({ password: 'newsecret123' });
-
-      expect(res.status).toBe(400);
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-
-    it('rejects an expired token', async () => {
-      employeeRepository.findOne.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        resetToken: {
-          tokenHash: 'hashed-raw-token',
-          expiresAt: new Date(Date.now() - 1000),
-        },
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/reset-password?token=raw-token')
-        .send({ password: 'newsecret123' });
-
-      expect(res.status).toBe(400);
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('POST /employees/refresh', () => {
-    it('rotates the token pair', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        organizationId: ORG_ID,
-        refreshTokens: [
-          {
-            tokenHash: 'hashed-refresh-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-        ],
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/refresh')
-        .send({ refreshToken: 'refresh-token' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.data.accessToken).toBe('access-token');
-      expect(res.body.data.refreshToken).toBe('refresh-token');
-    });
-
-    it('rejects an unknown refresh token', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        refreshTokens: [],
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/refresh')
-        .send({ refreshToken: 'refresh-token' });
-
-      expect(res.status).toBe(400);
-    });
-  });
-
-  describe('POST /employees/logout', () => {
-    it('revokes all sessions when no refresh token is provided', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        refreshTokens: [
-          {
-            tokenHash: 'hashed-refresh-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-        ],
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/logout')
-        .send({});
-
-      expect(res.status).toBe(200);
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({ refreshTokens: [] }),
-      );
-    });
-
-    it('revokes a single refresh token when provided', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'jane@example.com',
-        refreshTokens: [
-          {
-            tokenHash: 'hashed-refresh-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-          {
-            tokenHash: 'hashed-other-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-        ],
-      });
-
-      const res = await request(app.getHttpServer())
-        .post('/employees/logout')
-        .send({ refreshToken: 'refresh-token' });
-
-      expect(res.status).toBe(200);
-      const [, update] = employeeRepository.updateById.mock.calls[0] as [
-        string,
-        Record<string, any>,
-      ];
-      expect(update.refreshTokens).toHaveLength(1);
-      expect(update.refreshTokens[0].tokenHash).toBe('hashed-other-token');
     });
   });
 

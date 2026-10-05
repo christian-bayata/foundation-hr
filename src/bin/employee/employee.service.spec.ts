@@ -8,17 +8,16 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AppException } from '../../common/response/app-exception';
 import { EmailService } from '../../email/email.service';
-import { hash } from 'bcryptjs';
 import { EmployeeRepository } from './repository/employee.repository';
 import { EmployeeUtility } from './repository/employee.utility';
 import { EmployeeService } from './employee.service';
 import { EmployeeStatus } from './enum/employee.enum';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
-import { TokenService } from '../auth/token.service';
-import { AuthUtility } from '../auth/auth.utility';
+import { UserRepository } from '../auth/repository/user.repository';
 
 const INVITE_ID = '64f1b2c3d4e5f678901234ab';
 const ORG_ID = '64f1b2c3d4e5f678901234ac';
+const ADMIN_ID = '64f1b2c3d4e5f678901234ad';
 
 type AnyPromiseFn = (...args: any[]) => Promise<any>;
 
@@ -43,13 +42,10 @@ describe('EmployeeService', () => {
     findOrg: jest.Mock<AnyPromiseFn>;
     findBySlug: jest.Mock<AnyPromiseFn>;
   };
-  let tokenService: {
-    generateTokenPair: jest.Mock<AnyPromiseFn>;
-    generateAccessToken: jest.Mock<AnyPromiseFn>;
-    generateRefreshToken: jest.Mock<AnyPromiseFn>;
-    verifyRefreshToken: jest.Mock<AnyPromiseFn>;
+  let userRepository: {
+    findUser: jest.Mock<AnyPromiseFn>;
+    updateUser: jest.Mock<AnyPromiseFn>;
   };
-  let authUtility: { hash: jest.Mock; randomToken: jest.Mock };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -85,19 +81,9 @@ describe('EmployeeService', () => {
       findOrg: jest.fn<AnyPromiseFn>(),
       findBySlug: jest.fn<AnyPromiseFn>(),
     };
-    tokenService = {
-      generateTokenPair: jest
-        .fn<AnyPromiseFn>()
-        .mockResolvedValue({ accessToken: 'access-token', refreshToken: 'refresh-token' }),
-      generateAccessToken: jest.fn<AnyPromiseFn>(),
-      generateRefreshToken: jest.fn<AnyPromiseFn>(),
-      verifyRefreshToken: jest
-        .fn<AnyPromiseFn>()
-        .mockResolvedValue({ sub: INVITE_ID }),
-    };
-    authUtility = {
-      hash: jest.fn((value: string) => `hashed-${value}`),
-      randomToken: jest.fn(() => 'raw-token'),
+    userRepository = {
+      findUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+      updateUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -109,8 +95,7 @@ describe('EmployeeService', () => {
         { provide: EmployeeUtility, useValue: employeeUtility },
         { provide: EmailService, useValue: emailService },
         { provide: ConfigService, useValue: configService },
-        { provide: TokenService, useValue: tokenService },
-        { provide: AuthUtility, useValue: authUtility },
+        { provide: UserRepository, useValue: userRepository },
       ],
     }).compile();
 
@@ -591,7 +576,64 @@ describe('EmployeeService', () => {
       });
       expect(update.password).not.toBe('supersecret');
       expect(update.hasJoinedOrg).toBe(true);
-      expect(update['onboarding.startedAt']).toEqual(expect.any(Date));
+      expect(update.onboarding.startedAt).toEqual(expect.any(Date));
+    });
+
+    it('mirrors the password onto the admin user record', async () => {
+      employeeRepository.findByEmail.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'john@example.com',
+        organizationId: ORG_ID,
+        inviteExpiresAt: new Date(Date.now() + 3600000),
+        onboarding: null,
+      });
+      organizationRepository.findBySlug.mockResolvedValue({
+        _id: ORG_ID,
+        slug: 'acme',
+      });
+      userRepository.findUser.mockResolvedValue({
+        _id: ADMIN_ID,
+        email: 'john@example.com',
+      });
+
+      await service.employeeSetPassword(dto as any);
+
+      expect(userRepository.updateUser).toHaveBeenCalledWith(
+        { _id: ADMIN_ID },
+        expect.objectContaining({
+          password: expect.not.stringContaining('supersecret'),
+          isEmailVerified: true,
+          resetToken: null,
+        }),
+      );
+      const [, employeeUpdate] = employeeRepository.updateById.mock.calls[0] as [
+        string,
+        Record<string, any>,
+      ];
+      const [, adminUpdate] = userRepository.updateUser.mock.calls[0] as [
+        Record<string, any>,
+        Record<string, any>,
+      ];
+      expect(adminUpdate.password).toBe(employeeUpdate.password);
+    });
+
+    it('does not touch the admin record when the invitee has none', async () => {
+      employeeRepository.findByEmail.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'john@example.com',
+        organizationId: ORG_ID,
+        inviteExpiresAt: new Date(Date.now() + 3600000),
+        onboarding: null,
+      });
+      organizationRepository.findBySlug.mockResolvedValue({
+        _id: ORG_ID,
+        slug: 'acme',
+      });
+      userRepository.findUser.mockResolvedValue(null);
+
+      await service.employeeSetPassword(dto as any);
+
+      expect(userRepository.updateUser).not.toHaveBeenCalled();
     });
 
     it('preserves the existing onboarding start date', async () => {
@@ -614,7 +656,7 @@ describe('EmployeeService', () => {
         string,
         Record<string, any>,
       ];
-      expect(update['onboarding.startedAt']).toEqual(startedAt);
+      expect(update.onboarding.startedAt).toEqual(startedAt);
     });
 
     it('throws 404 when the employee does not exist', async () => {
@@ -659,325 +701,6 @@ describe('EmployeeService', () => {
         AppException,
       );
       expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('employeeLogin (auth)', () => {
-    const dto = { email: 'John@Example.com', password: 'secret123' };
-
-    const joinedEmployee = (overrides: any = {}) => ({
-      _id: INVITE_ID,
-      email: 'john@example.com',
-      password: 'stored-hash',
-      organizationId: ORG_ID,
-      refreshTokens: [],
-      status: EmployeeStatus.ACTIVE,
-      ...overrides,
-    });
-
-    it('issues a token pair and stores a hashed refresh token', async () => {
-      const storedHash = await hash(dto.password, 4);
-      employeeRepository.findByEmailWithPassword.mockResolvedValue(
-        joinedEmployee({ password: storedHash }),
-      );
-      employeeRepository.updateById.mockResolvedValue({});
-
-      const result = (await service.employeeLogin(
-        dto as any,
-      )) as any;
-
-      expect(employeeRepository.findByEmailWithPassword).toHaveBeenCalledWith(
-        'john@example.com',
-      );
-      expect(tokenService.generateTokenPair).toHaveBeenCalledWith({
-        sub: INVITE_ID,
-        email: 'john@example.com',
-        userType: 'employee',
-        organizationId: ORG_ID,
-      });
-      expect(authUtility.hash).toHaveBeenCalledWith('refresh-token');
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({
-          refreshTokens: [
-            {
-              tokenHash: 'hashed-refresh-token',
-              expiresAt: expect.any(Date),
-              createdAt: expect.any(Date),
-            },
-          ],
-        }),
-      );
-      expect(result).toEqual({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-        role: ['employee'],
-        organizationId: ORG_ID,
-        status: EmployeeStatus.ACTIVE,
-      });
-    });
-
-    it('throws 400 when the employee does not exist', async () => {
-      employeeRepository.findByEmailWithPassword.mockResolvedValue(null);
-
-      await expect(service.employeeLogin(dto as any)).rejects.toThrow(
-        AppException,
-      );
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-
-    it('throws 400 when no password has been set', async () => {
-      employeeRepository.findByEmailWithPassword.mockResolvedValue(
-        joinedEmployee({ password: null }),
-      );
-
-      await expect(service.employeeLogin(dto as any)).rejects.toThrow(
-        AppException,
-      );
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-
-    it('throws 400 when the password does not match', async () => {
-      const storedHash = await hash('different-pass', 4);
-      employeeRepository.findByEmailWithPassword.mockResolvedValue(
-        joinedEmployee({ password: storedHash }),
-      );
-
-      await expect(service.employeeLogin(dto as any)).rejects.toThrow(
-        AppException,
-      );
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('employeeRefresh (auth)', () => {
-    it('rotates the refresh token and returns a new pair', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        organizationId: ORG_ID,
-        refreshTokens: [
-          {
-            tokenHash: 'hashed-refresh-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-        ],
-      });
-
-      const result = (await service.employeeRefresh({
-        refreshToken: 'refresh-token',
-      } as any)) as any;
-
-      expect(tokenService.verifyRefreshToken).toHaveBeenCalledWith(
-        'refresh-token',
-      );
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({
-          refreshTokens: expect.arrayContaining([
-            expect.objectContaining({ tokenHash: 'hashed-refresh-token' }),
-          ]),
-        }),
-      );
-      expect(result).toEqual({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-      });
-    });
-
-    it('throws 404 when the employee does not exist', async () => {
-      employeeRepository.findById.mockResolvedValue(null);
-
-      await expect(
-        service.employeeRefresh({ refreshToken: 'refresh-token' } as any),
-      ).rejects.toThrow(AppException);
-    });
-
-    it('throws 400 for an unknown refresh token', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        refreshTokens: [],
-      });
-
-      await expect(
-        service.employeeRefresh({ refreshToken: 'refresh-token' } as any),
-      ).rejects.toThrow(AppException);
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('employeeForgotPassword (auth)', () => {
-    it('stores a reset token and emails the reset link for a joined employee', async () => {
-      employeeRepository.findByEmail.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        hasJoinedOrg: true,
-      });
-
-      const result = await service.employeeForgotPassword({
-        email: 'John@Example.com',
-      } as any);
-
-      expect(authUtility.randomToken).toHaveBeenCalled();
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(
-        INVITE_ID,
-        expect.objectContaining({
-          resetToken: expect.objectContaining({
-            tokenHash: 'hashed-raw-token',
-            expiresAt: expect.any(Date),
-          }),
-        }),
-      );
-      expect(emailService.brevoEmailDispatcher).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: 'john@example.com',
-          subject: 'Password Token Request',
-          html: expect.stringContaining('token=raw-token'),
-        }),
-      );
-      expect(result).toBe('If this email is registered, a reset link has been sent');
-    });
-
-    it('returns the generic message without emailing when the employee is unknown', async () => {
-      employeeRepository.findByEmail.mockResolvedValue(null);
-
-      const result = await service.employeeForgotPassword({
-        email: 'John@Example.com',
-      } as any);
-
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
-      expect(result).toBe('If this email is registered, a reset link has been sent');
-    });
-
-    it('does not email employees who have not joined', async () => {
-      employeeRepository.findByEmail.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        hasJoinedOrg: false,
-      });
-
-      await service.employeeForgotPassword({ email: 'John@Example.com' } as any);
-
-      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('employeeResetPassword (auth)', () => {
-    it('stores a new hashed password and clears sessions', async () => {
-      employeeRepository.findOne.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        resetToken: {
-          tokenHash: 'hashed-raw-token',
-          expiresAt: new Date(Date.now() + 3600000),
-        },
-      });
-
-      const result = await service.employeeResetPassword({
-        token: 'raw-token',
-        password: 'newsecret123',
-      } as any);
-
-      const [, update] = employeeRepository.updateById.mock.calls[0] as [
-        string,
-        Record<string, any>,
-      ];
-      expect(update.password).not.toBe('newsecret123');
-      expect(update.resetToken).toBeNull();
-      expect(update.refreshTokens).toEqual([]);
-      expect(result).toBe(`Password reset successful for: john@example.com`);
-    });
-
-    it('throws 400 when the reset token is invalid', async () => {
-      employeeRepository.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.employeeResetPassword({
-          token: 'bad-token',
-          password: 'newsecret123',
-        } as any),
-      ).rejects.toThrow(AppException);
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-
-    it('throws 400 when the reset token has expired', async () => {
-      employeeRepository.findOne.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        resetToken: {
-          tokenHash: 'hashed-raw-token',
-          expiresAt: new Date(Date.now() - 1000),
-        },
-      });
-
-      await expect(
-        service.employeeResetPassword({
-          token: 'raw-token',
-          password: 'newsecret123',
-        } as any),
-      ).rejects.toThrow(AppException);
-      expect(employeeRepository.updateById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('employeeLogout (auth)', () => {
-    it('revokes a single refresh token when provided', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        refreshTokens: [
-          {
-            tokenHash: 'hashed-refresh-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-          {
-            tokenHash: 'hashed-other-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-        ],
-      });
-
-      await service.employeeLogout(INVITE_ID, 'refresh-token');
-
-      const [, update] = employeeRepository.updateById.mock.calls[0] as [
-        string,
-        Record<string, any>,
-      ];
-      expect(update.refreshTokens).toHaveLength(1);
-      expect(update.refreshTokens[0].tokenHash).toBe('hashed-other-token');
-    });
-
-    it('clears all sessions when no refresh token is provided', async () => {
-      employeeRepository.findById.mockResolvedValue({
-        _id: INVITE_ID,
-        email: 'john@example.com',
-        refreshTokens: [
-          {
-            tokenHash: 'hashed-refresh-token',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-          },
-        ],
-      });
-
-      await service.employeeLogout(INVITE_ID);
-
-      expect(employeeRepository.updateById).toHaveBeenCalledWith(INVITE_ID, {
-        refreshTokens: [],
-      });
-    });
-
-    it('throws 404 when the employee does not exist', async () => {
-      employeeRepository.findById.mockResolvedValue(null);
-
-      await expect(service.employeeLogout(INVITE_ID)).rejects.toThrow(
-        AppException,
-      );
     });
   });
 

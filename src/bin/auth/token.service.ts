@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { PrincipalType } from './enum/principal-type.enum';
 
 export interface TokenPair {
   accessToken: string;
@@ -11,7 +12,16 @@ export interface AccessTokenPayload {
   sub: string;
   email: string;
   userType?: string;
+  principalType: PrincipalType;
+  employeeId?: string;
+  adminUserId?: string;
   organizationId?: string;
+}
+
+export interface RefreshTokenPayload {
+  sub: string;
+  email: string;
+  principalType: PrincipalType;
 }
 
 @Injectable()
@@ -44,7 +54,7 @@ export class TokenService {
   async generateTokenPair(payload: AccessTokenPayload): Promise<TokenPair> {
     const [accessToken, refreshToken] = await Promise.all([
       this.generateAccessToken(payload),
-      this.generateRefreshToken(payload?.sub),
+      this.generateRefreshToken(payload?.sub, payload?.principalType, payload?.email),
     ]);
 
     return { accessToken, refreshToken };
@@ -54,12 +64,17 @@ export class TokenService {
    * @Responsibility: dedicated service for generating a refresh token
    *
    * @param userId
+   * @param principalType
    * @returns {Promise<string>}
    */
-  async generateRefreshToken(userId: string): Promise<string> {
+  async generateRefreshToken(
+    userId: string,
+    principalType: PrincipalType,
+    email: string,
+  ): Promise<string> {
     const expiresIn = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d';
     return this.jwtService.signAsync(
-      { sub: userId },
+      { sub: userId, principalType, email },
       {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
         expiresIn,
@@ -71,10 +86,10 @@ export class TokenService {
    * @Responsibility: dedicated service for verifying a refresh token
    *
    * @param token
-   * @returns {Promise<{ sub: string }>}
+   * @returns {Promise<RefreshTokenPayload>}
    */
-  async verifyRefreshToken(token: string): Promise<{ sub: string }> {
-    return this.jwtService.verifyAsync<{ sub: string }>(token, {
+  async verifyRefreshToken(token: string): Promise<RefreshTokenPayload> {
+    return this.jwtService.verifyAsync<RefreshTokenPayload>(token, {
       secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
     });
   }

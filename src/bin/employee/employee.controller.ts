@@ -26,16 +26,7 @@ import {
   InviteEmployeesDto,
 } from './dto/invite-employees.dto';
 import { EmployeeSetPasswordDto } from './dto/set-password.dto';
-import { EmployeeLoginDto } from './dto/login.dto';
-import { EmployeeForgotPasswordDto } from './dto/forgot-password.dto';
-import { EmployeeResetPasswordDto } from './dto/reset-password.dto';
-import { EmployeeRefreshTokenDto } from './dto/refresh-token.dto';
 import { setPasswordSchema } from './dto/set-password.schema';
-import {
-  employeeForgotPasswordSchema,
-  employeeLoginSchema,
-  employeeRefreshTokenSchema,
-} from './dto/employee-auth.schemas';
 import {
   createEmployeeSchema,
   updateEmployeeSchema,
@@ -161,84 +152,6 @@ export class EmployeeController {
     );
 
     return AppResponse.success('Password set successfully', 200, data);
-  }
-
-  @Public()
-  @Post('/login')
-  @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @UsePipes(new JoiValidationPipe(employeeLoginSchema))
-  async employeeLogin(
-    @Req() req: IRequest,
-    @Body() employeeLoginDto: EmployeeLoginDto,
-  ) {
-    employeeLoginDto.req = req;
-    const data = await this.employeeService.employeeLogin(employeeLoginDto);
-
-    return AppResponse.success('Successfully logged in', 200, data);
-  }
-
-  @Public()
-  @Post('/refresh')
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
-  @UsePipes(new JoiValidationPipe(employeeRefreshTokenSchema))
-  async employeeRefresh(
-    @Req() req: IRequest,
-    @Body() employeeRefreshTokenDto: EmployeeRefreshTokenDto,
-  ) {
-    employeeRefreshTokenDto.req = req;
-    const data = await this.employeeService.employeeRefresh(
-      employeeRefreshTokenDto,
-    );
-
-    return AppResponse.success('Session refreshed successfully', 200, data);
-  }
-
-  @Public()
-  @Post('/forgot-password')
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @UsePipes(new JoiValidationPipe(employeeForgotPasswordSchema))
-  async employeeForgotPassword(
-    @Req() req: IRequest,
-    @Body() employeeForgotPasswordDto: EmployeeForgotPasswordDto,
-  ) {
-    employeeForgotPasswordDto.req = req;
-    const data = await this.employeeService.employeeForgotPassword(
-      employeeForgotPasswordDto,
-    );
-
-    return AppResponse.success('Reset link sent', 200, data);
-  }
-
-  @Public()
-  @Post('/reset-password')
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async employeeResetPassword(
-    @Req() req: IRequest,
-    @Query('token') token: string,
-    @Body() employeeResetPasswordDto: EmployeeResetPasswordDto,
-  ) {
-    employeeResetPasswordDto.token = token;
-    employeeResetPasswordDto.req = req;
-    const data = await this.employeeService.employeeResetPassword(
-      employeeResetPasswordDto,
-    );
-
-    return AppResponse.success('Password reset successfully', 200, data);
-  }
-
-  @Post('/logout')
-  @HttpCode(HttpStatus.OK)
-  async employeeLogout(
-    @Req() req: IRequest,
-    @Body() logoutDto: { refreshToken?: string },
-  ) {
-    const data = await this.employeeService.employeeLogout(
-      req.user?.userId ?? '',
-      logoutDto?.refreshToken,
-    );
-
-    return AppResponse.success('Logged out successfully', 200, data);
   }
 
   @Get('/onboarding/retrieve')
