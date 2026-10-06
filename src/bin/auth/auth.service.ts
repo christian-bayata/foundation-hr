@@ -238,7 +238,7 @@ export class AuthService {
       const credentialHolder = employee ?? adminUser;
       if (!credentialHolder?.password) {
         AppResponse.error({
-          message: `Invalid email or password`,
+          message: `No password has been set yet`,
           status: HttpStatus.BAD_REQUEST,
         });
       }

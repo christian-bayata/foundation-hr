@@ -435,15 +435,18 @@ export class EmployeeService {
 
       const hashedPassword = await hash(password, 10);
 
-      await this.employeeRepository.updateById(employee._id.toString(), {
-        password: hashedPassword,
-        hasJoinedOrg: true,
-        organizationId: employee.organizationId ?? organizationId,
-        onboarding: {
-          ...(employee.onboarding ?? {}),
-          startedAt: employee.onboarding?.startedAt ?? moment().toDate(),
+      await this.employeeRepository.updateEmployee(
+        { _id: employee?._id },
+        {
+          password: hashedPassword,
+          hasJoinedOrg: true,
+          organizationId: employee.organizationId ?? organizationId,
+          onboarding: {
+            ...(employee.onboarding ?? {}),
+            startedAt: employee.onboarding?.startedAt ?? moment().toDate(),
+          },
         },
-      });
+      );
 
       /* Keep one password across every identity the invitee holds */
       await this.syncPasswordToAdminUser(normalizedEmail, hashedPassword);
