@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './bin/auth/auth.module';
 import { EmployeeModule } from './bin/employee/employee.module';
 import { SettingModule } from './bin/setting/setting.module';
+import { FileUploadModule } from './file-upload/file-upload.module';
 import { HttpExceptionFilter } from './common';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RoleGuard } from './common/guards/role.guard';
@@ -22,6 +23,7 @@ import { RoleGuard } from './common/guards/role.guard';
     AuthModule,
     EmployeeModule,
     SettingModule,
+    FileUploadModule,
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
