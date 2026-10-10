@@ -23,7 +23,9 @@ describe('OrganisationController (integration)', () => {
     getOrganisationHierarchy: jest.Mock<AnyPromiseFn>;
     updateOrganisationHierarchy: jest.Mock<AnyPromiseFn>;
     getPolicyManagement: jest.Mock<AnyPromiseFn>;
-    updatePolicyManagement: jest.Mock<AnyPromiseFn>;
+    addPolicy: jest.Mock<AnyPromiseFn>;
+    updatePolicy: jest.Mock<AnyPromiseFn>;
+    deletePolicy: jest.Mock<AnyPromiseFn>;
     getBranding: jest.Mock<AnyPromiseFn>;
     updateBranding: jest.Mock<AnyPromiseFn>;
     getDepartments: jest.Mock<AnyPromiseFn>;
@@ -46,7 +48,9 @@ describe('OrganisationController (integration)', () => {
       getOrganisationHierarchy: jest.fn(),
       updateOrganisationHierarchy: jest.fn(),
       getPolicyManagement: jest.fn(),
-      updatePolicyManagement: jest.fn(),
+      addPolicy: jest.fn(),
+      updatePolicy: jest.fn(),
+      deletePolicy: jest.fn(),
       getBranding: jest.fn(),
       updateBranding: jest.fn(),
       getDepartments: jest.fn(),
@@ -604,39 +608,87 @@ describe('OrganisationController (integration)', () => {
     });
   });
 
-  describe.each([
-    {
-      section: 'policy-management',
-      getter: 'getPolicyManagement',
-      updater: 'updatePolicyManagement',
-    },
-  ])('$section endpoints', ({ section, getter, updater }) => {
-    it('retrieves the section and returns the pending placeholder', async () => {
-      const placeholder = { section, organizationId: ORG_ID, implemented: false };
-      (organisationService as any)[getter].mockResolvedValue(placeholder);
+  describe('policy-management endpoints', () => {
+    it('retrieves the policy documents with the search filter', async () => {
+      const documents = [{ code: 'pol-1', name: 'HR Handbook' }];
+      organisationService.getPolicyManagement.mockResolvedValue(documents);
 
       const response = await request(app.getHttpServer()).get(
-        `/setting/organization/${section}/retrieve`,
+        '/setting/organization/policy-management/retrieve?search=handbook',
       );
 
       expect(response.status).toBe(200);
-      expect(response.body.data).toEqual(placeholder);
+      expect(response.body.data).toEqual(documents);
+      expect(organisationService.getPolicyManagement).toHaveBeenCalledWith(
+        ORG_ID,
+        'handbook',
+      );
     });
 
-    it('updates the section and returns the pending placeholder', async () => {
-      const placeholder = {
-        section,
-        organizationId: ORG_ID,
-        implemented: false,
+    it('registers an uploaded policy document', async () => {
+      const created = {
+        code: 'pol-1',
+        name: 'HR Handbook',
       };
-      (organisationService as any)[updater].mockResolvedValue(placeholder);
+      organisationService.addPolicy.mockResolvedValue(created);
+
+      const payload = {
+        name: 'HR Handbook',
+        url: 'https://res.cloudinary.com/demo/raw/upload/v1700000000/foundationhr/documents/hr-handbook.pdf',
+      };
 
       const response = await request(app.getHttpServer())
-        .patch(`/setting/organization/${section}/update`)
-        .send({ foo: 'bar' });
+        .post('/setting/organization/policy-management/add')
+        .send(payload);
+
+      expect(response.status).toBe(201);
+      expect(response.body.data).toEqual(created);
+      expect(organisationService.addPolicy).toHaveBeenCalledWith(
+        ORG_ID,
+        payload,
+        { userId: 'usr123', email: 'admin@example.com' },
+      );
+    });
+
+    it('rejects an add payload with an invalid url', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/organization/policy-management/add')
+        .send({
+          name: 'HR Handbook',
+          url: 'not-a-url',
+        });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.addPolicy).not.toHaveBeenCalled();
+    });
+
+    it('updates a policy document by code', async () => {
+      const code = 'IQGLWvbEIi';
+      const payload = { name: 'Employee Handbook' };
+      organisationService.updatePolicy.mockResolvedValue({ code, ...payload });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/setting/organization/policy-management/update?code=${code}`)
+        .send(payload);
 
       expect(response.status).toBe(200);
-      expect(response.body.data).toEqual(placeholder);
+      expect(organisationService.updatePolicy).toHaveBeenCalledWith(
+        ORG_ID,
+        code,
+        payload,
+      );
+    });
+
+    it('deletes a policy document by code', async () => {
+      const code = 'IQGLWvbEIi';
+      organisationService.deletePolicy.mockResolvedValue('Policy document deleted');
+
+      const response = await request(app.getHttpServer()).delete(
+        `/setting/organization/policy-management/delete?code=${code}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.deletePolicy).toHaveBeenCalledWith(ORG_ID, code);
     });
   });
 

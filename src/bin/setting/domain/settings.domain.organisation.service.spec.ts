@@ -2,10 +2,13 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { AppException } from '../../../common/response/app-exception';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
 import { OrganizationDepartmentRepository } from '../../organization/repository/organization-department.repository';
+import { JobTitleRepository } from '../../organization/repository/job-title.repository';
 import { EmployeeService } from '../../employee/employee.service';
 import { EmployeeRepository } from '../../employee/repository/employee.repository';
 import { BusinessType } from '../organisation/enum/organisation.enum';
 import { InvoiceRepository } from '../organisation/repository/invoice.repository';
+import { OrganizationPolicyRepository } from '../organisation/repository/organization-policy.repository';
+import { FileUploadService } from '../../../file-upload/file-upload.service';
 import { AuthUtility } from '../../auth/auth.utility';
 import { SettingsDomainOrganisationService } from './settings.domain.organisation.service';
 
@@ -29,6 +32,13 @@ describe('SettingsDomainOrganisationService', () => {
     updateByCode: jest.Mock<AnyPromiseFn>;
     synchronizeDepartments: jest.Mock<AnyPromiseFn>;
   };
+  let jobTitleRepository: {
+    findByOrganization: jest.Mock<AnyPromiseFn>;
+    findByCode: jest.Mock<AnyPromiseFn>;
+    create: jest.Mock<AnyPromiseFn>;
+    updateByCode: jest.Mock<AnyPromiseFn>;
+    deleteWhere: jest.Mock<AnyPromiseFn>;
+  };
   let employeeService: {
     listEmployees: jest.Mock<AnyPromiseFn>;
     getOrganisationHierarchy: jest.Mock<AnyPromiseFn>;
@@ -39,6 +49,17 @@ describe('SettingsDomainOrganisationService', () => {
   };
   let invoiceRepository: {
     findByOrganization: jest.Mock<AnyPromiseFn>;
+  };
+  let organizationPolicyRepository: {
+    findByOrganization: jest.Mock<AnyPromiseFn>;
+    findByCode: jest.Mock<AnyPromiseFn>;
+    create: jest.Mock<AnyPromiseFn>;
+    updateByCode: jest.Mock<AnyPromiseFn>;
+    deleteWhere: jest.Mock<AnyPromiseFn>;
+  };
+  let fileUploadService: {
+    deleteAsset: jest.Mock<AnyPromiseFn>;
+    derivePublicId: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -62,12 +83,33 @@ describe('SettingsDomainOrganisationService', () => {
       updateSupervisor: jest.fn(),
     };
 
+    jobTitleRepository = {
+      findByOrganization: jest.fn(),
+      findByCode: jest.fn(),
+      create: jest.fn(),
+      updateByCode: jest.fn(),
+      deleteWhere: jest.fn(),
+    };
+
     employeeRepository = {
       findByOrganization: jest.fn(),
     };
 
     invoiceRepository = {
       findByOrganization: jest.fn(),
+    };
+
+    organizationPolicyRepository = {
+      findByOrganization: jest.fn(),
+      findByCode: jest.fn(),
+      create: jest.fn(),
+      updateByCode: jest.fn(),
+      deleteWhere: jest.fn(),
+    };
+
+    fileUploadService = {
+      deleteAsset: jest.fn(),
+      derivePublicId: jest.fn(),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -81,7 +123,13 @@ describe('SettingsDomainOrganisationService', () => {
         },
         { provide: EmployeeService, useValue: employeeService },
         { provide: EmployeeRepository, useValue: employeeRepository },
+        { provide: JobTitleRepository, useValue: jobTitleRepository },
         { provide: InvoiceRepository, useValue: invoiceRepository },
+        {
+          provide: OrganizationPolicyRepository,
+          useValue: organizationPolicyRepository,
+        },
+        { provide: FileUploadService, useValue: fileUploadService },
         {
           provide: AuthUtility,
           useValue: { generateRandomString: jest.fn(() => 'generated-code') },
@@ -1274,35 +1322,169 @@ describe('SettingsDomainOrganisationService', () => {
     });
   });
 
-  describe('pending sections', () => {
-    it.each(['getPolicyManagement'])(
-      '%s returns an unimplemented placeholder',
-      async (method) => {
-        const result = await (service as any)[method](ORG_ID);
+  describe('getPolicyManagement', () => {
+    it('returns policy documents with the search filter', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      const documents = [{ code: 'pol-1', name: 'HR Handbook' }];
+      organizationPolicyRepository.findByOrganization.mockResolvedValue(
+        documents,
+      );
 
-        expect(result).toEqual(
-          expect.objectContaining({
-            organizationId: ORG_ID,
-            implemented: false,
-          }),
-        );
-      },
-    );
+      const result = await service.getPolicyManagement(ORG_ID, 'handbook');
 
-    it.each(['updatePolicyManagement'])(
-      '%s returns an unimplemented placeholder with the payload',
-      async (method) => {
-        const payload = { key: 'value' };
-        const result = await (service as any)[method](ORG_ID, payload);
+      expect(organizationPolicyRepository.findByOrganization).toHaveBeenCalledWith(
+        ORG_ID,
+        'handbook',
+      );
+      expect(result).toEqual(documents);
+    });
 
-        expect(result).toEqual(
-          expect.objectContaining({
-            organizationId: ORG_ID,
-            implemented: false,
-            receivedPayload: payload,
-          }),
-        );
-      },
-    );
+    it('defaults the search filter to an empty string', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationPolicyRepository.findByOrganization.mockResolvedValue([]);
+
+      await service.getPolicyManagement(ORG_ID);
+
+      expect(organizationPolicyRepository.findByOrganization).toHaveBeenCalledWith(
+        ORG_ID,
+        '',
+      );
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getPolicyManagement(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+      expect(
+        organizationPolicyRepository.findByOrganization,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addPolicy', () => {
+    const dto = {
+      name: '  HR Handbook  ',
+      url: 'https://res.cloudinary.com/demo/raw/upload/v1700000000/foundationhr/documents/hr-handbook.pdf',
+    };
+
+    it('creates a policy document with a generated code, derived public id and uploader', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      fileUploadService.derivePublicId.mockReturnValue(
+        'foundationhr/documents/hr-handbook.pdf',
+      );
+      organizationPolicyRepository.create.mockResolvedValue({
+        code: 'generated-code',
+        name: 'HR Handbook',
+      });
+
+      const result = await service.addPolicy(ORG_ID, dto, {
+        userId: 'usr123',
+        email: 'admin@example.com',
+      });
+
+      expect(fileUploadService.derivePublicId).toHaveBeenCalledWith(dto.url);
+      expect(organizationPolicyRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: ORG_ID,
+          code: 'generated-code',
+          name: 'HR Handbook',
+          url: dto.url,
+          publicId: 'foundationhr/documents/hr-handbook.pdf',
+          uploadedByUserId: 'usr123',
+          uploadedByEmail: 'admin@example.com',
+        }),
+      );
+      expect(result).toEqual({ code: 'generated-code', name: 'HR Handbook' });
+    });
+
+    it('rejects an empty document name', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.addPolicy(ORG_ID, { ...dto, name: '   ' }),
+      ).rejects.toThrow(AppException);
+      expect(organizationPolicyRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.addPolicy(ORG_ID, dto)).rejects.toThrow(
+        AppException,
+      );
+      expect(organizationPolicyRepository.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updatePolicy', () => {
+    it('renames an existing document', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationPolicyRepository.findByCode.mockResolvedValue({
+        code: 'pol-1',
+      });
+      organizationPolicyRepository.updateByCode.mockResolvedValue({
+        code: 'pol-1',
+        name: 'Employee Handbook',
+      });
+
+      const result = await service.updatePolicy(ORG_ID, 'pol-1', {
+        name: '  Employee Handbook  ',
+      });
+
+      expect(organizationPolicyRepository.updateByCode).toHaveBeenCalledWith(
+        ORG_ID,
+        'pol-1',
+        {
+          name: 'Employee Handbook',
+        },
+      );
+      expect(result).toEqual({ code: 'pol-1', name: 'Employee Handbook' });
+    });
+
+    it('throws a 404 when the document does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationPolicyRepository.findByCode.mockResolvedValue(null);
+
+      await expect(
+        service.updatePolicy(ORG_ID, 'missing', { name: 'X' }),
+      ).rejects.toThrow(AppException);
+      expect(organizationPolicyRepository.updateByCode).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deletePolicy', () => {
+    it('deletes the document and removes its stored asset', async () => {
+      organizationPolicyRepository.findByCode.mockResolvedValue({
+        code: 'pol-1',
+        publicId: 'foundationhr/documents/hr-handbook',
+      });
+      organizationPolicyRepository.deleteWhere.mockResolvedValue({
+        code: 'pol-1',
+      });
+
+      const result = await service.deletePolicy(ORG_ID, 'pol-1');
+
+      expect(organizationPolicyRepository.deleteWhere).toHaveBeenCalledWith({
+        organizationId: ORG_ID,
+        code: 'pol-1',
+      });
+      expect(fileUploadService.deleteAsset).toHaveBeenCalledWith(
+        'foundationhr/documents/hr-handbook',
+        'documents',
+      );
+      expect(result).toBe('Policy document deleted');
+    });
+
+    it('throws a 404 when the document does not exist', async () => {
+      organizationPolicyRepository.findByCode.mockResolvedValue(null);
+
+      await expect(service.deletePolicy(ORG_ID, 'missing')).rejects.toThrow(
+        AppException,
+      );
+      expect(organizationPolicyRepository.deleteWhere).not.toHaveBeenCalled();
+      expect(fileUploadService.deleteAsset).not.toHaveBeenCalled();
+    });
   });
 });

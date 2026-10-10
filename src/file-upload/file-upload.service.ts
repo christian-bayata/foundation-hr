@@ -10,6 +10,16 @@ const ALLOWED_EXTENSIONS: Record<FileExtensionType, string[]> = {
   [FileExtensionType.CSV]: ['csv'],
   [FileExtensionType.XLSX]: ['xlsx'],
   [FileExtensionType.PDF]: ['pdf'],
+  [FileExtensionType.DOCUMENTS]: [
+    'pdf',
+    'doc',
+    'docx',
+    'txt',
+    'xls',
+    'xlsx',
+    'ppt',
+    'pptx',
+  ],
 };
 
 @Injectable()
@@ -87,6 +97,67 @@ export class FileUploadService {
         message: 'Failed to upload file',
         status: HttpStatus.INTERNAL_SERVER_ERROR,
       });
+    }
+  }
+
+  /**
+   * @Responsibility: Delete a previously uploaded asset from Cloudinary.
+   * Best-effort — failures are logged and never thrown so callers can safely
+   * remove their own records without being blocked by a storage hiccup.
+   *
+   * @param {string} publicId the Cloudinary public id returned on upload
+   * @param {string} flag one of FileExtensionType (images | csv | xlsx | pdf | documents)
+   * @returns {Promise<void>}
+   */
+  async deleteAsset(publicId: string | null, flag: string): Promise<void> {
+    if (!publicId) return;
+
+    const resourceType = flag === FileExtensionType.IMAGES ? 'image' : 'raw';
+
+    try {
+      await cloudinary.uploader.destroy(publicId, {
+        resource_type: resourceType,
+        invalidate: true,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to delete asset '${publicId}' from Cloudinary`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  /**
+   * @Responsibility: Recover the Cloudinary public id from a previously
+   * returned secure URL. Policy documents only receive the file URL from the
+   * client, so the public id required for later deletion is derived here.
+   *
+   * For `raw` assets the public id keeps its file extension, matching what
+   * `uploader.destroy` expects. Returns null when the URL is not a Cloudinary
+   * delivery URL (the caller then skips remote deletion).
+   *
+   * @param {string} url the Cloudinary secure_url returned on upload
+   * @returns {string | null}
+   */
+  derivePublicId(url: string): string | null {
+    if (!url) return null;
+
+    const marker = '/upload/';
+    const index = url.indexOf(marker);
+    if (index === -1) return null;
+
+    const path = url
+      .slice(index + marker.length)
+      .split('?')[0]
+      .split('#')[0]
+      .replace(/^v\d+\//, '');
+
+    if (!path) return null;
+
+    try {
+      return decodeURIComponent(path);
+    } catch {
+      return path;
     }
   }
 

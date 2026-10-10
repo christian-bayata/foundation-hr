@@ -38,6 +38,12 @@ import {
   JobTitleCodeQueryDto,
   UpdateJobTitleDto,
 } from './dto/update-job-title.dto';
+import { AddPolicyDto } from './dto/add-policy.dto';
+import { UpdatePolicyDto } from './dto/update-policy.dto';
+import {
+  ListPolicyQueryDto,
+  PolicyCodeQueryDto,
+} from './dto/policy-query.dto';
 import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
@@ -175,9 +181,13 @@ export class OrganisationController {
 
   @Get('policy-management/retrieve')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async retrievePolicyManagement(@CurrentUser() user: ICurrentUser) {
+  async retrievePolicyManagement(
+    @CurrentUser() user: ICurrentUser,
+    @Query() query: ListPolicyQueryDto,
+  ) {
     const data = await this.organisationService.getPolicyManagement(
       user.organizationId!,
+      query.search,
     );
     return AppResponse.success(
       'Policy management retrieved successfully',
@@ -186,19 +196,54 @@ export class OrganisationController {
     );
   }
 
+  @Post('policy-management/add')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  async addPolicy(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: AddPolicyDto,
+  ) {
+    const data = await this.organisationService.addPolicy(
+      user.organizationId!,
+      dto,
+      { userId: user.userId, email: user.email },
+    );
+    return AppResponse.success('Policy document added successfully', 201, data);
+  }
+
   @Patch('policy-management/update')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   @HttpCode(HttpStatus.OK)
   async updatePolicyManagement(
     @CurrentUser() user: ICurrentUser,
-    @Body() dto: unknown,
+    @Query() { code }: PolicyCodeQueryDto,
+    @Body() dto: UpdatePolicyDto,
   ) {
-    const data = await this.organisationService.updatePolicyManagement(
+    const data = await this.organisationService.updatePolicy(
       user.organizationId!,
+      code,
       dto,
     );
     return AppResponse.success(
       'Policy management updated successfully',
+      200,
+      data,
+    );
+  }
+
+  @Delete('policy-management/delete')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async deletePolicy(
+    @CurrentUser() user: ICurrentUser,
+    @Query() { code }: PolicyCodeQueryDto,
+  ) {
+    const data = await this.organisationService.deletePolicy(
+      user.organizationId!,
+      code,
+    );
+    return AppResponse.success(
+      'Policy document deleted successfully',
       200,
       data,
     );

@@ -19,7 +19,7 @@ export class FileUploadController {
   @Post('/files')
   @HttpCode(200)
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+    FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }),
   )
   async uploadFiles(
     @Query('flag') flag: string,

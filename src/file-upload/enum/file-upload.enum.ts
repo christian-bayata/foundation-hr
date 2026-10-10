@@ -3,4 +3,5 @@ export enum FileExtensionType {
   CSV = 'csv',
   XLSX = 'xlsx',
   PDF = 'pdf',
+  DOCUMENTS = 'documents',
 }

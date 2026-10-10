@@ -16,6 +16,12 @@ import { OrganizationDepartment } from '../../organization/entity/organization-d
 import { JobTitle } from '../../organization/entity/job-title.schema';
 import { Invoice } from '../organisation/entity/invoice.schema';
 import { InvoiceRepository } from '../organisation/repository/invoice.repository';
+import { OrganizationPolicy } from '../organisation/entity/organization-policy.schema';
+import { OrganizationPolicyRepository } from '../organisation/repository/organization-policy.repository';
+import { AddPolicyDto } from '../organisation/dto/add-policy.dto';
+import { UpdatePolicyDto } from '../organisation/dto/update-policy.dto';
+import { FileUploadService } from '../../../file-upload/file-upload.service';
+import { FileExtensionType } from '../../../file-upload/enum/file-upload.enum';
 import { EmployeeRepository } from '../../employee/repository/employee.repository';
 import { EmployeeService } from '../../employee/employee.service';
 import { EmployeeDocument } from '../../employee/entity/employee.schema';
@@ -69,6 +75,10 @@ export class SettingsDomainOrganisationService {
     private readonly employeeRepository: EmployeeRepository,
     @Inject(InvoiceRepository)
     private readonly invoiceRepository: InvoiceRepository,
+    @Inject(OrganizationPolicyRepository)
+    private readonly organizationPolicyRepository: OrganizationPolicyRepository,
+    @Inject(FileUploadService)
+    private readonly fileUploadService: FileUploadService,
     @Inject(AuthUtility)
     private readonly authUtility: AuthUtility,
   ) {}
@@ -413,29 +423,213 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Placeholder for the Policy management settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Retrieve an organization's policy documents, optionally
+   * filtered by a name search term. Documents are returned most recently
+   * uploaded first. When a policy document is uploaded through the generic
+   * file upload flow, this list exposes the stored metadata for the UI.
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param search - Optional document name search term
+   * @returns {Promise<OrganizationPolicy[]>}
+   *
+   * @throws {404} Organization not found
    */
-  async getPolicyManagement(organizationId: string): Promise<unknown> {
-    return this.pendingSection('policy-management', organizationId);
+  async getPolicyManagement(
+    organizationId: string,
+    search?: string,
+  ): Promise<OrganizationPolicy[]> {
+    try {
+      if (
+        !(await this.organizationRepository.findOrg({ _id: organizationId }))
+      ) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      return (await this.organizationPolicyRepository.findByOrganization(
+        organizationId,
+        search ?? '',
+      )) as unknown as OrganizationPolicy[];
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getPolicyManagement.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
-   * @Responsibility: Placeholder for the Policy management settings section.
-   * Not yet implemented — no design/data model provided yet.
+   * @Responsibility: Register a policy document whose file has already been
+   * uploaded through the generic file upload flow. Only the document name and
+   * file URL are provided; the document code and Cloudinary public id (used for
+   * later deletion) are generated server-side, and the uploader is captured
+   * from the authenticated user.
    *
-   * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to scope the creation to
+   * @param dto - The document name and uploaded file URL
+   * @param actor - The authenticated user that performed the upload
+   * @returns {Promise<OrganizationPolicy>}
+   *
+   * @throws {400} Empty document name
+   * @throws {404} Organization not found
    */
-  async updatePolicyManagement(
+  async addPolicy(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
-    return this.pendingSection('policy-management', organizationId, dto);
+    dto: AddPolicyDto,
+    actor?: { userId?: string; email?: string },
+  ): Promise<OrganizationPolicy> {
+    try {
+      if (
+        !(await this.organizationRepository.findOrg({ _id: organizationId }))
+      ) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const name = dto.name.trim();
+      if (name.length === 0) {
+        AppResponse.error({
+          message: 'Document name must not be empty.',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const created = await this.organizationPolicyRepository.create({
+        organizationId,
+        code: this.authUtility.generateRandomString(),
+        name,
+        url: dto.url,
+        publicId: this.fileUploadService.derivePublicId(dto.url),
+        uploadedByUserId: actor?.userId ?? null,
+        uploadedByEmail: actor?.email ?? null,
+      } as OrganizationPolicy);
+
+      this.logger.log(`Added policy document "${name}" for org ${organizationId}`);
+      return created as unknown as OrganizationPolicy;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addPolicy.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Rename a policy document matched by its unique code.
+   * The stored file itself is immutable and must be deleted and re-uploaded to
+   * change it.
+   *
+   * @param organizationId - The organization to scope the update to
+   * @param code - The unique policy document code to match
+   * @param dto - The new document name
+   * @returns {Promise<OrganizationPolicy>}
+   *
+   * @throws {400} Empty document name
+   * @throws {404} Organization or policy document not found
+   */
+  async updatePolicy(
+    organizationId: string,
+    code: string,
+    dto: UpdatePolicyDto,
+  ): Promise<OrganizationPolicy> {
+    try {
+      if (
+        !(await this.organizationRepository.findOrg({ _id: organizationId }))
+      ) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const policy = await this.organizationPolicyRepository.findByCode(
+        organizationId,
+        code,
+      );
+      if (!policy) {
+        AppResponse.error({
+          message: 'Policy document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const update: Partial<OrganizationPolicy> = {};
+      if (dto.name !== undefined) {
+        const name = dto.name.trim();
+        if (name.length === 0) {
+          AppResponse.error({
+            message: 'Document name must not be empty.',
+            status: HttpStatus.BAD_REQUEST,
+          });
+        }
+        update.name = name;
+      }
+
+      const updated = await this.organizationPolicyRepository.updateByCode(
+        organizationId,
+        code,
+        update,
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update policy document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated policy document ${code} for org ${organizationId}`);
+      return updated! as unknown as OrganizationPolicy;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updatePolicy.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Delete a policy document matched by its unique code and
+   * remove its asset from storage. Storage deletion is best-effort so a
+   * storage failure never blocks removing the organization's record.
+   *
+   * @param organizationId - The organization to scope the deletion to
+   * @param code - The unique policy document code to match
+   * @returns {Promise<string>}
+   *
+   * @throws {404} Organization or policy document not found
+   */
+  async deletePolicy(organizationId: string, code: string): Promise<string> {
+    try {
+      const policy = await this.organizationPolicyRepository.findByCode(
+        organizationId,
+        code,
+      );
+      if (!policy) {
+        AppResponse.error({
+          message: 'Policy document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      await this.organizationPolicyRepository.deleteWhere({
+        organizationId,
+        code,
+      });
+
+      await this.fileUploadService.deleteAsset(
+        policy!.publicId,
+        FileExtensionType.DOCUMENTS,
+      );
+
+      this.logger.log(`Deleted policy document ${code} for org ${organizationId}`);
+      return 'Policy document deleted';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deletePolicy.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
   }
 
   /**
@@ -1249,27 +1443,5 @@ export class SettingsDomainOrganisationService {
       AppResponse.error(error);
       throw error;
     }
-  }
-
-  /**
-   * @Responsibility: Build the standardized placeholder payload for a
-   * not-yet-implemented settings section
-   *
-   * @param section - The settings section identifier
-   * @param organizationId - The organization the section belongs to
-   * @param dto - Optional submitted payload (discarded until the section is implemented)
-   * @returns {unknown}
-   */
-  private pendingSection(
-    section: string,
-    organizationId: string,
-    dto?: unknown,
-  ): unknown {
-    return {
-      section,
-      organizationId,
-      implemented: false,
-      ...(dto !== undefined ? { receivedPayload: dto } : null),
-    };
   }
 }

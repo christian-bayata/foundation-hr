@@ -15,10 +15,16 @@ import { UserRoleRepository } from './access-control/repository/user-role.reposi
 import { InviteeUserRepository } from './access-control/repository/invitee-user.repository';
 import { Invoice, InvoiceSchema } from './organisation/entity/invoice.schema';
 import { InvoiceRepository } from './organisation/repository/invoice.repository';
+import {
+  OrganizationPolicy,
+  OrganizationPolicySchema,
+} from './organisation/entity/organization-policy.schema';
+import { OrganizationPolicyRepository } from './organisation/repository/organization-policy.repository';
 import { ROLE_SERVICE } from '../../common/guards/role.guard';
 import { EmailModule } from '../../email/email.module';
 import { OrganizationModule } from '../organization/organization.module';
 import { EmployeeModule } from '../employee/employee.module';
+import { FileUploadModule } from '../../file-upload/file-upload.module';
 import { User, UserSchema } from '../auth/entity/user.schema';
 import { AuthUtility } from '../auth/auth.utility';
 import { JobTitleRepository } from '../organization/repository/job-title.repository';
@@ -36,12 +42,14 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
       { name: UserRole.name, schema: UserRoleSchema },
       { name: User.name, schema: UserSchema },
       { name: Invoice.name, schema: InvoiceSchema },
+      { name: OrganizationPolicy.name, schema: OrganizationPolicySchema },
       { name: JobTitle.name, schema: JobTitleSchema },
       { name: Employee.name, schema: EmployeeSchema },
     ]),
     EmailModule,
     OrganizationModule,
     EmployeeModule,
+    FileUploadModule,
   ],
   controllers: [SettingController, OrganisationController],
   providers: [
@@ -57,6 +65,7 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
     { provide: ROLE_SERVICE, useExisting: SettingsDomainAccessControlService },
     AuthUtility,
     JobTitleRepository,
+    OrganizationPolicyRepository,
     EmployeeRepository,
   ],
   exports: [

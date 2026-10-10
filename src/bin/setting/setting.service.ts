@@ -19,6 +19,8 @@ import { UpdateHierarchyDto } from './organisation/dto/organization-hierarchy.dt
 import { UpdateBrandingDto } from './organisation/dto/update-branding.dto';
 import { UpdateBillingDto } from './organisation/dto/update-billing.dto';
 import { UpdateDepartmentDto } from './organisation/dto/update-departments.dto';
+import { AddPolicyDto } from './organisation/dto/add-policy.dto';
+import { UpdatePolicyDto } from './organisation/dto/update-policy.dto';
 import {
   AddDepartmentDto,
   AddDepartmentsDto,
@@ -33,6 +35,7 @@ import {
 } from '../organization/entity/organization.schema';
 import { OrganizationDepartment } from '../organization/entity/organization-department.schema';
 import { Invoice } from './organisation/entity/invoice.schema';
+import { OrganizationPolicy } from './organisation/entity/organization-policy.schema';
 import { DepartmentView } from './domain/settings.domain.organisation.service';
 import { EmployeeDocument } from '../employee/entity/employee.schema';
 import { HierarchyTreeNode } from '../employee/interface/employee.interface';
@@ -416,27 +419,71 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's policy management settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<unknown>}
+   * @param search - Optional document name search term
+   * @returns {Promise<OrganizationPolicy[]>}
    */
-  getOrgPolicyManagement(organizationId: string): Promise<unknown> {
-    return this.organisationDomainService.getPolicyManagement(organizationId);
+  getOrgPolicyManagement(
+    organizationId: string,
+    search?: string,
+  ): Promise<OrganizationPolicy[]> {
+    return this.organisationDomainService.getPolicyManagement(
+      organizationId,
+      search,
+    );
   }
 
   /**
-   * @Responsibility: Module-level facade to update an organization's policy management settings
+   * @Responsibility: Module-level facade to register an uploaded policy document
    *
-   * @param organizationId - The organization to scope the query to
-   * @param dto - The section payload
-   * @returns {Promise<unknown>}
+   * @param organizationId - The organization to scope the creation to
+   * @param dto - The uploaded document metadata
+   * @param actor - The authenticated user that performed the upload
+   * @returns {Promise<OrganizationPolicy>}
+   */
+  addOrgPolicy(
+    organizationId: string,
+    dto: AddPolicyDto,
+    actor?: { userId?: string; email?: string },
+  ): Promise<OrganizationPolicy> {
+    return this.organisationDomainService.addPolicy(
+      organizationId,
+      dto,
+      actor,
+    );
+  }
+
+  /**
+   * @Responsibility: Module-level facade to update an organization's policy document
+   *
+   * @param organizationId - The organization to scope the update to
+   * @param code - The unique policy document code to match
+   * @param dto - The partial policy payload
+   * @returns {Promise<OrganizationPolicy>}
    */
   updateOrgPolicyManagement(
     organizationId: string,
-    dto: unknown,
-  ): Promise<unknown> {
-    return this.organisationDomainService.updatePolicyManagement(
+    code: string,
+    dto: UpdatePolicyDto,
+  ): Promise<OrganizationPolicy> {
+    return this.organisationDomainService.updatePolicy(
       organizationId,
+      code,
       dto,
     );
+  }
+
+  /**
+   * @Responsibility: Module-level facade to delete an organization's policy document
+   *
+   * @param organizationId - The organization to scope the deletion to
+   * @param code - The unique policy document code to match
+   * @returns {Promise<string>}
+   */
+  deleteOrgPolicyManagement(
+    organizationId: string,
+    code: string,
+  ): Promise<string> {
+    return this.organisationDomainService.deletePolicy(organizationId, code);
   }
 
   /**
