@@ -11,6 +11,7 @@ import { OrganizationPolicyRepository } from '../organisation/repository/organiz
 import { FileUploadService } from '../../../file-upload/file-upload.service';
 import { AuthUtility } from '../../auth/auth.utility';
 import {
+  DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
   DEFAULT_NOTIFICATION_PREFERENCES,
   SettingsDomainOrganisationService,
 } from './settings.domain.organisation.service';
@@ -1581,6 +1582,105 @@ describe('SettingsDomainOrganisationService', () => {
 
       await expect(
         service.updateNotifications(ORG_ID, { newsAndUpdates: false }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getEmployeeProfileSettings', () => {
+    it('returns the stored employee profile settings', async () => {
+      const stored = {
+        ...DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
+        useEmployeeIdGenerator: false,
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeProfiles: stored,
+      });
+
+      const result = await service.getEmployeeProfileSettings(ORG_ID);
+
+      expect(result).toEqual(stored);
+    });
+
+    it('falls back to the default settings when none are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeProfiles: null,
+      });
+
+      const result = await service.getEmployeeProfileSettings(ORG_ID);
+
+      expect(result).toEqual(DEFAULT_EMPLOYEE_PROFILE_SETTINGS);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getEmployeeProfileSettings(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('updateEmployeeProfileSettings', () => {
+    it('merges a partial payload and replaces arrays', async () => {
+      const merged = {
+        ...DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
+        useEmployeeIdGenerator: false,
+        documentFormats: ['pdf', 'docx'],
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeProfiles: { ...DEFAULT_EMPLOYEE_PROFILE_SETTINGS },
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        employeeProfiles: merged,
+      });
+
+      const result = await service.updateEmployeeProfileSettings(ORG_ID, {
+        useEmployeeIdGenerator: false,
+        documentFormats: ['pdf', 'docx'],
+      } as any);
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        employeeProfiles: merged,
+      });
+      expect(result).toEqual(merged);
+    });
+
+    it('merges over the defaults when none are stored', async () => {
+      const merged = {
+        ...DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
+        employmentTypes: ['intern'],
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeProfiles: null,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        employeeProfiles: merged,
+      });
+
+      const result = await service.updateEmployeeProfileSettings(ORG_ID, {
+        employmentTypes: ['intern'],
+      } as any);
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        employeeProfiles: merged,
+      });
+      expect(result).toEqual(merged);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateEmployeeProfileSettings(ORG_ID, {
+          useEmployeeIdGenerator: false,
+        } as any),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });

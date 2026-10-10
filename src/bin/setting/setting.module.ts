@@ -11,6 +11,7 @@ import { SettingsDomainAccessControlService } from './domain/settings.domain.acc
 import { SettingsDomainOrganisationService } from './domain/settings.domain.organisation.service';
 import { OrganisationController } from './organisation/organisation.controller';
 import { NotificationsController } from './notifications/notifications.controller';
+import { EmployeeProfilesController } from './employee-profiles/employee-profiles.controller';
 import { RoleRepository } from './access-control/repository/role.repository';
 import { UserRoleRepository } from './access-control/repository/user-role.repository';
 import { InviteeUserRepository } from './access-control/repository/invitee-user.repository';
@@ -52,7 +53,12 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
     EmployeeModule,
     FileUploadModule,
   ],
-  controllers: [SettingController, OrganisationController, NotificationsController],
+  controllers: [
+    SettingController,
+    OrganisationController,
+    NotificationsController,
+    EmployeeProfilesController,
+  ],
   providers: [
     SettingService,
     SettingsDomainAccessControlService,

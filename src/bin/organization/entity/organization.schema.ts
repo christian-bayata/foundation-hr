@@ -2,6 +2,10 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Product } from '../../auth/enum/product.enum';
 import { BusinessType } from '../../setting/organisation/enum/organisation.enum';
+import {
+  DocumentFormat,
+  EmploymentType,
+} from '../../setting/employee-profiles/enum/employee-profile.enum';
 
 export type OrganizationDocument = Organization & Document;
 
@@ -100,6 +104,26 @@ export class NotificationPreferences {
 
   @Prop({ type: Boolean, default: true })
   deadlineNotification: boolean;
+}
+
+@Schema({ _id: false })
+export class EmployeeProfileSettings {
+  @Prop({ type: Boolean, default: true })
+  useEmployeeIdGenerator: boolean;
+
+  @Prop({
+    type: [String],
+    enum: Object.values(DocumentFormat),
+    default: [],
+  })
+  documentFormats: DocumentFormat[];
+
+  @Prop({
+    type: [String],
+    enum: Object.values(EmploymentType),
+    default: [],
+  })
+  employmentTypes: EmploymentType[];
 }
 
 @Schema({ _id: false })
@@ -214,6 +238,9 @@ export class Organization {
 
   @Prop({ type: () => NotificationPreferences, default: null })
   notifications: NotificationPreferences | null;
+
+  @Prop({ type: () => EmployeeProfileSettings, default: null })
+  employeeProfiles: EmployeeProfileSettings | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

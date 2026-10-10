@@ -7,6 +7,7 @@ import {
   Billing,
   Branding,
   BusinessDetails,
+  EmployeeProfileSettings,
   Location,
   NotificationPreferences,
   OrganizationDocument,
@@ -35,6 +36,11 @@ import { UpdateBrandingDto } from '../organisation/dto/update-branding.dto';
 import { UpdateBillingDto } from '../organisation/dto/update-billing.dto';
 import { UpdateDepartmentDto } from '../organisation/dto/update-departments.dto';
 import { UpdateNotificationPreferencesDto } from '../notifications/dto/update-notification-preferences.dto';
+import { UpdateEmployeeProfileSettingsDto } from '../employee-profiles/dto/update-employee-profile-settings.dto';
+import {
+  DocumentFormat,
+  EmploymentType,
+} from '../employee-profiles/enum/employee-profile.enum';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -69,6 +75,32 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   smsNotifications: false,
   leaveAndAttendance: true,
   deadlineNotification: true,
+};
+
+export const DEFAULT_EMPLOYEE_PROFILE_SETTINGS: EmployeeProfileSettings = {
+  useEmployeeIdGenerator: true,
+  documentFormats: [
+    DocumentFormat.PDF,
+    DocumentFormat.DOCX,
+    DocumentFormat.XLSX,
+    DocumentFormat.CSV,
+    DocumentFormat.ODS,
+    DocumentFormat.PPTX,
+    DocumentFormat.ODP,
+    DocumentFormat.JPG,
+    DocumentFormat.PNG,
+    DocumentFormat.TIFF,
+    DocumentFormat.GIF,
+    DocumentFormat.MP3,
+    DocumentFormat.WAV,
+    DocumentFormat.MP4,
+  ],
+  employmentTypes: [
+    EmploymentType.FULL_TIME,
+    EmploymentType.PART_TIME,
+    EmploymentType.INTERN,
+    EmploymentType.CONTRACT,
+  ],
 };
 
 @Injectable()
@@ -832,6 +864,100 @@ export class SettingsDomainOrganisationService {
       return updated!.notifications ?? merged;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateNotifications.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's employee profile settings.
+   * When the organization has never saved its settings, the design defaults are
+   * returned so the UI always receives a complete configuration.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   * @returns {Promise<EmployeeProfileSettings>}
+   *
+   * @throws {404} Organization not found
+   */
+  async getEmployeeProfileSettings(
+    organizationId: string,
+  ): Promise<EmployeeProfileSettings> {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return (
+        organization!.employeeProfiles ?? {
+          ...DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
+        }
+      );
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getEmployeeProfileSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an organization's employee profile settings. Only
+   * the provided fields are changed; the remaining fields keep their current
+   * value (or the design default when none have been saved yet). Array fields
+   * represent the full desired state and are replaced as-is.
+   *
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial employee profile settings payload
+   * @returns {Promise<EmployeeProfileSettings>}
+   *
+   * @throws {404} Organization not found
+   */
+  async updateEmployeeProfileSettings(
+    organizationId: string,
+    dto: UpdateEmployeeProfileSettingsDto,
+  ): Promise<EmployeeProfileSettings> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current: EmployeeProfileSettings = found!.employeeProfiles ?? {
+        ...DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
+      };
+
+      const merged: EmployeeProfileSettings = { ...current };
+
+      if (dto.useEmployeeIdGenerator !== undefined)
+        merged.useEmployeeIdGenerator = dto.useEmployeeIdGenerator;
+      if (dto.documentFormats !== undefined)
+        merged.documentFormats = dto.documentFormats;
+      if (dto.employmentTypes !== undefined)
+        merged.employmentTypes = dto.employmentTypes;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { employeeProfiles: merged },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization employee profile settings',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated employee profile settings for org ${organizationId}`);
+      return updated!.employeeProfiles ?? merged;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateEmployeeProfileSettings.name}`;
       AppResponse.error(error);
       throw error;
     }
