@@ -76,6 +76,33 @@ export class Branding {
 }
 
 @Schema({ _id: false })
+export class NotificationPreferences {
+  @Prop({ type: Boolean, default: true })
+  newsAndUpdates: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  remindersAndEvents: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  promotionsAndOffers: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  emailNotifications: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  pushNotifications: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  smsNotifications: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  leaveAndAttendance: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  deadlineNotification: boolean;
+}
+
+@Schema({ _id: false })
 export class PaymentMethod {
   @Prop({ type: String, default: null })
   brand: string | null;
@@ -184,6 +211,9 @@ export class Organization {
 
   @Prop({ type: () => Billing, default: null })
   billing: Billing | null;
+
+  @Prop({ type: () => NotificationPreferences, default: null })
+  notifications: NotificationPreferences | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

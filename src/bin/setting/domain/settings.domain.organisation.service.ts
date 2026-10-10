@@ -8,6 +8,7 @@ import {
   Branding,
   BusinessDetails,
   Location,
+  NotificationPreferences,
   OrganizationDocument,
   PaymentMethod,
   Plan,
@@ -33,6 +34,7 @@ import { UpdateHierarchyDto } from '../organisation/dto/organization-hierarchy.d
 import { UpdateBrandingDto } from '../organisation/dto/update-branding.dto';
 import { UpdateBillingDto } from '../organisation/dto/update-billing.dto';
 import { UpdateDepartmentDto } from '../organisation/dto/update-departments.dto';
+import { UpdateNotificationPreferencesDto } from '../notifications/dto/update-notification-preferences.dto';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -56,6 +58,17 @@ const DEFAULT_PLAN: Plan = {
   priceCurrency: 'USD',
   seatsUsed: 0,
   seatsLimit: 20,
+};
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  newsAndUpdates: true,
+  remindersAndEvents: true,
+  promotionsAndOffers: false,
+  emailNotifications: true,
+  pushNotifications: true,
+  smsNotifications: false,
+  leaveAndAttendance: true,
+  deadlineNotification: true,
 };
 
 @Injectable()
@@ -720,6 +733,105 @@ export class SettingsDomainOrganisationService {
       return updated!.branding ?? merged;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateBranding.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's notification preferences.
+   * When the organization has never saved its preferences, the design defaults
+   * are returned so the UI always receives a complete set of flags.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   * @returns {Promise<NotificationPreferences>}
+   *
+   * @throws {404} Organization not found
+   */
+  async getNotifications(
+    organizationId: string,
+  ): Promise<NotificationPreferences> {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return organization!.notifications ?? { ...DEFAULT_NOTIFICATION_PREFERENCES };
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getNotifications.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an organization's notification preferences. Only
+   * the provided flags are changed; the remaining flags keep their current
+   * value (or the design default when none have been saved yet).
+   *
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial notification preferences payload
+   * @returns {Promise<NotificationPreferences>}
+   *
+   * @throws {404} Organization not found
+   */
+  async updateNotifications(
+    organizationId: string,
+    dto: UpdateNotificationPreferencesDto,
+  ): Promise<NotificationPreferences> {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current: NotificationPreferences = found!.notifications ?? {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+      };
+
+      const merged: NotificationPreferences = { ...current };
+
+      if (dto.newsAndUpdates !== undefined)
+        merged.newsAndUpdates = dto.newsAndUpdates;
+      if (dto.remindersAndEvents !== undefined)
+        merged.remindersAndEvents = dto.remindersAndEvents;
+      if (dto.promotionsAndOffers !== undefined)
+        merged.promotionsAndOffers = dto.promotionsAndOffers;
+      if (dto.emailNotifications !== undefined)
+        merged.emailNotifications = dto.emailNotifications;
+      if (dto.pushNotifications !== undefined)
+        merged.pushNotifications = dto.pushNotifications;
+      if (dto.smsNotifications !== undefined)
+        merged.smsNotifications = dto.smsNotifications;
+      if (dto.leaveAndAttendance !== undefined)
+        merged.leaveAndAttendance = dto.leaveAndAttendance;
+      if (dto.deadlineNotification !== undefined)
+        merged.deadlineNotification = dto.deadlineNotification;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { notifications: merged },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization notification preferences',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated notification preferences for org ${organizationId}`);
+      return updated!.notifications ?? merged;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateNotifications.name}`;
       AppResponse.error(error);
       throw error;
     }

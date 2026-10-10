@@ -10,7 +10,10 @@ import { InvoiceRepository } from '../organisation/repository/invoice.repository
 import { OrganizationPolicyRepository } from '../organisation/repository/organization-policy.repository';
 import { FileUploadService } from '../../../file-upload/file-upload.service';
 import { AuthUtility } from '../../auth/auth.utility';
-import { SettingsDomainOrganisationService } from './settings.domain.organisation.service';
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  SettingsDomainOrganisationService,
+} from './settings.domain.organisation.service';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const DIRECTOR_ID = '64f1b2c3d4e5f678901234ba';
@@ -1485,6 +1488,101 @@ describe('SettingsDomainOrganisationService', () => {
       );
       expect(organizationPolicyRepository.deleteWhere).not.toHaveBeenCalled();
       expect(fileUploadService.deleteAsset).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getNotifications', () => {
+    it('returns the stored notification preferences', async () => {
+      const stored = {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        promotionsAndOffers: true,
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        notifications: stored,
+      });
+
+      const result = await service.getNotifications(ORG_ID);
+
+      expect(result).toEqual(stored);
+    });
+
+    it('falls back to the default preferences when none are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        notifications: null,
+      });
+
+      const result = await service.getNotifications(ORG_ID);
+
+      expect(result).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getNotifications(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('updateNotifications', () => {
+    it('merges a partial payload over the current preferences', async () => {
+      const merged = {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        promotionsAndOffers: true,
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        notifications: merged,
+      });
+
+      const result = await service.updateNotifications(ORG_ID, {
+        promotionsAndOffers: true,
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        notifications: merged,
+      });
+      expect(result).toEqual(merged);
+    });
+
+    it('merges over the defaults when none are stored', async () => {
+      const merged = {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        smsNotifications: true,
+      };
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        notifications: null,
+      });
+      organizationRepository.updateById.mockResolvedValue({
+        _id: ORG_ID,
+        notifications: merged,
+      });
+
+      const result = await service.updateNotifications(ORG_ID, {
+        smsNotifications: true,
+      });
+
+      expect(organizationRepository.updateById).toHaveBeenCalledWith(ORG_ID, {
+        notifications: merged,
+      });
+      expect(result).toEqual(merged);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateNotifications(ORG_ID, { newsAndUpdates: false }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
   });
 });
