@@ -171,6 +171,71 @@ export class EmployeeWorkflowSettings {
   offboarding: WorkflowStep[];
 }
 
+@Schema({ _id: true })
+export class PensionFundAdministrator {
+  _id: Types.ObjectId;
+
+  @Prop({ type: String, trim: true, required: true })
+  name: string;
+}
+
+@Schema({ _id: false })
+export class OnboardingDocument {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  label: string;
+
+  @Prop({ type: Boolean, default: true })
+  selected: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  optional: boolean;
+}
+
+@Schema({ _id: false })
+export class EmployerIssuedDocument {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  name: string;
+
+  @Prop({ type: String, trim: true, default: null })
+  fileType: string | null;
+
+  @Prop({ type: Boolean, default: false })
+  requiresSignature: boolean;
+}
+
+@Schema({ _id: false })
+export class OnboardingSettings {
+  @Prop({ type: Boolean, default: false })
+  welcomeMessageEnabled: boolean;
+
+  @Prop({ type: String, default: null })
+  welcomeMessage: string | null;
+
+  @Prop({ type: Boolean, default: false })
+  defaultDurationEnabled: boolean;
+
+  @Prop({ type: String, trim: true, default: null })
+  defaultDuration: string | null;
+
+  @Prop({ type: () => [OnboardingDocument], default: [] })
+  personalIdentificationDocuments: OnboardingDocument[];
+
+  @Prop({ type: () => [OnboardingDocument], default: [] })
+  educationalProfessionalCerts: OnboardingDocument[];
+
+  @Prop({ type: () => [OnboardingDocument], default: [] })
+  medicalHealthRecords: OnboardingDocument[];
+
+  @Prop({ type: () => [EmployerIssuedDocument], default: [] })
+  employerIssuedDocuments: EmployerIssuedDocument[];
+}
+
 @Schema({ _id: false })
 export class PaymentMethod {
   @Prop({ type: String, default: null })
@@ -292,6 +357,12 @@ export class Organization {
 
   @Prop({ type: [String], default: [] })
   customResponsibleParties: string[];
+
+  @Prop({ type: () => [PensionFundAdministrator], default: [] })
+  pensionFundAdministrators: PensionFundAdministrator[];
+
+  @Prop({ type: () => OnboardingSettings, default: null })
+  onboarding: OnboardingSettings | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

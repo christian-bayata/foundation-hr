@@ -9,10 +9,14 @@ import {
   BusinessDetails,
   EmployeeProfileSettings,
   EmployeeWorkflowSettings,
+  EmployerIssuedDocument,
   Location,
   NotificationPreferences,
+  OnboardingDocument,
+  OnboardingSettings,
   OrganizationDocument,
   PaymentMethod,
+  PensionFundAdministrator,
   Plan,
   WorkflowStep,
 } from '../../organization/entity/organization.schema';
@@ -42,11 +46,18 @@ import { UpdateEmployeeProfileSettingsDto } from '../employee-profiles/dto/updat
 import { AddWorkflowStepDto } from '../employee-profiles/dto/add-workflow-step.dto';
 import { UpdateWorkflowStepDto } from '../employee-profiles/dto/update-workflow-step.dto';
 import { AddResponsiblePartyDto } from '../employee-profiles/dto/add-responsible-party.dto';
+import { AddPensionFundAdministratorDto } from '../employee-profiles/dto/add-pension-fund-administrator.dto';
 import {
   DocumentFormat,
   EmploymentType,
   WorkflowType,
 } from '../employee-profiles/enum/employee-profile.enum';
+import { UpdateOnboardingSettingsDto } from '../onboarding/dto/update-onboarding-settings.dto';
+import { AddOnboardingDocumentDto } from '../onboarding/dto/add-onboarding-document.dto';
+import { UpdateOnboardingDocumentDto } from '../onboarding/dto/update-onboarding-document.dto';
+import { AddEmployerIssuedDocumentDto } from '../onboarding/dto/add-employer-issued-document.dto';
+import { UpdateEmployerIssuedDocumentDto } from '../onboarding/dto/update-employer-issued-document.dto';
+import { OnboardingDocumentCategory } from '../onboarding/enum/onboarding.enum';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -113,6 +124,17 @@ export const DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS: EmployeeWorkflowSettings = {
   onboarding: [],
   leave: [],
   offboarding: [],
+};
+
+export const DEFAULT_ONBOARDING_SETTINGS: OnboardingSettings = {
+  welcomeMessageEnabled: false,
+  welcomeMessage: null,
+  defaultDurationEnabled: false,
+  defaultDuration: null,
+  personalIdentificationDocuments: [],
+  educationalProfessionalCerts: [],
+  medicalHealthRecords: [],
+  employerIssuedDocuments: [],
 };
 
 @Injectable()
@@ -1378,6 +1400,761 @@ export class SettingsDomainOrganisationService {
       return 'Added responsible party';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.addResponsibleParty.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Convert a persisted pension fund administrator into its
+   * API representation, exposing the sub-document `_id` as `id`.
+   *
+   * @param administrator - The persisted pension fund administrator
+   */
+  private toPensionFundAdministratorView(administrator: PensionFundAdministrator) {
+    return {
+      id: String(administrator._id),
+      name: administrator.name,
+    };
+  }
+
+  /**
+   * @Responsibility: Retrieve the pension fund administrators configured for
+   * an organization. The list starts empty until administrators are added.
+   *
+   * @param organizationId - The organization to retrieve administrators for
+   *
+   * @throws {404} Organization not found
+   */
+  async getPensionFundAdministrators(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return {
+        administrators: (
+          organization!.pensionFundAdministrators ?? []
+        ).map((administrator) =>
+          this.toPensionFundAdministratorView(administrator),
+        ),
+      };
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getPensionFundAdministrators.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add a pension fund administrator to an organization's
+   * list of administrators.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new administrator payload
+   * @returns The created administrator
+   *
+   * @throws {404} Organization not found
+   */
+  async addPensionFundAdministrator(
+    organizationId: string,
+    dto: AddPensionFundAdministratorDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const administrator: PensionFundAdministrator = {
+        _id: new Types.ObjectId(),
+        name: dto.name.trim(),
+      };
+
+      const administrators = [
+        ...(found!.pensionFundAdministrators ?? []),
+        administrator,
+      ];
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { pensionFundAdministrators: administrators },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization pension fund administrator',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added pension fund administrator for org ${organizationId}`,
+      );
+      return this.toPensionFundAdministratorView(administrator);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addPensionFundAdministrator.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Convert an onboarding document into its API representation.
+   *
+   * @param document - The stored onboarding document
+   */
+  private toOnboardingDocumentView(document: OnboardingDocument) {
+    return {
+      id: document.id,
+      label: document.label,
+      selected: document.selected ?? true,
+      optional: document.optional ?? false,
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored onboarding document into a mutable
+   * plain object so it can be safely modified without touching Mongoose
+   * internals or a shared default.
+   */
+  private toOnboardingDocumentPlain(
+    document: OnboardingDocument,
+  ): OnboardingDocument {
+    return {
+      id: document.id,
+      label: document.label,
+      selected: document.selected ?? true,
+      optional: document.optional ?? false,
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored employer-issued document into a
+   * mutable plain object.
+   */
+  private toEmployerIssuedDocumentPlain(
+    document: EmployerIssuedDocument,
+  ): EmployerIssuedDocument {
+    return {
+      id: document.id,
+      name: document.name,
+      fileType: document.fileType ?? null,
+      requiresSignature: document.requiresSignature ?? false,
+    };
+  }
+
+  /**
+   * @Responsibility: Deep-clone onboarding settings into mutable plain objects
+   * so the shared default constant is never mutated.
+   */
+  private cloneOnboardingSettings(
+    settings: OnboardingSettings,
+  ): OnboardingSettings {
+    return {
+      welcomeMessageEnabled: settings.welcomeMessageEnabled ?? false,
+      welcomeMessage: settings.welcomeMessage ?? null,
+      defaultDurationEnabled: settings.defaultDurationEnabled ?? false,
+      defaultDuration: settings.defaultDuration ?? null,
+      personalIdentificationDocuments: (
+        settings.personalIdentificationDocuments ?? []
+      ).map((document) => this.toOnboardingDocumentPlain(document)),
+      educationalProfessionalCerts: (
+        settings.educationalProfessionalCerts ?? []
+      ).map((document) => this.toOnboardingDocumentPlain(document)),
+      medicalHealthRecords: (settings.medicalHealthRecords ?? []).map(
+        (document) => this.toOnboardingDocumentPlain(document),
+      ),
+      employerIssuedDocuments: (
+        settings.employerIssuedDocuments ?? []
+      ).map((document) => this.toEmployerIssuedDocumentPlain(document)),
+    };
+  }
+
+  /**
+   * @Responsibility: Present onboarding settings in the shape consumed by the
+   * client, exposing welcome message and default duration as grouped toggles
+   * and each documentation category as a flat list of documents.
+   */
+  private toOnboardingSettingsView(settings: OnboardingSettings) {
+    return {
+      welcomeMessage: {
+        enabled: settings.welcomeMessageEnabled ?? false,
+        message: settings.welcomeMessage ?? null,
+      },
+      defaultOnboardingDuration: {
+        enabled: settings.defaultDurationEnabled ?? false,
+        value: settings.defaultDuration ?? null,
+      },
+      personalIdentificationDocuments: (
+        settings.personalIdentificationDocuments ?? []
+      ).map((document) => this.toOnboardingDocumentView(document)),
+      educationalProfessionalCerts: (
+        settings.educationalProfessionalCerts ?? []
+      ).map((document) => this.toOnboardingDocumentView(document)),
+      medicalHealthRecords: (settings.medicalHealthRecords ?? []).map(
+        (document) => this.toOnboardingDocumentView(document),
+      ),
+      employerIssuedDocuments: (
+        settings.employerIssuedDocuments ?? []
+      ).map((document) => ({
+        id: document.id,
+        name: document.name,
+        fileType: document.fileType ?? null,
+        requiresSignature: document.requiresSignature ?? false,
+      })),
+    };
+  }
+
+  /**
+   * @Responsibility: Generate a URL/id-safe slug from a free-text value.
+   */
+  private slugify(value: string): string {
+    const slug = value
+      .toLowerCase()
+      .trim()
+      .replace(/[’']/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return slug || 'document';
+  }
+
+  /**
+   * @Responsibility: Produce a document id that is unique across all three
+   * documentation categories.
+   */
+  private uniqueOnboardingDocumentId(
+    settings: OnboardingSettings,
+    label: string,
+  ): string {
+    const existing = new Set<string>([
+      ...settings.personalIdentificationDocuments.map((d) => d.id),
+      ...settings.educationalProfessionalCerts.map((d) => d.id),
+      ...settings.medicalHealthRecords.map((d) => d.id),
+    ]);
+    const base = this.slugify(label);
+    if (!existing.has(base)) return base;
+    let counter = 2;
+    while (existing.has(`${base}_${counter}`)) counter += 1;
+    return `${base}_${counter}`;
+  }
+
+  /**
+   * @Responsibility: Locate an onboarding document by id across every
+   * documentation category.
+   */
+  private findOnboardingDocument(
+    settings: OnboardingSettings,
+    documentId: string,
+  ): OnboardingDocument | undefined {
+    const categories: OnboardingDocumentCategory[] = [
+      OnboardingDocumentCategory.PERSONAL_IDENTIFICATION_DOCUMENTS,
+      OnboardingDocumentCategory.EDUCATIONAL_PROFESSIONAL_CERTS,
+      OnboardingDocumentCategory.MEDICAL_HEALTH_RECORDS,
+    ];
+    for (const category of categories) {
+      const document = settings[category].find(
+        (candidate) => candidate.id === documentId,
+      );
+      if (document) return document;
+    }
+    return undefined;
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's onboarding settings. The three
+   * documentation categories and the employer-issued documents start empty and
+   * grow as the organization adds documents.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   *
+   * @throws {404} Organization not found
+   */
+  async getOnboardingSettings(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const settings =
+        organization!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS;
+
+      return this.toOnboardingSettingsView(settings);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getOnboardingSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an organization's onboarding settings. Only the
+   * provided fields are changed; the remaining fields keep their current value.
+   *
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial onboarding settings payload
+   *
+   * @throws {404} Organization not found
+   */
+  async updateOnboardingSettings(
+    organizationId: string,
+    dto: UpdateOnboardingSettingsDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOnboardingSettings(
+        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      );
+
+      if (dto.welcomeMessageEnabled !== undefined)
+        current.welcomeMessageEnabled = dto.welcomeMessageEnabled;
+      if (dto.welcomeMessage !== undefined)
+        current.welcomeMessage = dto.welcomeMessage;
+      if (dto.defaultDurationEnabled !== undefined)
+        current.defaultDurationEnabled = dto.defaultDurationEnabled;
+      if (dto.defaultDuration !== undefined)
+        current.defaultDuration = dto.defaultDuration;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { onboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization onboarding settings',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Updated onboarding settings for org ${organizationId}`);
+      return this.toOnboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateOnboardingSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Append a new required document to one of an
+   * organization's onboarding documentation categories.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new document payload (category + label)
+   * @returns The created document
+   *
+   * @throws {404} Organization not found
+   */
+  async addOnboardingDocument(
+    organizationId: string,
+    dto: AddOnboardingDocumentDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOnboardingSettings(
+        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      );
+
+      const document: OnboardingDocument = {
+        id: this.uniqueOnboardingDocumentId(current, dto.label),
+        label: dto.label.trim(),
+        selected: true,
+        optional: false,
+      };
+
+      current[dto.category].push(document);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { onboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization onboarding document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Added onboarding document for org ${organizationId}`);
+      return this.toOnboardingDocumentView(document);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addOnboardingDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a single onboarding document. Only the provided
+   * fields are changed.
+   *
+   * @param organizationId - The organization to update
+   * @param documentId - The id of the document to update
+   * @param dto - The partial document payload
+   *
+   * @throws {404} Organization or document not found
+   */
+  async updateOnboardingDocument(
+    organizationId: string,
+    documentId: string,
+    dto: UpdateOnboardingDocumentDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOnboardingSettings(
+        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      );
+
+      const target = this.findOnboardingDocument(current, documentId);
+      if (!target) {
+        AppResponse.error({
+          message: 'Onboarding document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.label !== undefined) target!.label = dto.label;
+      if (dto.selected !== undefined) target!.selected = dto.selected;
+      if (dto.optional !== undefined) target!.optional = dto.optional;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { onboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization onboarding document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return this.toOnboardingDocumentView(target!);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateOnboardingDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove a single onboarding document from whichever
+   * documentation category contains it.
+   *
+   * @param organizationId - The organization to update
+   * @param documentId - The id of the document to delete
+   *
+   * @throws {404} Organization or document not found
+   */
+  async deleteOnboardingDocument(organizationId: string, documentId: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOnboardingSettings(
+        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      );
+
+      const categories: OnboardingDocumentCategory[] = [
+        OnboardingDocumentCategory.PERSONAL_IDENTIFICATION_DOCUMENTS,
+        OnboardingDocumentCategory.EDUCATIONAL_PROFESSIONAL_CERTS,
+        OnboardingDocumentCategory.MEDICAL_HEALTH_RECORDS,
+      ];
+
+      let removed = false;
+      for (const category of categories) {
+        const index = current[category].findIndex(
+          (document) => document.id === documentId,
+        );
+        if (index !== -1) {
+          current[category].splice(index, 1);
+          removed = true;
+          break;
+        }
+      }
+
+      if (!removed) {
+        AppResponse.error({
+          message: 'Onboarding document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { onboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to delete organization onboarding document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return 'Deleted onboarding document';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deleteOnboardingDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Produce an employer-issued document id that is unique
+   * within the organization's list.
+   */
+  private uniqueEmployerIssuedDocumentId(
+    settings: OnboardingSettings,
+    name: string,
+  ): string {
+    const existing = new Set(
+      settings.employerIssuedDocuments.map((document) => document.id),
+    );
+    const base = this.slugify(name);
+    if (!existing.has(base)) return base;
+    let counter = 2;
+    while (existing.has(`${base}_${counter}`)) counter += 1;
+    return `${base}_${counter}`;
+  }
+
+  /**
+   * @Responsibility: Append a new employer-issued document to an
+   * organization's list.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new document payload
+   * @returns The created document
+   *
+   * @throws {404} Organization not found
+   */
+  async addEmployerIssuedDocument(
+    organizationId: string,
+    dto: AddEmployerIssuedDocumentDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOnboardingSettings(
+        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      );
+
+      const document: EmployerIssuedDocument = {
+        id: this.uniqueEmployerIssuedDocumentId(current, dto.name),
+        name: dto.name.trim(),
+        fileType: dto.fileType ?? null,
+        requiresSignature: false,
+      };
+
+      current.employerIssuedDocuments.push(document);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { onboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization employer-issued document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added employer-issued document for org ${organizationId}`,
+      );
+      return {
+        id: document.id,
+        name: document.name,
+        fileType: document.fileType,
+        requiresSignature: document.requiresSignature,
+      };
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addEmployerIssuedDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a single employer-issued document. Only the
+   * provided fields are changed.
+   *
+   * @param organizationId - The organization to update
+   * @param documentId - The id of the document to update
+   * @param dto - The partial document payload
+   *
+   * @throws {404} Organization or document not found
+   */
+  async updateEmployerIssuedDocument(
+    organizationId: string,
+    documentId: string,
+    dto: UpdateEmployerIssuedDocumentDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOnboardingSettings(
+        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      );
+
+      const target = current.employerIssuedDocuments.find(
+        (document) => document.id === documentId,
+      );
+      if (!target) {
+        AppResponse.error({
+          message: 'Employer-issued document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.name !== undefined) target!.name = dto.name;
+      if (dto.fileType !== undefined) target!.fileType = dto.fileType;
+      if (dto.requiresSignature !== undefined)
+        target!.requiresSignature = dto.requiresSignature;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { onboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization employer-issued document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return {
+        id: target!.id,
+        name: target!.name,
+        fileType: target!.fileType ?? null,
+        requiresSignature: target!.requiresSignature ?? false,
+      };
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateEmployerIssuedDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove a single employer-issued document.
+   *
+   * @param organizationId - The organization to update
+   * @param documentId - The id of the document to delete
+   *
+   * @throws {404} Organization or document not found
+   */
+  async deleteEmployerIssuedDocument(
+    organizationId: string,
+    documentId: string,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOnboardingSettings(
+        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      );
+
+      const index = current.employerIssuedDocuments.findIndex(
+        (document) => document.id === documentId,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Employer-issued document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.employerIssuedDocuments.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { onboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to delete organization employer-issued document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return 'Deleted employer-issued document';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deleteEmployerIssuedDocument.name}`;
       AppResponse.error(error);
       throw error;
     }

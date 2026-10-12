@@ -22,6 +22,8 @@ describe('EmployeeProfilesController (integration)', () => {
     deleteWorkflowStep: jest.Mock<AnyPromiseFn>;
     getResponsibleParties: jest.Mock<AnyPromiseFn>;
     addResponsibleParty: jest.Mock<AnyPromiseFn>;
+    getPensionFundAdministrators: jest.Mock<AnyPromiseFn>;
+    addPensionFundAdministrator: jest.Mock<AnyPromiseFn>;
   };
 
   beforeEach(async () => {
@@ -36,6 +38,8 @@ describe('EmployeeProfilesController (integration)', () => {
       deleteWorkflowStep: jest.fn(),
       getResponsibleParties: jest.fn(),
       addResponsibleParty: jest.fn(),
+      getPensionFundAdministrators: jest.fn(),
+      addPensionFundAdministrator: jest.fn(),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -371,6 +375,60 @@ describe('EmployeeProfilesController (integration)', () => {
 
       expect(response.status).toBe(400);
       expect(organisationService.addResponsibleParty).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/employee-profiles/pension-fund-administrators/retrieve', () => {
+    it('retrieves the pension fund administrators', async () => {
+      const administrators = {
+        administrators: [
+          { id: '64f1b2c3d4e5f678901234ff', name: 'Access Pensions Limited' },
+        ],
+      };
+      organisationService.getPensionFundAdministrators.mockResolvedValue(
+        administrators,
+      );
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/employee-profiles/pension-fund-administrators/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(administrators);
+      expect(
+        organisationService.getPensionFundAdministrators,
+      ).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('POST /setting/employee-profiles/pension-fund-administrators/add', () => {
+    it('adds a pension fund administrator with a valid payload', async () => {
+      const payload = { name: 'Access Pensions Limited' };
+      const created = { id: '64f1b2c3d4e5f678901234ff', ...payload };
+      organisationService.addPensionFundAdministrator.mockResolvedValue(created);
+
+      const response = await request(app.getHttpServer())
+        .post('/setting/employee-profiles/pension-fund-administrators/add')
+        .send(payload);
+
+      expect(response.status).toBe(201);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(created);
+      expect(
+        organisationService.addPensionFundAdministrator,
+      ).toHaveBeenCalledWith(ORG_ID, payload);
+    });
+
+    it('rejects an administrator with a missing name', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/employee-profiles/pension-fund-administrators/add')
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.addPensionFundAdministrator,
+      ).not.toHaveBeenCalled();
     });
   });
 });

@@ -2021,4 +2021,465 @@ describe('SettingsDomainOrganisationService', () => {
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
   });
+
+  describe('getPensionFundAdministrators', () => {
+    it('returns stored administrators mapped with an id instead of _id', async () => {
+      const administratorId = new Types.ObjectId();
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        pensionFundAdministrators: [
+          { _id: administratorId, name: 'Access Pensions Limited' },
+        ],
+      });
+
+      const result = await service.getPensionFundAdministrators(ORG_ID);
+
+      expect(result.administrators).toEqual([
+        { id: String(administratorId), name: 'Access Pensions Limited' },
+      ]);
+      expect((result.administrators[0] as any)._id).toBeUndefined();
+    });
+
+    it('returns an empty list when none are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getPensionFundAdministrators(ORG_ID);
+
+      expect(result.administrators).toEqual([]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.getPensionFundAdministrators(ORG_ID),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('addPensionFundAdministrator', () => {
+    it('appends an administrator and persists it', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        pensionFundAdministrators: [],
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addPensionFundAdministrator(ORG_ID, {
+        name: 'Access Pensions Limited',
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1]
+          .pensionFundAdministrators;
+      expect(saved).toHaveLength(1);
+      expect(saved[0].name).toBe('Access Pensions Limited');
+      expect(result).toEqual({
+        id: String(saved[0]._id),
+        name: 'Access Pensions Limited',
+      });
+    });
+
+    it('trims the administrator name before saving', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        pensionFundAdministrators: [],
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addPensionFundAdministrator(ORG_ID, {
+        name: '  Access Pensions Limited  ',
+      } as any);
+
+      expect(result.name).toBe('Access Pensions Limited');
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addPensionFundAdministrator(ORG_ID, {
+          name: 'Access Pensions Limited',
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getOnboardingSettings', () => {
+    it('returns empty categories and disabled toggles when nothing is stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getOnboardingSettings(ORG_ID);
+
+      expect(result).toEqual({
+        welcomeMessage: { enabled: false, message: null },
+        defaultOnboardingDuration: { enabled: false, value: null },
+        personalIdentificationDocuments: [],
+        educationalProfessionalCerts: [],
+        medicalHealthRecords: [],
+        employerIssuedDocuments: [],
+      });
+    });
+
+    it('returns stored settings mapped to the response shape', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        onboarding: {
+          welcomeMessageEnabled: true,
+          welcomeMessage: 'Welcome aboard',
+          defaultDurationEnabled: true,
+          defaultDuration: '2 weeks',
+          personalIdentificationDocuments: [
+            {
+              id: 'national_id_card',
+              label: 'National ID Card',
+              selected: true,
+              optional: false,
+            },
+          ],
+          educationalProfessionalCerts: [],
+          medicalHealthRecords: [],
+          employerIssuedDocuments: [
+            {
+              id: 'offer_letter',
+              name: 'Offer letter',
+              fileType: 'pdf',
+              requiresSignature: true,
+            },
+          ],
+        },
+      });
+
+      const result = await service.getOnboardingSettings(ORG_ID);
+
+      expect(result.welcomeMessage).toEqual({
+        enabled: true,
+        message: 'Welcome aboard',
+      });
+      expect(result.defaultOnboardingDuration).toEqual({
+        enabled: true,
+        value: '2 weeks',
+      });
+      expect(result.personalIdentificationDocuments).toEqual([
+        {
+          id: 'national_id_card',
+          label: 'National ID Card',
+          selected: true,
+          optional: false,
+        },
+      ]);
+      expect(result.employerIssuedDocuments).toEqual([
+        {
+          id: 'offer_letter',
+          name: 'Offer letter',
+          fileType: 'pdf',
+          requiresSignature: true,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getOnboardingSettings(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('updateOnboardingSettings', () => {
+    it('merges the provided fields and persists them', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateOnboardingSettings(ORG_ID, {
+        welcomeMessageEnabled: true,
+        welcomeMessage: 'Hello there',
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].onboarding;
+      expect(saved.welcomeMessageEnabled).toBe(true);
+      expect(saved.welcomeMessage).toBe('Hello there');
+      expect(saved.defaultDurationEnabled).toBe(false);
+      expect(result.welcomeMessage).toEqual({
+        enabled: true,
+        message: 'Hello there',
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateOnboardingSettings(ORG_ID, {
+          welcomeMessageEnabled: true,
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addOnboardingDocument', () => {
+    it('appends a document with a slug id and defaults selected to true', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addOnboardingDocument(ORG_ID, {
+        category: 'personalIdentificationDocuments',
+        label: 'National ID Card',
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].onboarding
+          .personalIdentificationDocuments;
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        id: 'national_id_card',
+        label: 'National ID Card',
+        selected: true,
+        optional: false,
+      });
+      expect(result).toEqual({
+        id: 'national_id_card',
+        label: 'National ID Card',
+        selected: true,
+        optional: false,
+      });
+    });
+
+    it('deduplicates the slug when a document id already exists', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        onboarding: {
+          personalIdentificationDocuments: [
+            {
+              id: 'national_id_card',
+              label: 'National ID Card',
+              selected: true,
+              optional: false,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addOnboardingDocument(ORG_ID, {
+        category: 'personalIdentificationDocuments',
+        label: 'National ID Card',
+      } as any);
+
+      expect(result.id).toBe('national_id_card_2');
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addOnboardingDocument(ORG_ID, {
+          category: 'personalIdentificationDocuments',
+          label: 'National ID Card',
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateOnboardingDocument', () => {
+    it('updates the matching document', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        onboarding: {
+          medicalHealthRecords: [
+            {
+              id: 'pre_employment_medical_report',
+              label: 'Pre-Employment Medical Report',
+              selected: true,
+              optional: false,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateOnboardingDocument(
+        ORG_ID,
+        'pre_employment_medical_report',
+        { selected: false, optional: true } as any,
+      );
+
+      expect(result).toEqual({
+        id: 'pre_employment_medical_report',
+        label: 'Pre-Employment Medical Report',
+        selected: false,
+        optional: true,
+      });
+    });
+
+    it('throws a 404 when the document is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateOnboardingDocument(ORG_ID, 'missing', {
+          selected: false,
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteOnboardingDocument', () => {
+    it('removes the matching document', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        onboarding: {
+          educationalProfessionalCerts: [
+            {
+              id: 'degree_certificates',
+              label: 'Degree Certificates',
+              selected: true,
+              optional: false,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.deleteOnboardingDocument(
+        ORG_ID,
+        'degree_certificates',
+      );
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].onboarding
+          .educationalProfessionalCerts;
+      expect(saved).toEqual([]);
+      expect(result).toBe('Deleted onboarding document');
+    });
+
+    it('throws a 404 when the document is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.deleteOnboardingDocument(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addEmployerIssuedDocument', () => {
+    it('appends an employer-issued document with a slug id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addEmployerIssuedDocument(ORG_ID, {
+        name: 'Offer letter',
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].onboarding
+          .employerIssuedDocuments;
+      expect(saved).toHaveLength(1);
+      expect(result).toEqual({
+        id: 'offer_letter',
+        name: 'Offer letter',
+        fileType: null,
+        requiresSignature: false,
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addEmployerIssuedDocument(ORG_ID, {
+          name: 'Offer letter',
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateEmployerIssuedDocument', () => {
+    it('updates the matching document', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        onboarding: {
+          employerIssuedDocuments: [
+            {
+              id: 'offer_letter',
+              name: 'Offer letter',
+              fileType: null,
+              requiresSignature: false,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateEmployerIssuedDocument(
+        ORG_ID,
+        'offer_letter',
+        { requiresSignature: true } as any,
+      );
+
+      expect(result).toEqual({
+        id: 'offer_letter',
+        name: 'Offer letter',
+        fileType: null,
+        requiresSignature: true,
+      });
+    });
+
+    it('throws a 404 when the document is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateEmployerIssuedDocument(ORG_ID, 'missing', {
+          requiresSignature: true,
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteEmployerIssuedDocument', () => {
+    it('removes the matching document', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        onboarding: {
+          employerIssuedDocuments: [
+            {
+              id: 'offer_letter',
+              name: 'Offer letter',
+              fileType: null,
+              requiresSignature: false,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.deleteEmployerIssuedDocument(
+        ORG_ID,
+        'offer_letter',
+      );
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].onboarding
+          .employerIssuedDocuments;
+      expect(saved).toEqual([]);
+      expect(result).toBe('Deleted employer-issued document');
+    });
+
+    it('throws a 404 when the document is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.deleteEmployerIssuedDocument(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
 });

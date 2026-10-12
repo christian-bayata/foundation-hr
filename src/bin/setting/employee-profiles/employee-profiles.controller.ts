@@ -22,6 +22,7 @@ import { UpdateEmployeeProfileSettingsDto } from './dto/update-employee-profile-
 import { AddWorkflowStepDto } from './dto/add-workflow-step.dto';
 import { UpdateWorkflowStepDto } from './dto/update-workflow-step.dto';
 import { AddResponsiblePartyDto } from './dto/add-responsible-party.dto';
+import { AddPensionFundAdministratorDto } from './dto/add-pension-fund-administrator.dto';
 
 @Controller('setting/employee-profiles')
 @UseGuards(JwtAuthGuard, RoleGuard)
@@ -143,6 +144,48 @@ export class EmployeeProfilesController {
       user.organizationId!,
       dto,
     );
-    return AppResponse.success('Responsible party added successfully', 201, data);
+    return AppResponse.success(
+      'Responsible party added successfully',
+      201,
+      data,
+    );
   }
+
+  @Get('pension-fund-administrators/retrieve')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async retrievePensionFundAdministrators(@CurrentUser() user: ICurrentUser) {
+    const data = await this.organisationService.getPensionFundAdministrators(
+      user.organizationId!,
+    );
+    return AppResponse.success(
+      'Pension fund administrators retrieved successfully',
+      200,
+      data,
+    );
+  }
+
+  @Post('pension-fund-administrators/add')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  async addPensionFundAdministrator(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: AddPensionFundAdministratorDto,
+  ) {
+    const data = await this.organisationService.addPensionFundAdministrator(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success(
+      'Pension fund administrator added successfully',
+      201,
+      data,
+    );
+  }
+
+  onboardindDocs: {
+    persona: {
+      nationalId: true;
+      interface: true;
+    };
+  };
 }
