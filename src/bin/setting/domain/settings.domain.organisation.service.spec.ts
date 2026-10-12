@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { Types } from 'mongoose';
 import { AppException } from '../../../common/response/app-exception';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
 import { OrganizationDepartmentRepository } from '../../organization/repository/organization-department.repository';
@@ -12,9 +13,14 @@ import { FileUploadService } from '../../../file-upload/file-upload.service';
 import { AuthUtility } from '../../auth/auth.utility';
 import {
   DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
+  DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
   DEFAULT_NOTIFICATION_PREFERENCES,
   SettingsDomainOrganisationService,
 } from './settings.domain.organisation.service';
+import {
+  DueDate,
+  ResponsibleParty,
+} from '../employee-profiles/enum/employee-profile.enum';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const DIRECTOR_ID = '64f1b2c3d4e5f678901234ba';
@@ -1681,6 +1687,336 @@ describe('SettingsDomainOrganisationService', () => {
         service.updateEmployeeProfileSettings(ORG_ID, {
           useEmployeeIdGenerator: false,
         } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  const buildStoredStep = (overrides: Record<string, any> = {}) => ({
+    _id: new Types.ObjectId(),
+    stepName: 'Kickoff',
+    responsibleParty: 'Admin',
+    taskType: null,
+    dueDate: null,
+    instructions: null,
+    attachmentUrls: [],
+    completionRequirements: [],
+    ...overrides,
+  });
+
+  describe('getEmployeeWorkflow', () => {
+    it('returns stored steps mapped with an id instead of _id', async () => {
+      const step = buildStoredStep();
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: {
+          onboarding: [step],
+          leave: [],
+          offboarding: [],
+        },
+      });
+
+      const result = await service.getEmployeeWorkflow(ORG_ID);
+
+      expect(result.onboarding).toHaveLength(1);
+      expect(result.onboarding[0]).toEqual({
+        id: String(step._id),
+        stepName: 'Kickoff',
+        responsibleParty: 'Admin',
+        taskType: null,
+        dueDate: null,
+        instructions: null,
+        attachmentUrls: [],
+        completionRequirements: [],
+      });
+      expect((result.onboarding[0] as any)._id).toBeUndefined();
+    });
+
+    it('falls back to the default workflow steps when none are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: null,
+      });
+
+      const result = await service.getEmployeeWorkflow(ORG_ID);
+
+      expect(result.onboarding).toHaveLength(
+        DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.length,
+      );
+      expect(result.onboarding[0]).toMatchObject({
+        stepName: DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding[0].stepName,
+      });
+      expect(typeof result.onboarding[0].id).toBe('string');
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getEmployeeWorkflow(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('addWorkflowStep', () => {
+    it('appends a step to the requested workflow and persists it', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [], leave: [], offboarding: [] },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addWorkflowStep(ORG_ID, {
+        type: 'onboarding',
+        stepName: 'Sign employee agreement',
+        responsibleParty: 'New hire',
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
+      expect(saved.onboarding).toHaveLength(1);
+      expect(saved.onboarding[0].stepName).toBe('Sign employee agreement');
+      expect(result).toMatchObject({
+        stepName: 'Sign employee agreement',
+        responsibleParty: 'New hire',
+      });
+      expect(typeof result.id).toBe('string');
+    });
+
+    it('does not mutate the shared default constant', async () => {
+      const initialLength = DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.length;
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: null,
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      await service.addWorkflowStep(ORG_ID, {
+        type: 'onboarding',
+        stepName: 'Sign employee agreement',
+      } as any);
+
+      expect(DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding).toHaveLength(
+        initialLength,
+      );
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addWorkflowStep(ORG_ID, {
+          type: 'onboarding',
+          stepName: 'Sign employee agreement',
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateWorkflowStep', () => {
+    it('updates the fields of an existing step', async () => {
+      const step = buildStoredStep({ stepName: 'Old name' });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [step], leave: [], offboarding: [] },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateWorkflowStep(
+        ORG_ID,
+        String(step._id),
+        { stepName: 'New name', dueDate: DueDate.TWO_DAYS_AFTER_JOINING } as any,
+      );
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
+      expect(saved.onboarding[0].stepName).toBe('New name');
+      expect(saved.onboarding[0].dueDate).toBe(DueDate.TWO_DAYS_AFTER_JOINING);
+      expect(result).toMatchObject({
+        id: String(step._id),
+        stepName: 'New name',
+        dueDate: DueDate.TWO_DAYS_AFTER_JOINING,
+      });
+    });
+
+    it('finds and updates a step in any workflow type', async () => {
+      const step = buildStoredStep({ stepName: 'Leave review' });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [], leave: [step], offboarding: [] },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateWorkflowStep(
+        ORG_ID,
+        String(step._id),
+        { stepName: 'Updated leave review' } as any,
+      );
+
+      expect(result).toMatchObject({ stepName: 'Updated leave review' });
+    });
+
+    it('throws a 404 when the step does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [], leave: [], offboarding: [] },
+      });
+
+      await expect(
+        service.updateWorkflowStep(ORG_ID, 'missing', {
+          stepName: 'New name',
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateWorkflowStep(ORG_ID, 'missing', {
+          stepName: 'New name',
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteWorkflowStep', () => {
+    it('removes the step from its workflow', async () => {
+      const step = buildStoredStep();
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [step], leave: [], offboarding: [] },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.deleteWorkflowStep(
+        ORG_ID,
+        String(step._id),
+      );
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
+      expect(saved.onboarding).toHaveLength(0);
+      expect(result).toEqual({ id: String(step._id) });
+    });
+
+    it('throws a 404 when the step does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [], leave: [], offboarding: [] },
+      });
+
+      await expect(
+        service.deleteWorkflowStep(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.deleteWorkflowStep(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('getResponsibleParties', () => {
+    it('returns the default parties plus stored custom parties', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        customResponsibleParties: ['Payroll'],
+      });
+
+      const result = await service.getResponsibleParties(ORG_ID);
+
+      expect(result.defaultParties).toEqual(Object.values(ResponsibleParty));
+      expect(result.customParties).toEqual(['Payroll']);
+    });
+
+    it('defaults custom parties to an empty list when none are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getResponsibleParties(ORG_ID);
+
+      expect(result.customParties).toEqual([]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getResponsibleParties(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('addResponsibleParty', () => {
+    it('appends a custom party and persists it', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        customResponsibleParties: ['Payroll'],
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addResponsibleParty(ORG_ID, {
+        name: 'Recruiter',
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1]
+          .customResponsibleParties;
+      expect(saved).toEqual(['Payroll', 'Recruiter']);
+      expect(result.customParties).toEqual(['Payroll', 'Recruiter']);
+      expect(result.defaultParties).toEqual(Object.values(ResponsibleParty));
+    });
+
+    it('trims the party name before saving', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        customResponsibleParties: [],
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addResponsibleParty(ORG_ID, {
+        name: '  Recruiter  ',
+      } as any);
+
+      expect(result.customParties).toEqual(['Recruiter']);
+    });
+
+    it('rejects a party that duplicates a default option', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        customResponsibleParties: [],
+      });
+
+      await expect(
+        service.addResponsibleParty(ORG_ID, { name: 'Admin' } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('rejects a party that already exists in the custom list', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        customResponsibleParties: ['Payroll'],
+      });
+
+      await expect(
+        service.addResponsibleParty(ORG_ID, { name: 'payroll' } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addResponsibleParty(ORG_ID, { name: 'Recruiter' } as any),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });

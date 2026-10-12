@@ -8,11 +8,13 @@ import {
   Branding,
   BusinessDetails,
   EmployeeProfileSettings,
+  EmployeeWorkflowSettings,
   Location,
   NotificationPreferences,
   OrganizationDocument,
   PaymentMethod,
   Plan,
+  WorkflowStep,
 } from '../../organization/entity/organization.schema';
 import { OrganizationDepartment } from '../../organization/entity/organization-department.schema';
 import { JobTitle } from '../../organization/entity/job-title.schema';
@@ -37,9 +39,13 @@ import { UpdateBillingDto } from '../organisation/dto/update-billing.dto';
 import { UpdateDepartmentDto } from '../organisation/dto/update-departments.dto';
 import { UpdateNotificationPreferencesDto } from '../notifications/dto/update-notification-preferences.dto';
 import { UpdateEmployeeProfileSettingsDto } from '../employee-profiles/dto/update-employee-profile-settings.dto';
+import { AddWorkflowStepDto } from '../employee-profiles/dto/add-workflow-step.dto';
+import { UpdateWorkflowStepDto } from '../employee-profiles/dto/update-workflow-step.dto';
+import { AddResponsiblePartyDto } from '../employee-profiles/dto/add-responsible-party.dto';
 import {
   DocumentFormat,
   EmploymentType,
+  WorkflowType,
 } from '../employee-profiles/enum/employee-profile.enum';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
@@ -101,6 +107,12 @@ export const DEFAULT_EMPLOYEE_PROFILE_SETTINGS: EmployeeProfileSettings = {
     EmploymentType.INTERN,
     EmploymentType.CONTRACT,
   ],
+};
+
+export const DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS: EmployeeWorkflowSettings = {
+  onboarding: [],
+  leave: [],
+  offboarding: [],
 };
 
 @Injectable()
@@ -552,7 +564,9 @@ export class SettingsDomainOrganisationService {
         uploadedByEmail: actor?.email ?? null,
       } as OrganizationPolicy);
 
-      this.logger.log(`Added policy document "${name}" for org ${organizationId}`);
+      this.logger.log(
+        `Added policy document "${name}" for org ${organizationId}`,
+      );
       return created as unknown as OrganizationPolicy;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.addPolicy.name}`;
@@ -625,7 +639,9 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      this.logger.log(`Updated policy document ${code} for org ${organizationId}`);
+      this.logger.log(
+        `Updated policy document ${code} for org ${organizationId}`,
+      );
       return updated! as unknown as OrganizationPolicy;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updatePolicy.name}`;
@@ -668,7 +684,9 @@ export class SettingsDomainOrganisationService {
         FileExtensionType.DOCUMENTS,
       );
 
-      this.logger.log(`Deleted policy document ${code} for org ${organizationId}`);
+      this.logger.log(
+        `Deleted policy document ${code} for org ${organizationId}`,
+      );
       return 'Policy document deleted';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.deletePolicy.name}`;
@@ -791,7 +809,9 @@ export class SettingsDomainOrganisationService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      return organization!.notifications ?? { ...DEFAULT_NOTIFICATION_PREFERENCES };
+      return (
+        organization!.notifications ?? { ...DEFAULT_NOTIFICATION_PREFERENCES }
+      );
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.getNotifications.name}`;
       AppResponse.error(error);
@@ -860,7 +880,9 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      this.logger.log(`Updated notification preferences for org ${organizationId}`);
+      this.logger.log(
+        `Updated notification preferences for org ${organizationId}`,
+      );
       return updated!.notifications ?? merged;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateNotifications.name}`;
@@ -954,10 +976,408 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      this.logger.log(`Updated employee profile settings for org ${organizationId}`);
+      this.logger.log(
+        `Updated employee profile settings for org ${organizationId}`,
+      );
       return updated!.employeeProfiles ?? merged;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateEmployeeProfileSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Convert a persisted workflow step into its API
+   * representation, exposing the sub-document `_id` as `id` so clients can
+   * edit or delete individual steps.
+   *
+   * @param step - The persisted workflow step
+   */
+  private toWorkflowStepView(step: WorkflowStep) {
+    return {
+      id: String(step._id),
+      stepName: step.stepName,
+      responsibleParty: step.responsibleParty ?? null,
+      taskType: step.taskType ?? null,
+      dueDate: step.dueDate ?? null,
+      instructions: step.instructions ?? null,
+      attachmentUrls: step.attachmentUrls ?? [],
+      completionRequirements: step.completionRequirements ?? [],
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored workflow step into a mutable plain
+   * object so it can be safely modified without touching Mongoose internals or
+   * the shared default constant.
+   *
+   * @param step - The persisted workflow step
+   */
+  private toWorkflowStepPlain(step: WorkflowStep): WorkflowStep {
+    return {
+      _id: step._id,
+      stepName: step.stepName,
+      responsibleParty: step.responsibleParty ?? null,
+      taskType: step.taskType ?? null,
+      dueDate: step.dueDate ?? null,
+      instructions: step.instructions ?? null,
+      attachmentUrls: [...(step.attachmentUrls ?? [])],
+      completionRequirements: [...(step.completionRequirements ?? [])],
+    };
+  }
+
+  /**
+   * @Responsibility: Deep-clone workflow settings into mutable plain objects so
+   * the shared default constant is never mutated by add/update/delete.
+   */
+  private cloneWorkflowSettings(
+    settings: EmployeeWorkflowSettings,
+  ): EmployeeWorkflowSettings {
+    return {
+      onboarding: (settings.onboarding ?? []).map((step) =>
+        this.toWorkflowStepPlain(step),
+      ),
+      leave: (settings.leave ?? []).map((step) =>
+        this.toWorkflowStepPlain(step),
+      ),
+      offboarding: (settings.offboarding ?? []).map((step) =>
+        this.toWorkflowStepPlain(step),
+      ),
+    };
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's employee workflow settings.
+   * When the organization has never saved its workflows, the design defaults
+   * are returned so the UI always receives a complete configuration.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   *
+   * @throws {404} Organization not found
+   */
+  async getEmployeeWorkflow(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const settings =
+        organization!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS;
+
+      return {
+        onboarding: (settings.onboarding ?? []).map((step) =>
+          this.toWorkflowStepView(step),
+        ),
+        leave: (settings.leave ?? []).map((step) =>
+          this.toWorkflowStepView(step),
+        ),
+        offboarding: (settings.offboarding ?? []).map((step) =>
+          this.toWorkflowStepView(step),
+        ),
+      };
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getEmployeeWorkflow.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Append a new step to one of an organization's employee
+   * workflows.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new workflow step payload (including its target type)
+   * @returns The created step
+   *
+   * @throws {404} Organization not found
+   */
+  async addWorkflowStep(organizationId: string, dto: AddWorkflowStepDto) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneWorkflowSettings(
+        found!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+      );
+
+      const step: WorkflowStep = {
+        _id: new Types.ObjectId(),
+        stepName: dto.stepName,
+        responsibleParty: dto.responsibleParty ?? null,
+        taskType: dto.taskType ?? null,
+        dueDate: dto.dueDate ?? null,
+        instructions: dto.instructions ?? null,
+        attachmentUrls: dto.attachmentUrls ?? [],
+        completionRequirements: dto.completionRequirements ?? [],
+      };
+
+      current[dto.type].push(step);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { employeeWorkflow: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization employee workflow step',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Added employee workflow step for org ${organizationId}`);
+      return this.toWorkflowStepView(step);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addWorkflowStep.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a single step within any of an organization's
+   * employee workflows. Only the provided fields are changed.
+   *
+   * @param organizationId - The organization to update
+   * @param stepId - The id of the step to update
+   * @param dto - The partial workflow step payload
+   * @returns The updated step
+   *
+   * @throws {404} Organization or step not found
+   */
+  async updateWorkflowStep(
+    organizationId: string,
+    stepId: string,
+    dto: UpdateWorkflowStepDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneWorkflowSettings(
+        found!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+      );
+
+      const target = this.findWorkflowStep(current, stepId);
+      if (!target) {
+        AppResponse.error({
+          message: 'Workflow step not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.stepName !== undefined) target!.stepName = dto.stepName;
+      if (dto.responsibleParty !== undefined)
+        target!.responsibleParty = dto.responsibleParty;
+      if (dto.taskType !== undefined) target!.taskType = dto.taskType;
+      if (dto.dueDate !== undefined) target!.dueDate = dto.dueDate;
+      if (dto.instructions !== undefined)
+        target!.instructions = dto.instructions;
+      if (dto.attachmentUrls !== undefined)
+        target!.attachmentUrls = dto.attachmentUrls;
+      if (dto.completionRequirements !== undefined)
+        target!.completionRequirements = dto.completionRequirements;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { employeeWorkflow: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization employee workflow step',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return 'Updated employee workflow step';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateWorkflowStep.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove a single step from any of an organization's
+   * employee workflows.
+   *
+   * @param organizationId - The organization to update
+   * @param stepId - The id of the step to delete
+   *
+   * @throws {404} Organization or step not found
+   */
+  async deleteWorkflowStep(organizationId: string, stepId: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneWorkflowSettings(
+        found!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+      );
+
+      const types: WorkflowType[] = [
+        WorkflowType.ONBOARDING,
+        WorkflowType.LEAVE,
+        WorkflowType.OFFBOARDING,
+      ];
+
+      let removed = false;
+      for (const type of types) {
+        const index = current[type].findIndex(
+          (step) => String(step._id) === stepId,
+        );
+        if (index !== -1) {
+          current[type].splice(index, 1);
+          removed = true;
+          break;
+        }
+      }
+
+      if (!removed) {
+        AppResponse.error({
+          message: 'Workflow step not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { employeeWorkflow: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to delete organization employee workflow step',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return 'Deleted employee workflow step';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deleteWorkflowStep.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Locate a workflow step by id across all workflow types.
+   */
+  private findWorkflowStep(
+    settings: EmployeeWorkflowSettings,
+    stepId: string,
+  ): WorkflowStep | undefined {
+    const types: WorkflowType[] = [
+      WorkflowType.ONBOARDING,
+      WorkflowType.LEAVE,
+      WorkflowType.OFFBOARDING,
+    ];
+    for (const type of types) {
+      const step = (settings[type] ?? []).find(
+        (candidate) => String(candidate._id) === stepId,
+      );
+      if (step) return step;
+    }
+    return undefined;
+  }
+
+  /**
+   * @Responsibility: Retrieve the responsible party options available for
+   * workflow steps. Custom parties added by the organization are returned
+   * alongside the built-in defaults.
+   *
+   * @param organizationId - The organization to retrieve options for
+   *
+   * @throws {404} Organization not found
+   */
+  async getResponsibleParties(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return {
+        customParties: organization!.customResponsibleParties ?? [],
+      };
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getResponsibleParties.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add a custom responsible party to the organization-wide
+   * list of available workflow responsible parties.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new party payload
+   *
+   * @throws {404} Organization not found
+   * @throws {409} Party already exists
+   */
+  async addResponsibleParty(
+    organizationId: string,
+    dto: AddResponsiblePartyDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const name = dto.name.trim();
+      if (!name) {
+        AppResponse.error({
+          message: 'Party name is required',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const customParties = [...(found!.customResponsibleParties ?? []), name];
+
+      await this.organizationRepository.updateById(organizationId, {
+        customResponsibleParties: customParties,
+      });
+
+      return 'Added responsible party';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addResponsibleParty.name}`;
       AppResponse.error(error);
       throw error;
     }

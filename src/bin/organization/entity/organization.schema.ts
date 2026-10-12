@@ -3,8 +3,11 @@ import { Document, Types } from 'mongoose';
 import { Product } from '../../auth/enum/product.enum';
 import { BusinessType } from '../../setting/organisation/enum/organisation.enum';
 import {
+  CompletionRequirement,
   DocumentFormat,
+  DueDate,
   EmploymentType,
+  TaskType,
 } from '../../setting/employee-profiles/enum/employee-profile.enum';
 
 export type OrganizationDocument = Organization & Document;
@@ -126,6 +129,48 @@ export class EmployeeProfileSettings {
   employmentTypes: EmploymentType[];
 }
 
+@Schema({ _id: true })
+export class WorkflowStep {
+  _id: Types.ObjectId;
+
+  @Prop({ type: String, trim: true, required: true })
+  stepName: string;
+
+  @Prop({ type: String, trim: true, default: null })
+  responsibleParty: string | null;
+
+  @Prop({ type: String, enum: Object.values(TaskType), default: null })
+  taskType: TaskType | null;
+
+  @Prop({ type: String, enum: Object.values(DueDate), default: null })
+  dueDate: DueDate | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  instructions: string | null;
+
+  @Prop({ type: [String], default: [] })
+  attachmentUrls: string[];
+
+  @Prop({
+    type: [String],
+    enum: Object.values(CompletionRequirement),
+    default: [],
+  })
+  completionRequirements: CompletionRequirement[];
+}
+
+@Schema({ _id: false })
+export class EmployeeWorkflowSettings {
+  @Prop({ type: () => [WorkflowStep], default: [] })
+  onboarding: WorkflowStep[];
+
+  @Prop({ type: () => [WorkflowStep], default: [] })
+  leave: WorkflowStep[];
+
+  @Prop({ type: () => [WorkflowStep], default: [] })
+  offboarding: WorkflowStep[];
+}
+
 @Schema({ _id: false })
 export class PaymentMethod {
   @Prop({ type: String, default: null })
@@ -241,6 +286,12 @@ export class Organization {
 
   @Prop({ type: () => EmployeeProfileSettings, default: null })
   employeeProfiles: EmployeeProfileSettings | null;
+
+  @Prop({ type: () => EmployeeWorkflowSettings, default: null })
+  employeeWorkflow: EmployeeWorkflowSettings | null;
+
+  @Prop({ type: [String], default: [] })
+  customResponsibleParties: string[];
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);
