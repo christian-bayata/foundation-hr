@@ -13,6 +13,7 @@ import { OrganisationController } from './organisation/organisation.controller';
 import { NotificationsController } from './notifications/notifications.controller';
 import { EmployeeProfilesController } from './employee-profiles/employee-profiles.controller';
 import { OnboardingController } from './onboarding/onboarding.controller';
+import { RequestManagementController } from './request-management/request-management.controller';
 import { RoleRepository } from './access-control/repository/role.repository';
 import { UserRoleRepository } from './access-control/repository/user-role.repository';
 import { InviteeUserRepository } from './access-control/repository/invitee-user.repository';
@@ -60,6 +61,7 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
     NotificationsController,
     EmployeeProfilesController,
     OnboardingController,
+    RequestManagementController,
   ],
   providers: [
     SettingService,

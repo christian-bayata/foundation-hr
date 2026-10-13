@@ -5,10 +5,7 @@ import {
   IsEnum,
   IsOptional,
 } from 'class-validator';
-import {
-  DocumentFormat,
-  EmploymentType,
-} from '../enum/employee-profile.enum';
+import { DocumentFormat, EmploymentType } from '../enum/employee-profile.enum';
 
 export class UpdateEmployeeProfileSettingsDto {
   @IsBoolean({ message: 'Employee ID auto-generation must be a boolean.' })

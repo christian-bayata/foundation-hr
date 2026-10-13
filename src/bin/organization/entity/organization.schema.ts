@@ -9,6 +9,7 @@ import {
   EmploymentType,
   TaskType,
 } from '../../setting/employee-profiles/enum/employee-profile.enum';
+import { RequestType } from '../../setting/request-management/enum/request-management.enum';
 
 export type OrganizationDocument = Organization & Document;
 
@@ -236,6 +237,34 @@ export class OnboardingSettings {
   employerIssuedDocuments: EmployerIssuedDocument[];
 }
 
+@Schema({ _id: true })
+export class RequestWorkflowStep {
+  _id: Types.ObjectId;
+
+  @Prop({ type: Number, default: 1 })
+  order: number;
+
+  @Prop({ type: String, trim: true, default: null })
+  responsibleParty: string | null;
+}
+
+@Schema({ _id: true })
+export class RequestWorkflow {
+  _id: Types.ObjectId;
+
+  @Prop({ type: String, enum: Object.values(RequestType), required: true })
+  requestType: RequestType;
+
+  @Prop({ type: String, trim: true, required: true })
+  name: string;
+
+  @Prop({ type: Boolean, default: false })
+  isDefault: boolean;
+
+  @Prop({ type: () => [RequestWorkflowStep], default: [] })
+  steps: RequestWorkflowStep[];
+}
+
 @Schema({ _id: false })
 export class PaymentMethod {
   @Prop({ type: String, default: null })
@@ -363,6 +392,9 @@ export class Organization {
 
   @Prop({ type: () => OnboardingSettings, default: null })
   onboarding: OnboardingSettings | null;
+
+  @Prop({ type: () => [RequestWorkflow], default: [] })
+  requestWorkflows: RequestWorkflow[];
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

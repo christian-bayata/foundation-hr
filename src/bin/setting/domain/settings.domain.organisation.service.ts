@@ -18,6 +18,8 @@ import {
   PaymentMethod,
   PensionFundAdministrator,
   Plan,
+  RequestWorkflow,
+  RequestWorkflowStep,
   WorkflowStep,
 } from '../../organization/entity/organization.schema';
 import { OrganizationDepartment } from '../../organization/entity/organization-department.schema';
@@ -58,6 +60,14 @@ import { UpdateOnboardingDocumentDto } from '../onboarding/dto/update-onboarding
 import { AddEmployerIssuedDocumentDto } from '../onboarding/dto/add-employer-issued-document.dto';
 import { UpdateEmployerIssuedDocumentDto } from '../onboarding/dto/update-employer-issued-document.dto';
 import { OnboardingDocumentCategory } from '../onboarding/enum/onboarding.enum';
+import { AddRequestWorkflowDto } from '../request-management/dto/add-request-workflow.dto';
+import { UpdateRequestWorkflowDto } from '../request-management/dto/update-request-workflow.dto';
+import { RequestWorkflowStepDto } from '../request-management/dto/request-workflow-step.dto';
+import {
+  REQUEST_TYPE_LABELS,
+  REQUEST_TYPES,
+  RequestType,
+} from '../request-management/enum/request-management.enum';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -1411,7 +1421,9 @@ export class SettingsDomainOrganisationService {
    *
    * @param administrator - The persisted pension fund administrator
    */
-  private toPensionFundAdministratorView(administrator: PensionFundAdministrator) {
+  private toPensionFundAdministratorView(
+    administrator: PensionFundAdministrator,
+  ) {
     return {
       id: String(administrator._id),
       name: administrator.name,
@@ -1436,10 +1448,8 @@ export class SettingsDomainOrganisationService {
         });
 
       return {
-        administrators: (
-          organization!.pensionFundAdministrators ?? []
-        ).map((administrator) =>
-          this.toPensionFundAdministratorView(administrator),
+        administrators: (organization!.pensionFundAdministrators ?? []).map(
+          (administrator) => this.toPensionFundAdministratorView(administrator),
         ),
       };
     } catch (error: any) {
@@ -1573,9 +1583,9 @@ export class SettingsDomainOrganisationService {
       medicalHealthRecords: (settings.medicalHealthRecords ?? []).map(
         (document) => this.toOnboardingDocumentPlain(document),
       ),
-      employerIssuedDocuments: (
-        settings.employerIssuedDocuments ?? []
-      ).map((document) => this.toEmployerIssuedDocumentPlain(document)),
+      employerIssuedDocuments: (settings.employerIssuedDocuments ?? []).map(
+        (document) => this.toEmployerIssuedDocumentPlain(document),
+      ),
     };
   }
 
@@ -1603,14 +1613,14 @@ export class SettingsDomainOrganisationService {
       medicalHealthRecords: (settings.medicalHealthRecords ?? []).map(
         (document) => this.toOnboardingDocumentView(document),
       ),
-      employerIssuedDocuments: (
-        settings.employerIssuedDocuments ?? []
-      ).map((document) => ({
-        id: document.id,
-        name: document.name,
-        fileType: document.fileType ?? null,
-        requiresSignature: document.requiresSignature ?? false,
-      })),
+      employerIssuedDocuments: (settings.employerIssuedDocuments ?? []).map(
+        (document) => ({
+          id: document.id,
+          name: document.name,
+          fileType: document.fileType ?? null,
+          requiresSignature: document.requiresSignature ?? false,
+        }),
+      ),
     };
   }
 
@@ -1687,8 +1697,7 @@ export class SettingsDomainOrganisationService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      const settings =
-        organization!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS;
+      const settings = organization!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS;
 
       return this.toOnboardingSettingsView(settings);
     } catch (error: any) {
@@ -2875,6 +2884,361 @@ export class SettingsDomainOrganisationService {
       return 'Job title deleted';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.deleteJobTitle.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Convert a stored request-workflow step into its API shape.
+   */
+  private toRequestWorkflowStepView(step: RequestWorkflowStep) {
+    return {
+      id: String(step._id),
+      order: step.order ?? 1,
+      responsibleParty: step.responsibleParty ?? null,
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored request-workflow step into a mutable
+   * plain object.
+   */
+  private toRequestWorkflowStepPlain(
+    step: RequestWorkflowStep,
+  ): RequestWorkflowStep {
+    return {
+      _id: step._id,
+      order: step.order ?? 1,
+      responsibleParty: step.responsibleParty ?? null,
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored request workflow into a mutable plain
+   * object so it can be safely modified without touching Mongoose internals.
+   */
+  private toRequestWorkflowPlain(workflow: RequestWorkflow): RequestWorkflow {
+    return {
+      _id: workflow._id,
+      requestType: workflow.requestType,
+      name: workflow.name,
+      isDefault: workflow.isDefault ?? false,
+      steps: (workflow.steps ?? []).map((step) =>
+        this.toRequestWorkflowStepPlain(step),
+      ),
+    };
+  }
+
+  /**
+   * @Responsibility: Present a request workflow in the shape consumed by the
+   * client.
+   */
+  private toRequestWorkflowView(workflow: RequestWorkflow) {
+    return {
+      id: String(workflow._id),
+      requestType: workflow.requestType,
+      name: workflow.name,
+      isDefault: workflow.isDefault ?? false,
+      steps: (workflow.steps ?? []).map((step) =>
+        this.toRequestWorkflowStepView(step),
+      ),
+    };
+  }
+
+  /**
+   * @Responsibility: Build the ordered step list from a payload, defaulting the
+   * order to the position in the array when it is not supplied.
+   */
+  private buildRequestWorkflowSteps(
+    steps: RequestWorkflowStepDto[] | undefined,
+  ): RequestWorkflowStep[] {
+    return (steps ?? []).map((step, index) => ({
+      _id: new Types.ObjectId(),
+      order: step.order ?? index + 1,
+      responsibleParty: step.responsibleParty.trim(),
+    }));
+  }
+
+  /**
+   * @Responsibility: Locate a request workflow by id.
+   */
+  private findRequestWorkflow(
+    workflows: RequestWorkflow[],
+    workflowId: string,
+  ): RequestWorkflow | undefined {
+    return workflows.find((workflow) => String(workflow._id) === workflowId);
+  }
+
+  /**
+   * @Responsibility: Retrieve the request workflows for an organization grouped
+   * by request type. Every request type is always returned (with an empty
+   * workflow list when none are configured) so the client can render the tab
+   * navigation. An optional request type narrows the response to a single tab.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   * @param requestType - Optional request type to narrow the response to
+   *
+   * @throws {404} Organization not found
+   */
+  async getRequestWorkflows(organizationId: string, requestType?: RequestType) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const workflows = organization!.requestWorkflows ?? [];
+      const types = requestType ? [requestType] : REQUEST_TYPES;
+
+      return {
+        requestTypes: types.map((type) => ({
+          type,
+          label: REQUEST_TYPE_LABELS[type],
+          workflows: workflows
+            .filter((workflow) => workflow.requestType === type)
+            .map((workflow) => this.toRequestWorkflowView(workflow)),
+        })),
+      };
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getRequestWorkflows.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve a single request workflow by id.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   * @param workflowId - The id of the workflow to retrieve
+   *
+   * @throws {404} Organization or workflow not found
+   */
+  async getRequestWorkflow(organizationId: string, workflowId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const workflow = this.findRequestWorkflow(
+        organization!.requestWorkflows ?? [],
+        workflowId,
+      );
+      if (!workflow) {
+        AppResponse.error({
+          message: 'Request workflow not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      return this.toRequestWorkflowView(workflow!);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getRequestWorkflow.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Create a request workflow for one of an organization's
+   * request types. The workflow name defaults to "<Label> workflow".
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new workflow payload (request type + optional name/steps)
+   *
+   * @throws {404} Organization not found
+   */
+  async addRequestWorkflow(organizationId: string, dto: AddRequestWorkflowDto) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const workflows = (found!.requestWorkflows ?? []).map((workflow) =>
+        this.toRequestWorkflowPlain(workflow),
+      );
+
+      const name =
+        dto.name?.trim() || `${REQUEST_TYPE_LABELS[dto.requestType]} workflow`;
+
+      const workflow: RequestWorkflow = {
+        _id: new Types.ObjectId(),
+        requestType: dto.requestType,
+        name,
+        isDefault: false,
+        steps: this.buildRequestWorkflowSteps(dto.steps),
+      };
+
+      workflows.push(workflow);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { requestWorkflows: workflows },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization request workflow',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added request workflow "${name}" for org ${organizationId}`,
+      );
+      return this.toRequestWorkflowView(workflow);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addRequestWorkflow.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a request workflow. Only the provided fields are
+   * changed; when steps are supplied they replace the existing list. Setting
+   * isDefault to true clears the flag on every sibling workflow of the same
+   * request type so a single default is always kept.
+   *
+   * @param organizationId - The organization to update
+   * @param workflowId - The id of the workflow to update
+   * @param dto - The partial workflow payload
+   *
+   * @throws {404} Organization or workflow not found
+   */
+  async updateRequestWorkflow(
+    organizationId: string,
+    workflowId: string,
+    dto: UpdateRequestWorkflowDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const workflows = (found!.requestWorkflows ?? []).map((workflow) =>
+        this.toRequestWorkflowPlain(workflow),
+      );
+
+      const target = this.findRequestWorkflow(workflows, workflowId);
+      if (!target) {
+        AppResponse.error({
+          message: 'Request workflow not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.name !== undefined) target!.name = dto.name.trim();
+      if (dto.steps !== undefined)
+        target!.steps = this.buildRequestWorkflowSteps(dto.steps);
+      if (dto.isDefault !== undefined) target!.isDefault = dto.isDefault;
+
+      if (dto.isDefault === true) {
+        for (const workflow of workflows) {
+          if (
+            String(workflow._id) !== workflowId &&
+            workflow.requestType === target!.requestType
+          ) {
+            workflow.isDefault = false;
+          }
+        }
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { requestWorkflows: workflows },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization request workflow',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated request workflow ${workflowId} for org ${organizationId}`,
+      );
+      return this.toRequestWorkflowView(target!);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateRequestWorkflow.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Delete a request workflow by id.
+   *
+   * @param organizationId - The organization to update
+   * @param workflowId - The id of the workflow to delete
+   *
+   * @throws {404} Organization or workflow not found
+   */
+  async deleteRequestWorkflow(organizationId: string, workflowId: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const workflows = (found!.requestWorkflows ?? []).map((workflow) =>
+        this.toRequestWorkflowPlain(workflow),
+      );
+
+      const index = workflows.findIndex(
+        (workflow) => String(workflow._id) === workflowId,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Request workflow not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      workflows.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { requestWorkflows: workflows },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to delete organization request workflow',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Deleted request workflow ${workflowId} for org ${organizationId}`,
+      );
+      return 'Request workflow deleted';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deleteRequestWorkflow.name}`;
       AppResponse.error(error);
       throw error;
     }

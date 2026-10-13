@@ -21,6 +21,7 @@ import {
   DueDate,
   ResponsibleParty,
 } from '../employee-profiles/enum/employee-profile.enum';
+import { RequestType } from '../request-management/enum/request-management.enum';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const DIRECTOR_ID = '64f1b2c3d4e5f678901234ba';
@@ -168,7 +169,9 @@ describe('SettingsDomainOrganisationService', () => {
     it('throws a 404 when the organization does not exist', async () => {
       organizationRepository.findOrg.mockResolvedValue(null);
 
-      await expect(service.getGeneralInfo(ORG_ID)).rejects.toThrow(AppException);
+      await expect(service.getGeneralInfo(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
     });
   });
 
@@ -725,9 +728,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       const result = await service.getDepartments(ORG_ID);
 
-      expect(organizationDepartmentRepository.findByOrganization).toHaveBeenCalledWith(
-        ORG_ID,
-      );
+      expect(
+        organizationDepartmentRepository.findByOrganization,
+      ).toHaveBeenCalledWith(ORG_ID);
       expect(result).toEqual([
         {
           ...departments[0],
@@ -866,11 +869,9 @@ describe('SettingsDomainOrganisationService', () => {
         headOfDepartmentId: DIRECTOR_ID,
       });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { headOfDepartmentId: DIRECTOR_ID },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { headOfDepartmentId: DIRECTOR_ID });
       expect(result).toEqual({ ...FINANCE, headOfDepartmentId: DIRECTOR_ID });
     });
 
@@ -885,11 +886,9 @@ describe('SettingsDomainOrganisationService', () => {
         name: 'Finance & Accounting',
       });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { name: 'Finance & Accounting' },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { name: 'Finance & Accounting' });
     });
 
     it('clears the head of department with an explicit null', async () => {
@@ -910,11 +909,9 @@ describe('SettingsDomainOrganisationService', () => {
         headOfDepartmentId: null,
       });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { headOfDepartmentId: null },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { headOfDepartmentId: null });
     });
 
     it('resolves a parent department by code', async () => {
@@ -930,11 +927,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       await service.updateDepartments(ORG_ID, CODE, { parentCode: 'legal' });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { parentDepartmentId: LEGAL_ID },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { parentDepartmentId: LEGAL_ID });
     });
 
     it('resolves a parent department by name', async () => {
@@ -950,11 +945,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       await service.updateDepartments(ORG_ID, CODE, { parentCode: 'Legal' });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { parentDepartmentId: LEGAL_ID },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { parentDepartmentId: LEGAL_ID });
     });
 
     it('clears the parent with an explicit null parentCode', async () => {
@@ -974,11 +967,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       await service.updateDepartments(ORG_ID, CODE, { parentCode: null });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { parentDepartmentId: null },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { parentDepartmentId: null });
     });
 
     it('clears the parent when the parent code cannot be resolved', async () => {
@@ -987,11 +978,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       await service.updateDepartments(ORG_ID, CODE, { parentCode: 'missing' });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { parentDepartmentId: null },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { parentDepartmentId: null });
     });
 
     it('clears the parent when the department is set as its own parent', async () => {
@@ -1000,11 +989,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       await service.updateDepartments(ORG_ID, CODE, { parentCode: CODE });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { parentDepartmentId: null },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { parentDepartmentId: null });
     });
 
     it('rejects a name that collides with another department', async () => {
@@ -1029,11 +1016,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       await service.updateDepartments(ORG_ID, CODE, { name: 'Finance' });
 
-      expect(organizationDepartmentRepository.updateByCode).toHaveBeenCalledWith(
-        ORG_ID,
-        CODE,
-        { name: 'Finance' },
-      );
+      expect(
+        organizationDepartmentRepository.updateByCode,
+      ).toHaveBeenCalledWith(ORG_ID, CODE, { name: 'Finance' });
     });
 
     it('throws a 500 when the update returns no document', async () => {
@@ -1251,9 +1236,7 @@ describe('SettingsDomainOrganisationService', () => {
         billingEmail: null,
       });
 
-      expect(result).toEqual(
-        expect.objectContaining({ billingEmail: null }),
-      );
+      expect(result).toEqual(expect.objectContaining({ billingEmail: null }));
     });
 
     it('throws a 404 when the organization does not exist', async () => {
@@ -1342,10 +1325,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       const result = await service.getPolicyManagement(ORG_ID, 'handbook');
 
-      expect(organizationPolicyRepository.findByOrganization).toHaveBeenCalledWith(
-        ORG_ID,
-        'handbook',
-      );
+      expect(
+        organizationPolicyRepository.findByOrganization,
+      ).toHaveBeenCalledWith(ORG_ID, 'handbook');
       expect(result).toEqual(documents);
     });
 
@@ -1355,10 +1337,9 @@ describe('SettingsDomainOrganisationService', () => {
 
       await service.getPolicyManagement(ORG_ID);
 
-      expect(organizationPolicyRepository.findByOrganization).toHaveBeenCalledWith(
-        ORG_ID,
-        '',
-      );
+      expect(
+        organizationPolicyRepository.findByOrganization,
+      ).toHaveBeenCalledWith(ORG_ID, '');
     });
 
     it('throws a 404 when the organization does not exist', async () => {
@@ -1784,7 +1765,8 @@ describe('SettingsDomainOrganisationService', () => {
     });
 
     it('does not mutate the shared default constant', async () => {
-      const initialLength = DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.length;
+      const initialLength =
+        DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.length;
       organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         employeeWorkflow: null,
@@ -1826,7 +1808,10 @@ describe('SettingsDomainOrganisationService', () => {
       const result = await service.updateWorkflowStep(
         ORG_ID,
         String(step._id),
-        { stepName: 'New name', dueDate: DueDate.TWO_DAYS_AFTER_JOINING } as any,
+        {
+          stepName: 'New name',
+          dueDate: DueDate.TWO_DAYS_AFTER_JOINING,
+        } as any,
       );
 
       const saved =
@@ -1892,10 +1877,7 @@ describe('SettingsDomainOrganisationService', () => {
       });
       organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
 
-      const result = await service.deleteWorkflowStep(
-        ORG_ID,
-        String(step._id),
-      );
+      const result = await service.deleteWorkflowStep(ORG_ID, String(step._id));
 
       const saved =
         organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
@@ -2478,6 +2460,270 @@ describe('SettingsDomainOrganisationService', () => {
 
       await expect(
         service.deleteEmployerIssuedDocument(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getRequestWorkflows', () => {
+    it('returns every request type with empty workflow lists when nothing is stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getRequestWorkflows(ORG_ID);
+
+      expect(result.requestTypes).toHaveLength(10);
+      expect(result.requestTypes[0]).toEqual({
+        type: RequestType.EMPLOYEE_TERMINATION,
+        label: 'Employee termination',
+        workflows: [],
+      });
+    });
+
+    it('groups stored workflows under their request type', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        requestWorkflows: [
+          {
+            _id: 'wf-1',
+            requestType: RequestType.EMPLOYEE_TERMINATION,
+            name: 'Employee termination workflow',
+            isDefault: true,
+            steps: [{ _id: 's-1', order: 1, responsibleParty: 'Admin' }],
+          },
+        ],
+      });
+
+      const result = await service.getRequestWorkflows(ORG_ID);
+
+      const termination = result.requestTypes.find(
+        (entry) => entry.type === RequestType.EMPLOYEE_TERMINATION,
+      );
+      expect(termination?.workflows).toHaveLength(1);
+      expect(termination?.workflows[0]).toEqual({
+        id: 'wf-1',
+        requestType: RequestType.EMPLOYEE_TERMINATION,
+        name: 'Employee termination workflow',
+        isDefault: true,
+        steps: [{ id: 's-1', order: 1, responsibleParty: 'Admin' }],
+      });
+    });
+
+    it('narrows the response to a single request type when filtered', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getRequestWorkflows(
+        ORG_ID,
+        RequestType.QUERY_REQUEST,
+      );
+
+      expect(result.requestTypes).toEqual([
+        {
+          type: RequestType.QUERY_REQUEST,
+          label: 'Query request',
+          workflows: [],
+        },
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getRequestWorkflows(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('getRequestWorkflow', () => {
+    it('returns the matching workflow', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        requestWorkflows: [
+          {
+            _id: 'wf-1',
+            requestType: RequestType.EMPLOYEE_TERMINATION,
+            name: 'Termination workflow',
+            isDefault: false,
+            steps: [],
+          },
+        ],
+      });
+
+      const result = await service.getRequestWorkflow(ORG_ID, 'wf-1');
+
+      expect(result).toEqual({
+        id: 'wf-1',
+        requestType: RequestType.EMPLOYEE_TERMINATION,
+        name: 'Termination workflow',
+        isDefault: false,
+        steps: [],
+      });
+    });
+
+    it('throws a 404 when the workflow is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.getRequestWorkflow(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('addRequestWorkflow', () => {
+    it('appends a workflow with a default name and ordered steps', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addRequestWorkflow(ORG_ID, {
+        requestType: RequestType.EMPLOYEE_TERMINATION,
+        steps: [
+          { responsibleParty: 'Admin' },
+          { responsibleParty: 'Line manager' },
+        ],
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].requestWorkflows;
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        requestType: RequestType.EMPLOYEE_TERMINATION,
+        name: 'Employee termination workflow',
+        isDefault: false,
+      });
+      expect(saved[0].steps).toHaveLength(2);
+      expect(saved[0].steps[0]).toMatchObject({
+        order: 1,
+        responsibleParty: 'Admin',
+      });
+      expect(saved[0].steps[1]).toMatchObject({
+        order: 2,
+        responsibleParty: 'Line manager',
+      });
+      expect(result.name).toBe('Employee termination workflow');
+    });
+
+    it('honours an explicit workflow name', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addRequestWorkflow(ORG_ID, {
+        requestType: RequestType.QUERY_REQUEST,
+        name: 'Custom query flow',
+      } as any);
+
+      expect(result.name).toBe('Custom query flow');
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addRequestWorkflow(ORG_ID, {
+          requestType: RequestType.QUERY_REQUEST,
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateRequestWorkflow', () => {
+    it('replaces steps and updates the name', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        requestWorkflows: [
+          {
+            _id: 'wf-1',
+            requestType: RequestType.EMPLOYEE_TERMINATION,
+            name: 'Old name',
+            isDefault: false,
+            steps: [{ _id: 's-1', order: 1, responsibleParty: 'Admin' }],
+          },
+        ],
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateRequestWorkflow(ORG_ID, 'wf-1', {
+        name: 'New name',
+        steps: [{ responsibleParty: 'Finance' }],
+      } as any);
+
+      expect(result.name).toBe('New name');
+      expect(result.steps).toEqual([
+        expect.objectContaining({ order: 1, responsibleParty: 'Finance' }),
+      ]);
+    });
+
+    it('clears the default flag on sibling workflows of the same request type', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        requestWorkflows: [
+          {
+            _id: 'wf-1',
+            requestType: RequestType.EMPLOYEE_TERMINATION,
+            name: 'First',
+            isDefault: true,
+            steps: [],
+          },
+          {
+            _id: 'wf-2',
+            requestType: RequestType.EMPLOYEE_TERMINATION,
+            name: 'Second',
+            isDefault: false,
+            steps: [],
+          },
+        ],
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      await service.updateRequestWorkflow(ORG_ID, 'wf-2', {
+        isDefault: true,
+      } as any);
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].requestWorkflows;
+      expect(saved.find((w: any) => w._id === 'wf-1').isDefault).toBe(false);
+      expect(saved.find((w: any) => w._id === 'wf-2').isDefault).toBe(true);
+    });
+
+    it('throws a 404 when the workflow is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateRequestWorkflow(ORG_ID, 'missing', { name: 'x' } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteRequestWorkflow', () => {
+    it('removes the matching workflow', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        requestWorkflows: [
+          {
+            _id: 'wf-1',
+            requestType: RequestType.EMPLOYEE_TERMINATION,
+            name: 'Termination',
+            isDefault: false,
+            steps: [],
+          },
+        ],
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.deleteRequestWorkflow(ORG_ID, 'wf-1');
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].requestWorkflows;
+      expect(saved).toEqual([]);
+      expect(result).toBe('Request workflow deleted');
+    });
+
+    it('throws a 404 when the workflow is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.deleteRequestWorkflow(ORG_ID, 'missing'),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
