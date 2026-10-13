@@ -15,6 +15,7 @@ import { EmployeeProfilesController } from './employee-profiles/employee-profile
 import { OnboardingController } from './onboarding/onboarding.controller';
 import { RequestManagementController } from './request-management/request-management.controller';
 import { LeaveManagementController } from './leave-management/leave-management.controller';
+import { OffboardingController } from './offboarding/offboarding.controller';
 import { RoleRepository } from './access-control/repository/role.repository';
 import { UserRoleRepository } from './access-control/repository/user-role.repository';
 import { InviteeUserRepository } from './access-control/repository/invitee-user.repository';
@@ -64,6 +65,7 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
     OnboardingController,
     RequestManagementController,
     LeaveManagementController,
+    OffboardingController,
   ],
   providers: [
     SettingService,

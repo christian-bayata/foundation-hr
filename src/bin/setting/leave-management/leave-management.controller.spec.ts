@@ -296,7 +296,11 @@ describe('LeaveManagementController (integration)', () => {
       );
     });
 
-    it('rejects an invalid date', async () => {
+    it('accepts a non-ISO date and leaves formatting to the client', async () => {
+      organisationService.addLeaveRestrictedPeriod.mockResolvedValue(
+        entitlement,
+      );
+
       const response = await request(app.getHttpServer())
         .post('/setting/leave-management/entitlement/restricted-period/add')
         .send({
@@ -305,10 +309,15 @@ describe('LeaveManagementController (integration)', () => {
           endDate: '2026-01-30',
         });
 
-      expect(response.status).toBe(400);
-      expect(
-        organisationService.addLeaveRestrictedPeriod,
-      ).not.toHaveBeenCalled();
+      expect(response.status).toBe(201);
+      expect(organisationService.addLeaveRestrictedPeriod).toHaveBeenCalledWith(
+        ORG_ID,
+        {
+          name: 'Financial Year-End',
+          startDate: 'not-a-date',
+          endDate: '2026-01-30',
+        },
+      );
     });
 
     it('rejects a missing name', async () => {

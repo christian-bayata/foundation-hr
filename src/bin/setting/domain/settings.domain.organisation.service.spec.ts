@@ -17,6 +17,7 @@ import {
   DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
   DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  DEFAULT_OFFBOARDING_SETTINGS,
   SettingsDomainOrganisationService,
 } from './settings.domain.organisation.service';
 import {
@@ -3131,18 +3132,27 @@ describe('SettingsDomainOrganisationService', () => {
       ]);
     });
 
-    it('rejects an end date before the start date', async () => {
+    it('adds a period even when the end date precedes the start date', async () => {
       organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
 
-      await expect(
-        service.addLeaveRestrictedPeriod(ORG_ID, {
+      const result = await service.addLeaveRestrictedPeriod(ORG_ID, {
+        name: 'Reversed',
+        startDate: '2026-01-30',
+        endDate: '2026-01-24',
+        departmentCodes: [],
+      });
+
+      expect(result.restrictedPeriods).toEqual([
+        {
+          id: 'reversed',
           name: 'Reversed',
           startDate: '2026-01-30',
           endDate: '2026-01-24',
           departmentCodes: [],
-        }),
-      ).rejects.toThrow(AppException);
-      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+        },
+      ]);
+      expect(organizationRepository.updateById).toHaveBeenCalled();
     });
 
     it('throws a 404 when the organization does not exist', async () => {
@@ -3281,6 +3291,379 @@ describe('SettingsDomainOrganisationService', () => {
 
       await expect(
         service.removeLeaveRestrictedPeriod(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getOffboardingSettings', () => {
+    it('returns the defaults when no settings are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getOffboardingSettings(ORG_ID);
+
+      expect(result).toEqual(DEFAULT_OFFBOARDING_SETTINGS);
+    });
+
+    it('returns the stored settings', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [{ id: 'resignation', label: 'Resignation' }],
+          exitReasons: [{ id: 'relocation', label: 'Relocation' }],
+          exitChecklist: [
+            {
+              id: 'asset_return',
+              label: 'Asset return',
+              description: 'Return of laptop, ID badges, phone',
+              selected: true,
+            },
+          ],
+        },
+      });
+
+      const result = await service.getOffboardingSettings(ORG_ID);
+
+      expect(result).toEqual({
+        offboardingTypes: [{ id: 'resignation', label: 'Resignation' }],
+        exitReasons: [{ id: 'relocation', label: 'Relocation' }],
+        exitChecklist: [
+          {
+            id: 'asset_return',
+            label: 'Asset return',
+            description: 'Return of laptop, ID badges, phone',
+            selected: true,
+          },
+        ],
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getOffboardingSettings(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('addOffboardingType', () => {
+    it('adds a type with a slug id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addOffboardingType(ORG_ID, {
+        label: 'End of contract',
+      });
+
+      expect(result.offboardingTypes).toEqual([
+        { id: 'end_of_contract', label: 'End of contract' },
+      ]);
+    });
+
+    it('ignores a duplicate label regardless of case', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [{ id: 'resignation', label: 'Resignation' }],
+          exitReasons: [],
+          exitChecklist: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addOffboardingType(ORG_ID, {
+        label: 'resignation',
+      });
+
+      expect(result.offboardingTypes).toEqual([
+        { id: 'resignation', label: 'Resignation' },
+      ]);
+    });
+
+    it('appends a suffix when the slug already exists', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [{ id: 'lay_off', label: 'Lay off' }],
+          exitReasons: [],
+          exitChecklist: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addOffboardingType(ORG_ID, {
+        label: 'Lay-off',
+      });
+
+      expect(result.offboardingTypes.map((type) => type.id)).toEqual([
+        'lay_off',
+        'lay_off_2',
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addOffboardingType(ORG_ID, { label: 'Resignation' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('removeOffboardingType', () => {
+    it('removes a type by id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [
+            { id: 'resignation', label: 'Resignation' },
+            { id: 'termination', label: 'Termination' },
+          ],
+          exitReasons: [],
+          exitChecklist: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.removeOffboardingType(ORG_ID, 'termination');
+
+      expect(result.offboardingTypes).toEqual([
+        { id: 'resignation', label: 'Resignation' },
+      ]);
+    });
+
+    it('throws a 404 when the type is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.removeOffboardingType(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addExitReason', () => {
+    it('adds a reason with a slug id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addExitReason(ORG_ID, {
+        label: 'Work-Life balance',
+      });
+
+      expect(result.exitReasons).toEqual([
+        { id: 'work_life_balance', label: 'Work-Life balance' },
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addExitReason(ORG_ID, { label: 'Relocation' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('removeExitReason', () => {
+    it('removes a reason by id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [],
+          exitReasons: [
+            { id: 'relocation', label: 'Relocation' },
+            { id: 'retirement', label: 'Retirement' },
+          ],
+          exitChecklist: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.removeExitReason(ORG_ID, 'retirement');
+
+      expect(result.exitReasons).toEqual([
+        { id: 'relocation', label: 'Relocation' },
+      ]);
+    });
+
+    it('throws a 404 when the reason is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(service.removeExitReason(ORG_ID, 'missing')).rejects.toThrow(
+        AppException,
+      );
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addExitChecklistItem', () => {
+    it('adds a selected item with a trimmed description', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addExitChecklistItem(ORG_ID, {
+        label: 'Exit interview',
+        description: '  Schedule interview  ',
+      });
+
+      expect(result.exitChecklist).toEqual([
+        {
+          id: 'exit_interview',
+          label: 'Exit interview',
+          description: 'Schedule interview',
+          selected: true,
+        },
+      ]);
+    });
+
+    it('defaults the description to null when omitted', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addExitChecklistItem(ORG_ID, {
+        label: 'Asset return',
+      });
+
+      expect(result.exitChecklist).toEqual([
+        {
+          id: 'asset_return',
+          label: 'Asset return',
+          description: null,
+          selected: true,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addExitChecklistItem(ORG_ID, { label: 'Asset return' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('updateExitChecklistItem', () => {
+    it('applies only the provided fields', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [],
+          exitReasons: [],
+          exitChecklist: [
+            {
+              id: 'asset_return',
+              label: 'Asset return',
+              description: 'Return of laptop',
+              selected: true,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateExitChecklistItem(
+        ORG_ID,
+        'asset_return',
+        { selected: false },
+      );
+
+      expect(result.exitChecklist).toEqual([
+        {
+          id: 'asset_return',
+          label: 'Asset return',
+          description: 'Return of laptop',
+          selected: false,
+        },
+      ]);
+    });
+
+    it('clears the description with an explicit null', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [],
+          exitReasons: [],
+          exitChecklist: [
+            {
+              id: 'asset_return',
+              label: 'Asset return',
+              description: 'Return of laptop',
+              selected: true,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateExitChecklistItem(
+        ORG_ID,
+        'asset_return',
+        { description: null },
+      );
+
+      expect(result.exitChecklist[0].description).toBeNull();
+    });
+
+    it('throws a 404 when the item is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateExitChecklistItem(ORG_ID, 'missing', {
+          selected: false,
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeExitChecklistItem', () => {
+    it('removes an item by id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboarding: {
+          offboardingTypes: [],
+          exitReasons: [],
+          exitChecklist: [
+            {
+              id: 'asset_return',
+              label: 'Asset return',
+              description: null,
+              selected: true,
+            },
+            {
+              id: 'knowledge_transfer',
+              label: 'Knowledge transfer',
+              description: null,
+              selected: true,
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.removeExitChecklistItem(
+        ORG_ID,
+        'knowledge_transfer',
+      );
+
+      expect(result.exitChecklist).toEqual([
+        {
+          id: 'asset_return',
+          label: 'Asset return',
+          description: null,
+          selected: true,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the item is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.removeExitChecklistItem(ORG_ID, 'missing'),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });

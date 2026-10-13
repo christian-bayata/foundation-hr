@@ -306,6 +306,51 @@ export class LeaveEntitlementSettings {
   restrictedPeriods: LeaveRestrictedPeriod[];
 }
 
+@Schema({ _id: false })
+export class OffboardingType {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  label: string;
+}
+
+@Schema({ _id: false })
+export class ExitReason {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  label: string;
+}
+
+@Schema({ _id: false })
+export class ExitChecklistItem {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  label: string;
+
+  @Prop({ type: String, trim: true, default: null })
+  description: string | null;
+
+  @Prop({ type: Boolean, default: true })
+  selected: boolean;
+}
+
+@Schema({ _id: false })
+export class OffboardingSettings {
+  @Prop({ type: () => [OffboardingType], default: [] })
+  offboardingTypes: OffboardingType[];
+
+  @Prop({ type: () => [ExitReason], default: [] })
+  exitReasons: ExitReason[];
+
+  @Prop({ type: () => [ExitChecklistItem], default: [] })
+  exitChecklist: ExitChecklistItem[];
+}
+
 @Schema({ _id: true })
 export class RequestWorkflowStep {
   _id: Types.ObjectId;
@@ -470,6 +515,9 @@ export class Organization {
 
   @Prop({ type: () => LeaveEntitlementSettings, default: null })
   leaveEntitlement: LeaveEntitlementSettings | null;
+
+  @Prop({ type: () => OffboardingSettings, default: null })
+  offboarding: OffboardingSettings | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

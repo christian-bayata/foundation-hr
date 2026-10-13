@@ -10,12 +10,14 @@ import {
   EmployeeProfileSettings,
   EmployeeWorkflowSettings,
   EmployerIssuedDocument,
+  ExitChecklistItem,
   LeaveCategory,
   LeaveEntitlementSettings,
   LeaveManagementSettings,
   LeaveRestrictedPeriod,
   Location,
   NotificationPreferences,
+  OffboardingSettings,
   OnboardingDocument,
   OnboardingSettings,
   OrganizationDocument,
@@ -78,6 +80,10 @@ import { UpdateLeaveEntitlementDto } from '../leave-management/dto/update-leave-
 import { AddLeaveRestrictedPeriodDto } from '../leave-management/dto/add-leave-restricted-period.dto';
 import { UpdateLeaveRestrictedPeriodDto } from '../leave-management/dto/update-leave-restricted-period.dto';
 import { LEAVE_ALLOCATION_METHOD_LABELS } from '../leave-management/enum/leave-management.enum';
+import { AddOffboardingTypeDto } from '../offboarding/dto/add-offboarding-type.dto';
+import { AddExitReasonDto } from '../offboarding/dto/add-exit-reason.dto';
+import { AddExitChecklistItemDto } from '../offboarding/dto/add-exit-checklist-item.dto';
+import { UpdateExitChecklistItemDto } from '../offboarding/dto/update-exit-checklist-item.dto';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -169,6 +175,12 @@ export const DEFAULT_LEAVE_ENTITLEMENT_SETTINGS: LeaveEntitlementSettings = {
   allocationMethod: null,
   employmentTypes: [],
   restrictedPeriods: [],
+};
+
+export const DEFAULT_OFFBOARDING_SETTINGS: OffboardingSettings = {
+  offboardingTypes: [],
+  exitReasons: [],
+  exitChecklist: [],
 };
 
 @Injectable()
@@ -3922,6 +3934,536 @@ export class SettingsDomainOrganisationService {
       return this.toLeaveEntitlementSettingsView(current);
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.removeLeaveRestrictedPeriod.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Deep-clone off-boarding settings into mutable plain
+   * objects so the shared default constant is never mutated.
+   */
+  private cloneOffboardingSettings(
+    settings: OffboardingSettings,
+  ): OffboardingSettings {
+    return {
+      offboardingTypes: (settings.offboardingTypes ?? []).map((type) => ({
+        id: type.id,
+        label: type.label,
+      })),
+      exitReasons: (settings.exitReasons ?? []).map((reason) => ({
+        id: reason.id,
+        label: reason.label,
+      })),
+      exitChecklist: (settings.exitChecklist ?? []).map((item) =>
+        this.toExitChecklistItemPlain(item),
+      ),
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored exit checklist item into a mutable
+   * plain object.
+   */
+  private toExitChecklistItemPlain(item: ExitChecklistItem): ExitChecklistItem {
+    return {
+      id: item.id,
+      label: item.label,
+      description: item.description ?? null,
+      selected: item.selected ?? true,
+    };
+  }
+
+  /**
+   * @Responsibility: Present an exit checklist item in the shape consumed by
+   * the client.
+   */
+  private toExitChecklistItemView(item: ExitChecklistItem) {
+    return {
+      id: item.id,
+      label: item.label,
+      description: item.description ?? null,
+      selected: item.selected ?? true,
+    };
+  }
+
+  /**
+   * @Responsibility: Present off-boarding settings in the shape consumed by
+   * the client.
+   */
+  private toOffboardingSettingsView(settings: OffboardingSettings) {
+    return {
+      offboardingTypes: (settings.offboardingTypes ?? []).map((type) => ({
+        id: type.id,
+        label: type.label,
+      })),
+      exitReasons: (settings.exitReasons ?? []).map((reason) => ({
+        id: reason.id,
+        label: reason.label,
+      })),
+      exitChecklist: (settings.exitChecklist ?? []).map((item) =>
+        this.toExitChecklistItemView(item),
+      ),
+    };
+  }
+
+  /**
+   * @Responsibility: Generate an id that is unique within a list of off-boarding
+   * items, derived from a label.
+   */
+  private uniqueOffboardingItemId(
+    items: { id: string }[],
+    label: string,
+  ): string {
+    const existing = new Set((items ?? []).map((item) => item.id));
+    const base = this.slugify(label);
+    if (!existing.has(base)) return base;
+    let counter = 2;
+    while (existing.has(`${base}_${counter}`)) counter += 1;
+    return `${base}_${counter}`;
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's off-boarding settings. The
+   * off-boarding types, exit reasons and exit checklist start empty and grow as
+   * the organization configures them.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   *
+   * @throws {404} Organization not found
+   */
+  async getOffboardingSettings(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const settings =
+        organization!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS;
+
+      return this.toOffboardingSettingsView(settings);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getOffboardingSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add an off-boarding type. The type id is generated from the
+   * label; duplicates (by label, ignoring case) are ignored.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new type payload
+   *
+   * @throws {404} Organization not found
+   */
+  async addOffboardingType(organizationId: string, dto: AddOffboardingTypeDto) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingSettings(
+        found!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS,
+      );
+
+      const label = dto.label.trim();
+      const exists = current.offboardingTypes.some(
+        (type) => type.label.toLowerCase() === label.toLowerCase(),
+      );
+      if (!exists) {
+        current.offboardingTypes.push({
+          id: this.uniqueOffboardingItemId(current.offboardingTypes, label),
+          label,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization off-boarding type',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added off-boarding type "${label}" for org ${organizationId}`,
+      );
+      return this.toOffboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addOffboardingType.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove an off-boarding type by its id.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The type id to remove
+   *
+   * @throws {404} Organization or off-boarding type not found
+   */
+  async removeOffboardingType(organizationId: string, id: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingSettings(
+        found!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS,
+      );
+
+      const index = current.offboardingTypes.findIndex(
+        (type) => type.id === id,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Off-boarding type not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.offboardingTypes.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to remove organization off-boarding type',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Removed off-boarding type "${id}" for org ${organizationId}`,
+      );
+      return this.toOffboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.removeOffboardingType.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add a reason for exit. The reason id is generated from the
+   * label; duplicates (by label, ignoring case) are ignored.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new reason payload
+   *
+   * @throws {404} Organization not found
+   */
+  async addExitReason(organizationId: string, dto: AddExitReasonDto) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingSettings(
+        found!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS,
+      );
+
+      const label = dto.label.trim();
+      const exists = current.exitReasons.some(
+        (reason) => reason.label.toLowerCase() === label.toLowerCase(),
+      );
+      if (!exists) {
+        current.exitReasons.push({
+          id: this.uniqueOffboardingItemId(current.exitReasons, label),
+          label,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization exit reason',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Added exit reason "${label}" for org ${organizationId}`);
+      return this.toOffboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addExitReason.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove a reason for exit by its id.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The reason id to remove
+   *
+   * @throws {404} Organization or exit reason not found
+   */
+  async removeExitReason(organizationId: string, id: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingSettings(
+        found!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS,
+      );
+
+      const index = current.exitReasons.findIndex((reason) => reason.id === id);
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Exit reason not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.exitReasons.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to remove organization exit reason',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(`Removed exit reason "${id}" for org ${organizationId}`);
+      return this.toOffboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.removeExitReason.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add an exit checklist item. The item id is generated from
+   * the label and the item is selected by default.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new exit checklist item payload
+   *
+   * @throws {404} Organization not found
+   */
+  async addExitChecklistItem(
+    organizationId: string,
+    dto: AddExitChecklistItemDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingSettings(
+        found!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS,
+      );
+
+      const label = dto.label.trim();
+      const exists = current.exitChecklist.some(
+        (item) => item.label.toLowerCase() === label.toLowerCase(),
+      );
+      if (!exists) {
+        current.exitChecklist.push({
+          id: this.uniqueOffboardingItemId(current.exitChecklist, label),
+          label,
+          description: dto.description?.trim() || null,
+          selected: true,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization exit checklist item',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added exit checklist item "${label}" for org ${organizationId}`,
+      );
+      return this.toOffboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addExitChecklistItem.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an exit checklist item. Only the provided fields
+   * are changed.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The exit checklist item id to update
+   * @param dto - The partial exit checklist item payload
+   *
+   * @throws {404} Organization or exit checklist item not found
+   */
+  async updateExitChecklistItem(
+    organizationId: string,
+    id: string,
+    dto: UpdateExitChecklistItemDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingSettings(
+        found!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS,
+      );
+
+      const item = current.exitChecklist.find((entry) => entry.id === id);
+      if (!item) {
+        AppResponse.error({
+          message: 'Exit checklist item not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.label !== undefined) item!.label = dto.label.trim();
+      if (dto.description !== undefined)
+        item!.description = dto.description?.trim() || null;
+      if (dto.selected !== undefined) item!.selected = dto.selected;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization exit checklist item',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated exit checklist item "${id}" for org ${organizationId}`,
+      );
+      return this.toOffboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateExitChecklistItem.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove an exit checklist item by its id.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The exit checklist item id to remove
+   *
+   * @throws {404} Organization or exit checklist item not found
+   */
+  async removeExitChecklistItem(organizationId: string, id: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingSettings(
+        found!.offboarding ?? DEFAULT_OFFBOARDING_SETTINGS,
+      );
+
+      const index = current.exitChecklist.findIndex((item) => item.id === id);
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Exit checklist item not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.exitChecklist.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboarding: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to remove organization exit checklist item',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Removed exit checklist item "${id}" for org ${organizationId}`,
+      );
+      return this.toOffboardingSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.removeExitChecklistItem.name}`;
       AppResponse.error(error);
       throw error;
     }
