@@ -17,6 +17,7 @@ import {
   DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
   DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
   DEFAULT_OFFBOARDING_SETTINGS,
   SettingsDomainOrganisationService,
 } from './settings.domain.organisation.service';
@@ -30,6 +31,7 @@ import {
   ApprovalDeadline,
   LeaveAllocationMethod,
 } from '../leave-management/enum/leave-management.enum';
+import { DataRetentionPeriod } from '../offboarding/enum/offboarding.enum';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const DIRECTOR_ID = '64f1b2c3d4e5f678901234ba';
@@ -3666,6 +3668,480 @@ describe('SettingsDomainOrganisationService', () => {
         service.removeExitChecklistItem(ORG_ID, 'missing'),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getOffboardingDocumentsSettings', () => {
+    it('returns the defaults when no settings are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getOffboardingDocumentsSettings(ORG_ID);
+
+      expect(result).toEqual({
+        ...DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+        dataRetentionPeriodLabel: null,
+      });
+    });
+
+    it('returns the stored settings with the retention label', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [
+            {
+              id: 'relieving_letter',
+              name: 'Experience/Relieving Letter',
+              fileType: 'PDF',
+              requiresSignature: false,
+            },
+          ],
+          complianceChecklist: [
+            {
+              id: 'nda_reminders',
+              label: 'NDA Reminders',
+              description: null,
+              selected: true,
+            },
+          ],
+          dataRetentionPeriod: DataRetentionPeriod.SIX_MONTHS,
+        },
+      });
+
+      const result = await service.getOffboardingDocumentsSettings(ORG_ID);
+
+      expect(result).toEqual({
+        employerExitDocuments: [
+          {
+            id: 'relieving_letter',
+            name: 'Experience/Relieving Letter',
+            fileType: 'PDF',
+            requiresSignature: false,
+          },
+        ],
+        complianceChecklist: [
+          {
+            id: 'nda_reminders',
+            label: 'NDA Reminders',
+            description: null,
+            selected: true,
+          },
+        ],
+        dataRetentionPeriod: DataRetentionPeriod.SIX_MONTHS,
+        dataRetentionPeriodLabel: '6 months',
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.getOffboardingDocumentsSettings(ORG_ID),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('addEmployerExitDocument', () => {
+    it('adds a document with a slug id and no signature required', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addEmployerExitDocument(ORG_ID, {
+        name: 'Experience/Relieving Letter',
+        fileType: 'PDF',
+      });
+
+      expect(result.employerExitDocuments).toEqual([
+        {
+          id: 'experience_relieving_letter',
+          name: 'Experience/Relieving Letter',
+          fileType: 'PDF',
+          requiresSignature: false,
+        },
+      ]);
+    });
+
+    it('defaults the file type to null when omitted', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addEmployerExitDocument(ORG_ID, {
+        name: 'Final Payslip',
+      });
+
+      expect(result.employerExitDocuments).toEqual([
+        {
+          id: 'final_payslip',
+          name: 'Final Payslip',
+          fileType: null,
+          requiresSignature: false,
+        },
+      ]);
+    });
+
+    it('ignores a duplicate name regardless of case', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [
+            {
+              id: 'final_payslip',
+              name: 'Final Payslip',
+              fileType: null,
+              requiresSignature: false,
+            },
+          ],
+          complianceChecklist: [],
+          dataRetentionPeriod: null,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addEmployerExitDocument(ORG_ID, {
+        name: 'final payslip',
+      });
+
+      expect(result.employerExitDocuments).toEqual([
+        {
+          id: 'final_payslip',
+          name: 'Final Payslip',
+          fileType: null,
+          requiresSignature: false,
+        },
+      ]);
+    });
+
+    it('appends a suffix when the slug already exists', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [
+            {
+              id: 'final_payslip',
+              name: 'Final Payslip',
+              fileType: null,
+              requiresSignature: false,
+            },
+          ],
+          complianceChecklist: [],
+          dataRetentionPeriod: null,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addEmployerExitDocument(ORG_ID, {
+        name: 'Final-Payslip',
+      });
+
+      expect(result.employerExitDocuments.map((doc) => doc.id)).toEqual([
+        'final_payslip',
+        'final_payslip_2',
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addEmployerExitDocument(ORG_ID, { name: 'Final Payslip' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('updateEmployerExitDocument', () => {
+    it('updates the provided fields', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [
+            {
+              id: 'relieving_letter',
+              name: 'Experience/Relieving Letter',
+              fileType: 'PDF',
+              requiresSignature: false,
+            },
+          ],
+          complianceChecklist: [],
+          dataRetentionPeriod: null,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateEmployerExitDocument(
+        ORG_ID,
+        'relieving_letter',
+        { requiresSignature: true, fileType: 'PPT' },
+      );
+
+      expect(result.employerExitDocuments).toEqual([
+        {
+          id: 'relieving_letter',
+          name: 'Experience/Relieving Letter',
+          fileType: 'PPT',
+          requiresSignature: true,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the document is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateEmployerExitDocument(ORG_ID, 'missing', {
+          requiresSignature: true,
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeEmployerExitDocument', () => {
+    it('removes a document by id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [
+            {
+              id: 'final_payslip',
+              name: 'Final Payslip',
+              fileType: null,
+              requiresSignature: false,
+            },
+            {
+              id: 'relieving_letter',
+              name: 'Experience/Relieving Letter',
+              fileType: 'PDF',
+              requiresSignature: false,
+            },
+          ],
+          complianceChecklist: [],
+          dataRetentionPeriod: null,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.removeEmployerExitDocument(
+        ORG_ID,
+        'final_payslip',
+      );
+
+      expect(result.employerExitDocuments).toEqual([
+        {
+          id: 'relieving_letter',
+          name: 'Experience/Relieving Letter',
+          fileType: 'PDF',
+          requiresSignature: false,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the document is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.removeEmployerExitDocument(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addComplianceChecklistItem', () => {
+    it('adds an item with a slug id, selected by default', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addComplianceChecklistItem(ORG_ID, {
+        label: 'NDA Reminders',
+        description: 'Return of laptop',
+      });
+
+      expect(result.complianceChecklist).toEqual([
+        {
+          id: 'nda_reminders',
+          label: 'NDA Reminders',
+          description: 'Return of laptop',
+          selected: true,
+        },
+      ]);
+    });
+
+    it('ignores a duplicate label regardless of case', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [],
+          complianceChecklist: [
+            {
+              id: 'nda_reminders',
+              label: 'NDA Reminders',
+              description: null,
+              selected: true,
+            },
+          ],
+          dataRetentionPeriod: null,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addComplianceChecklistItem(ORG_ID, {
+        label: 'nda reminders',
+      });
+
+      expect(result.complianceChecklist).toEqual([
+        {
+          id: 'nda_reminders',
+          label: 'NDA Reminders',
+          description: null,
+          selected: true,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addComplianceChecklistItem(ORG_ID, { label: 'NDA Reminders' }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('updateComplianceChecklistItem', () => {
+    it('updates the provided fields', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [],
+          complianceChecklist: [
+            {
+              id: 'nda_reminders',
+              label: 'NDA Reminders',
+              description: 'Return of laptop',
+              selected: true,
+            },
+          ],
+          dataRetentionPeriod: null,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateComplianceChecklistItem(
+        ORG_ID,
+        'nda_reminders',
+        { selected: false, description: null },
+      );
+
+      expect(result.complianceChecklist).toEqual([
+        {
+          id: 'nda_reminders',
+          label: 'NDA Reminders',
+          description: null,
+          selected: false,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the item is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateComplianceChecklistItem(ORG_ID, 'missing', {
+          selected: false,
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeComplianceChecklistItem', () => {
+    it('removes an item by id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [],
+          complianceChecklist: [
+            {
+              id: 'nda_reminders',
+              label: 'NDA Reminders',
+              description: null,
+              selected: true,
+            },
+            {
+              id: 'data_privacy_acknowledgments',
+              label: 'Data privacy acknowledgments',
+              description: null,
+              selected: true,
+            },
+          ],
+          dataRetentionPeriod: null,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.removeComplianceChecklistItem(
+        ORG_ID,
+        'nda_reminders',
+      );
+
+      expect(result.complianceChecklist).toEqual([
+        {
+          id: 'data_privacy_acknowledgments',
+          label: 'Data privacy acknowledgments',
+          description: null,
+          selected: true,
+        },
+      ]);
+    });
+
+    it('throws a 404 when the item is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.removeComplianceChecklistItem(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateDataRetention', () => {
+    it('sets the data retention period with its label', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateDataRetention(ORG_ID, {
+        dataRetentionPeriod: DataRetentionPeriod.TWO_YEARS,
+      });
+
+      expect(result.dataRetentionPeriod).toBe(DataRetentionPeriod.TWO_YEARS);
+      expect(result.dataRetentionPeriodLabel).toBe('2 years');
+    });
+
+    it('clears the data retention period when null is provided', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        offboardingDocuments: {
+          employerExitDocuments: [],
+          complianceChecklist: [],
+          dataRetentionPeriod: DataRetentionPeriod.SIX_MONTHS,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateDataRetention(ORG_ID, {
+        dataRetentionPeriod: null,
+      });
+
+      expect(result.dataRetentionPeriod).toBeNull();
+      expect(result.dataRetentionPeriodLabel).toBeNull();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateDataRetention(ORG_ID, {
+          dataRetentionPeriod: DataRetentionPeriod.ONE_YEAR,
+        }),
+      ).rejects.toThrow(AppException);
     });
   });
 });

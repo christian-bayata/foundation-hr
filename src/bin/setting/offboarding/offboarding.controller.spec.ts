@@ -22,6 +22,14 @@ describe('OffboardingController (integration)', () => {
     addExitChecklistItem: jest.Mock<AnyPromiseFn>;
     updateExitChecklistItem: jest.Mock<AnyPromiseFn>;
     removeExitChecklistItem: jest.Mock<AnyPromiseFn>;
+    getOffboardingDocumentsSettings: jest.Mock<AnyPromiseFn>;
+    addEmployerExitDocument: jest.Mock<AnyPromiseFn>;
+    updateEmployerExitDocument: jest.Mock<AnyPromiseFn>;
+    removeEmployerExitDocument: jest.Mock<AnyPromiseFn>;
+    addComplianceChecklistItem: jest.Mock<AnyPromiseFn>;
+    updateComplianceChecklistItem: jest.Mock<AnyPromiseFn>;
+    removeComplianceChecklistItem: jest.Mock<AnyPromiseFn>;
+    updateDataRetention: jest.Mock<AnyPromiseFn>;
   };
 
   const settings = {
@@ -37,6 +45,27 @@ describe('OffboardingController (integration)', () => {
     ],
   };
 
+  const documentsSettings = {
+    employerExitDocuments: [
+      {
+        id: 'relieving_letter',
+        name: 'Experience/Relieving Letter',
+        fileType: 'PDF',
+        requiresSignature: false,
+      },
+    ],
+    complianceChecklist: [
+      {
+        id: 'nda_reminders',
+        label: 'NDA Reminders',
+        description: 'Return of laptop',
+        selected: true,
+      },
+    ],
+    dataRetentionPeriod: '6_months',
+    dataRetentionPeriodLabel: '6 months',
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -49,6 +78,14 @@ describe('OffboardingController (integration)', () => {
       addExitChecklistItem: jest.fn(),
       updateExitChecklistItem: jest.fn(),
       removeExitChecklistItem: jest.fn(),
+      getOffboardingDocumentsSettings: jest.fn(),
+      addEmployerExitDocument: jest.fn(),
+      updateEmployerExitDocument: jest.fn(),
+      removeEmployerExitDocument: jest.fn(),
+      addComplianceChecklistItem: jest.fn(),
+      updateComplianceChecklistItem: jest.fn(),
+      removeComplianceChecklistItem: jest.fn(),
+      updateDataRetention: jest.fn(),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -300,6 +337,258 @@ describe('OffboardingController (integration)', () => {
       expect(
         organisationService.removeExitChecklistItem,
       ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/offboarding/exit-documents/retrieve', () => {
+    it('retrieves the exit documents settings', async () => {
+      organisationService.getOffboardingDocumentsSettings.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/offboarding/exit-documents/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(
+        organisationService.getOffboardingDocumentsSettings,
+      ).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('POST /setting/offboarding/exit-documents/employer-document/add', () => {
+    it('adds an employer exit document', async () => {
+      organisationService.addEmployerExitDocument.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer())
+        .post('/setting/offboarding/exit-documents/employer-document/add')
+        .send({ name: 'Experience/Relieving Letter', fileType: 'PDF' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(organisationService.addEmployerExitDocument).toHaveBeenCalledWith(
+        ORG_ID,
+        {
+          name: 'Experience/Relieving Letter',
+          fileType: 'PDF',
+        },
+      );
+    });
+
+    it('rejects a missing name', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/offboarding/exit-documents/employer-document/add')
+        .send({ fileType: 'PDF' });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.addEmployerExitDocument,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/offboarding/exit-documents/employer-document/update', () => {
+    it('updates an employer exit document by id', async () => {
+      organisationService.updateEmployerExitDocument.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer())
+        .patch(
+          '/setting/offboarding/exit-documents/employer-document/update?id=relieving_letter',
+        )
+        .send({ requiresSignature: true });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(
+        organisationService.updateEmployerExitDocument,
+      ).toHaveBeenCalledWith(ORG_ID, 'relieving_letter', {
+        requiresSignature: true,
+      });
+    });
+
+    it('rejects a missing id', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/offboarding/exit-documents/employer-document/update')
+        .send({ requiresSignature: true });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.updateEmployerExitDocument,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DELETE /setting/offboarding/exit-documents/employer-document/remove', () => {
+    it('removes an employer exit document by id', async () => {
+      organisationService.removeEmployerExitDocument.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer()).delete(
+        '/setting/offboarding/exit-documents/employer-document/remove?id=relieving_letter',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(
+        organisationService.removeEmployerExitDocument,
+      ).toHaveBeenCalledWith(ORG_ID, 'relieving_letter');
+    });
+
+    it('rejects a missing id', async () => {
+      const response = await request(app.getHttpServer()).delete(
+        '/setting/offboarding/exit-documents/employer-document/remove',
+      );
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.removeEmployerExitDocument,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /setting/offboarding/exit-documents/compliance-checklist/add', () => {
+    it('adds a compliance checklist item', async () => {
+      organisationService.addComplianceChecklistItem.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer())
+        .post('/setting/offboarding/exit-documents/compliance-checklist/add')
+        .send({ label: 'NDA Reminders', description: 'Return of laptop' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(
+        organisationService.addComplianceChecklistItem,
+      ).toHaveBeenCalledWith(ORG_ID, {
+        label: 'NDA Reminders',
+        description: 'Return of laptop',
+      });
+    });
+
+    it('rejects a missing label', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/offboarding/exit-documents/compliance-checklist/add')
+        .send({ description: 'Return of laptop' });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.addComplianceChecklistItem,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/offboarding/exit-documents/compliance-checklist/update', () => {
+    it('updates a compliance checklist item by id', async () => {
+      organisationService.updateComplianceChecklistItem.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer())
+        .patch(
+          '/setting/offboarding/exit-documents/compliance-checklist/update?id=nda_reminders',
+        )
+        .send({ selected: false });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(
+        organisationService.updateComplianceChecklistItem,
+      ).toHaveBeenCalledWith(ORG_ID, 'nda_reminders', { selected: false });
+    });
+
+    it('rejects a missing id', async () => {
+      const response = await request(app.getHttpServer())
+        .patch(
+          '/setting/offboarding/exit-documents/compliance-checklist/update',
+        )
+        .send({ selected: false });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.updateComplianceChecklistItem,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DELETE /setting/offboarding/exit-documents/compliance-checklist/remove', () => {
+    it('removes a compliance checklist item by id', async () => {
+      organisationService.removeComplianceChecklistItem.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer()).delete(
+        '/setting/offboarding/exit-documents/compliance-checklist/remove?id=nda_reminders',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(
+        organisationService.removeComplianceChecklistItem,
+      ).toHaveBeenCalledWith(ORG_ID, 'nda_reminders');
+    });
+
+    it('rejects a missing id', async () => {
+      const response = await request(app.getHttpServer()).delete(
+        '/setting/offboarding/exit-documents/compliance-checklist/remove',
+      );
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.removeComplianceChecklistItem,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/offboarding/exit-documents/data-retention/update', () => {
+    it('updates the data retention period', async () => {
+      organisationService.updateDataRetention.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/offboarding/exit-documents/data-retention/update')
+        .send({ dataRetentionPeriod: '6_months' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(documentsSettings);
+      expect(organisationService.updateDataRetention).toHaveBeenCalledWith(
+        ORG_ID,
+        { dataRetentionPeriod: '6_months' },
+      );
+    });
+
+    it('clears the data retention period', async () => {
+      organisationService.updateDataRetention.mockResolvedValue(
+        documentsSettings,
+      );
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/offboarding/exit-documents/data-retention/update')
+        .send({ dataRetentionPeriod: null });
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateDataRetention).toHaveBeenCalledWith(
+        ORG_ID,
+        { dataRetentionPeriod: null },
+      );
+    });
+
+    it('rejects an invalid data retention period', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/offboarding/exit-documents/data-retention/update')
+        .send({ dataRetentionPeriod: '9_months' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateDataRetention).not.toHaveBeenCalled();
     });
   });
 });

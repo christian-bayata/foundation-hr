@@ -10,6 +10,7 @@ import {
   EmployeeProfileSettings,
   EmployeeWorkflowSettings,
   EmployerIssuedDocument,
+  EmployerExitDocument,
   ExitChecklistItem,
   LeaveCategory,
   LeaveEntitlementSettings,
@@ -18,6 +19,7 @@ import {
   Location,
   NotificationPreferences,
   OffboardingSettings,
+  OffboardingDocumentsSettings,
   OnboardingDocument,
   OnboardingSettings,
   OrganizationDocument,
@@ -84,6 +86,12 @@ import { AddOffboardingTypeDto } from '../offboarding/dto/add-offboarding-type.d
 import { AddExitReasonDto } from '../offboarding/dto/add-exit-reason.dto';
 import { AddExitChecklistItemDto } from '../offboarding/dto/add-exit-checklist-item.dto';
 import { UpdateExitChecklistItemDto } from '../offboarding/dto/update-exit-checklist-item.dto';
+import { AddEmployerExitDocumentDto } from '../offboarding/dto/add-employer-exit-document.dto';
+import { UpdateEmployerExitDocumentDto } from '../offboarding/dto/update-employer-exit-document.dto';
+import { AddComplianceChecklistItemDto } from '../offboarding/dto/add-compliance-checklist-item.dto';
+import { UpdateComplianceChecklistItemDto } from '../offboarding/dto/update-compliance-checklist-item.dto';
+import { UpdateDataRetentionDto } from '../offboarding/dto/update-data-retention.dto';
+import { DATA_RETENTION_PERIOD_LABELS } from '../offboarding/enum/offboarding.enum';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -182,6 +190,13 @@ export const DEFAULT_OFFBOARDING_SETTINGS: OffboardingSettings = {
   exitReasons: [],
   exitChecklist: [],
 };
+
+export const DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS: OffboardingDocumentsSettings =
+  {
+    employerExitDocuments: [],
+    complianceChecklist: [],
+    dataRetentionPeriod: null,
+  };
 
 @Injectable()
 export class SettingsDomainOrganisationService {
@@ -4464,6 +4479,539 @@ export class SettingsDomainOrganisationService {
       return this.toOffboardingSettingsView(current);
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.removeExitChecklistItem.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Deep-clone off-boarding document settings into mutable
+   * plain objects so the shared default constant is never mutated.
+   */
+  private cloneOffboardingDocumentsSettings(
+    settings: OffboardingDocumentsSettings,
+  ): OffboardingDocumentsSettings {
+    return {
+      employerExitDocuments: (settings.employerExitDocuments ?? []).map(
+        (document) => this.toEmployerExitDocumentPlain(document),
+      ),
+      complianceChecklist: (settings.complianceChecklist ?? []).map((item) =>
+        this.toExitChecklistItemPlain(item),
+      ),
+      dataRetentionPeriod: settings.dataRetentionPeriod ?? null,
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored employer exit document into a mutable
+   * plain object.
+   */
+  private toEmployerExitDocumentPlain(
+    document: EmployerExitDocument,
+  ): EmployerExitDocument {
+    return {
+      id: document.id,
+      name: document.name,
+      fileType: document.fileType ?? null,
+      requiresSignature: document.requiresSignature ?? false,
+    };
+  }
+
+  /**
+   * @Responsibility: Present an employer exit document in the shape consumed by
+   * the client.
+   */
+  private toEmployerExitDocumentView(document: EmployerExitDocument) {
+    return {
+      id: document.id,
+      name: document.name,
+      fileType: document.fileType ?? null,
+      requiresSignature: document.requiresSignature ?? false,
+    };
+  }
+
+  /**
+   * @Responsibility: Present off-boarding document settings in the shape
+   * consumed by the client.
+   */
+  private toOffboardingDocumentsSettingsView(
+    settings: OffboardingDocumentsSettings,
+  ) {
+    const dataRetentionPeriod = settings.dataRetentionPeriod ?? null;
+    return {
+      employerExitDocuments: (settings.employerExitDocuments ?? []).map(
+        (document) => this.toEmployerExitDocumentView(document),
+      ),
+      complianceChecklist: (settings.complianceChecklist ?? []).map((item) =>
+        this.toExitChecklistItemView(item),
+      ),
+      dataRetentionPeriod,
+      dataRetentionPeriodLabel: dataRetentionPeriod
+        ? DATA_RETENTION_PERIOD_LABELS[dataRetentionPeriod]
+        : null,
+    };
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's off-boarding document settings.
+   * The employer exit documents and compliance checklist start empty and the
+   * data retention period is unset until the organization configures them.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   *
+   * @throws {404} Organization not found
+   */
+  async getOffboardingDocumentsSettings(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const settings =
+        organization!.offboardingDocuments ??
+        DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS;
+
+      return this.toOffboardingDocumentsSettingsView(settings);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getOffboardingDocumentsSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add an employer exit document. The document id is
+   * generated from the name; duplicates (by name, ignoring case) are ignored.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new employer exit document payload
+   *
+   * @throws {404} Organization not found
+   */
+  async addEmployerExitDocument(
+    organizationId: string,
+    dto: AddEmployerExitDocumentDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingDocumentsSettings(
+        found!.offboardingDocuments ?? DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+      );
+
+      const name = dto.name.trim();
+      const exists = current.employerExitDocuments.some(
+        (document) => document.name.toLowerCase() === name.toLowerCase(),
+      );
+      if (!exists) {
+        current.employerExitDocuments.push({
+          id: this.uniqueOffboardingItemId(current.employerExitDocuments, name),
+          name,
+          fileType: dto.fileType?.trim() || null,
+          requiresSignature: false,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboardingDocuments: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization employer exit document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added employer exit document "${name}" for org ${organizationId}`,
+      );
+      return this.toOffboardingDocumentsSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addEmployerExitDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an employer exit document. Only the provided fields
+   * are changed.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The employer exit document id to update
+   * @param dto - The partial employer exit document payload
+   *
+   * @throws {404} Organization or employer exit document not found
+   */
+  async updateEmployerExitDocument(
+    organizationId: string,
+    id: string,
+    dto: UpdateEmployerExitDocumentDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingDocumentsSettings(
+        found!.offboardingDocuments ?? DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+      );
+
+      const document = current.employerExitDocuments.find(
+        (entry) => entry.id === id,
+      );
+      if (!document) {
+        AppResponse.error({
+          message: 'Employer exit document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.name !== undefined) document!.name = dto.name.trim();
+      if (dto.fileType !== undefined)
+        document!.fileType = dto.fileType?.trim() || null;
+      if (dto.requiresSignature !== undefined)
+        document!.requiresSignature = dto.requiresSignature;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboardingDocuments: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization employer exit document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated employer exit document "${id}" for org ${organizationId}`,
+      );
+      return this.toOffboardingDocumentsSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateEmployerExitDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove an employer exit document by its id.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The employer exit document id to remove
+   *
+   * @throws {404} Organization or employer exit document not found
+   */
+  async removeEmployerExitDocument(organizationId: string, id: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingDocumentsSettings(
+        found!.offboardingDocuments ?? DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+      );
+
+      const index = current.employerExitDocuments.findIndex(
+        (document) => document.id === id,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Employer exit document not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.employerExitDocuments.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboardingDocuments: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to remove organization employer exit document',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Removed employer exit document "${id}" for org ${organizationId}`,
+      );
+      return this.toOffboardingDocumentsSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.removeEmployerExitDocument.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add a compliance checklist item. The item id is generated
+   * from the label and the item is selected by default.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new compliance checklist item payload
+   *
+   * @throws {404} Organization not found
+   */
+  async addComplianceChecklistItem(
+    organizationId: string,
+    dto: AddComplianceChecklistItemDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingDocumentsSettings(
+        found!.offboardingDocuments ?? DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+      );
+
+      const label = dto.label.trim();
+      const exists = current.complianceChecklist.some(
+        (item) => item.label.toLowerCase() === label.toLowerCase(),
+      );
+      if (!exists) {
+        current.complianceChecklist.push({
+          id: this.uniqueOffboardingItemId(current.complianceChecklist, label),
+          label,
+          description: dto.description?.trim() || null,
+          selected: true,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboardingDocuments: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization compliance checklist item',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added compliance checklist item "${label}" for org ${organizationId}`,
+      );
+      return this.toOffboardingDocumentsSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addComplianceChecklistItem.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a compliance checklist item. Only the provided
+   * fields are changed.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The compliance checklist item id to update
+   * @param dto - The partial compliance checklist item payload
+   *
+   * @throws {404} Organization or compliance checklist item not found
+   */
+  async updateComplianceChecklistItem(
+    organizationId: string,
+    id: string,
+    dto: UpdateComplianceChecklistItemDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingDocumentsSettings(
+        found!.offboardingDocuments ?? DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+      );
+
+      const item = current.complianceChecklist.find((entry) => entry.id === id);
+      if (!item) {
+        AppResponse.error({
+          message: 'Compliance checklist item not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.label !== undefined) item!.label = dto.label.trim();
+      if (dto.description !== undefined)
+        item!.description = dto.description?.trim() || null;
+      if (dto.selected !== undefined) item!.selected = dto.selected;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboardingDocuments: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization compliance checklist item',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated compliance checklist item "${id}" for org ${organizationId}`,
+      );
+      return this.toOffboardingDocumentsSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateComplianceChecklistItem.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove a compliance checklist item by its id.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The compliance checklist item id to remove
+   *
+   * @throws {404} Organization or compliance checklist item not found
+   */
+  async removeComplianceChecklistItem(organizationId: string, id: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingDocumentsSettings(
+        found!.offboardingDocuments ?? DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+      );
+
+      const index = current.complianceChecklist.findIndex(
+        (item) => item.id === id,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Compliance checklist item not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.complianceChecklist.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboardingDocuments: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to remove organization compliance checklist item',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Removed compliance checklist item "${id}" for org ${organizationId}`,
+      );
+      return this.toOffboardingDocumentsSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.removeComplianceChecklistItem.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update the data retention period. Passing null clears the
+   * selection.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The data retention payload
+   *
+   * @throws {404} Organization not found
+   */
+  async updateDataRetention(
+    organizationId: string,
+    dto: UpdateDataRetentionDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneOffboardingDocumentsSettings(
+        found!.offboardingDocuments ?? DEFAULT_OFFBOARDING_DOCUMENTS_SETTINGS,
+      );
+
+      if (dto.dataRetentionPeriod !== undefined)
+        current.dataRetentionPeriod = dto.dataRetentionPeriod ?? null;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { offboardingDocuments: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization data retention period',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated data retention period for org ${organizationId}`,
+      );
+      return this.toOffboardingDocumentsSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateDataRetention.name}`;
       AppResponse.error(error);
       throw error;
     }

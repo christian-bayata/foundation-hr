@@ -14,6 +14,7 @@ import {
   ApprovalDeadline,
   LeaveAllocationMethod,
 } from '../../setting/leave-management/enum/leave-management.enum';
+import { DataRetentionPeriod } from '../../setting/offboarding/enum/offboarding.enum';
 
 export type OrganizationDocument = Organization & Document;
 
@@ -351,6 +352,37 @@ export class OffboardingSettings {
   exitChecklist: ExitChecklistItem[];
 }
 
+@Schema({ _id: false })
+export class EmployerExitDocument {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  name: string;
+
+  @Prop({ type: String, trim: true, default: null })
+  fileType: string | null;
+
+  @Prop({ type: Boolean, default: false })
+  requiresSignature: boolean;
+}
+
+@Schema({ _id: false })
+export class OffboardingDocumentsSettings {
+  @Prop({ type: () => [EmployerExitDocument], default: [] })
+  employerExitDocuments: EmployerExitDocument[];
+
+  @Prop({ type: () => [ExitChecklistItem], default: [] })
+  complianceChecklist: ExitChecklistItem[];
+
+  @Prop({
+    type: String,
+    enum: Object.values(DataRetentionPeriod),
+    default: null,
+  })
+  dataRetentionPeriod: DataRetentionPeriod | null;
+}
+
 @Schema({ _id: true })
 export class RequestWorkflowStep {
   _id: Types.ObjectId;
@@ -518,6 +550,9 @@ export class Organization {
 
   @Prop({ type: () => OffboardingSettings, default: null })
   offboarding: OffboardingSettings | null;
+
+  @Prop({ type: () => OffboardingDocumentsSettings, default: null })
+  offboardingDocuments: OffboardingDocumentsSettings | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);
