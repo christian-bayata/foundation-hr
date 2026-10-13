@@ -14,16 +14,21 @@ import { AuthUtility } from '../../auth/auth.utility';
 import {
   DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
   DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+  DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
   DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
   DEFAULT_NOTIFICATION_PREFERENCES,
   SettingsDomainOrganisationService,
 } from './settings.domain.organisation.service';
 import {
   DueDate,
+  EmploymentType,
   ResponsibleParty,
 } from '../employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../request-management/enum/request-management.enum';
-import { ApprovalDeadline } from '../leave-management/enum/leave-management.enum';
+import {
+  ApprovalDeadline,
+  LeaveAllocationMethod,
+} from '../leave-management/enum/leave-management.enum';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const DIRECTOR_ID = '64f1b2c3d4e5f678901234ba';
@@ -2951,6 +2956,331 @@ describe('SettingsDomainOrganisationService', () => {
 
       await expect(
         service.removeLeaveCategory(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getLeaveEntitlementSettings', () => {
+    it('returns the defaults when no settings are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getLeaveEntitlementSettings(ORG_ID);
+
+      expect(result).toEqual({
+        ...DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
+        allocationMethodLabel: null,
+      });
+    });
+
+    it('returns the stored settings with the allocation method label', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveEntitlement: {
+          allocationMethod: LeaveAllocationMethod.FIXED_DAYS,
+          employmentTypes: [EmploymentType.FULL_TIME, EmploymentType.INTERN],
+          restrictedPeriods: [
+            {
+              id: 'financial_year_end',
+              name: 'Financial Year-End',
+              startDate: '2026-01-24',
+              endDate: '2026-01-30',
+              departmentCodes: ['fin', 'hr'],
+            },
+          ],
+        },
+      });
+
+      const result = await service.getLeaveEntitlementSettings(ORG_ID);
+
+      expect(result).toEqual({
+        allocationMethod: LeaveAllocationMethod.FIXED_DAYS,
+        allocationMethodLabel: 'Fixed days',
+        employmentTypes: [EmploymentType.FULL_TIME, EmploymentType.INTERN],
+        restrictedPeriods: [
+          {
+            id: 'financial_year_end',
+            name: 'Financial Year-End',
+            startDate: '2026-01-24',
+            endDate: '2026-01-30',
+            departmentCodes: ['fin', 'hr'],
+          },
+        ],
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getLeaveEntitlementSettings(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('updateLeaveEntitlementSettings', () => {
+    it('applies only the provided fields and de-duplicates employment types', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveEntitlement: {
+          allocationMethod: null,
+          employmentTypes: [],
+          restrictedPeriods: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateLeaveEntitlementSettings(ORG_ID, {
+        allocationMethod: LeaveAllocationMethod.ACCRUAL,
+        employmentTypes: [
+          EmploymentType.FULL_TIME,
+          EmploymentType.FULL_TIME,
+          EmploymentType.CONTRACT,
+        ],
+      });
+
+      expect(result.allocationMethod).toBe(LeaveAllocationMethod.ACCRUAL);
+      expect(result.employmentTypes).toEqual([
+        EmploymentType.FULL_TIME,
+        EmploymentType.CONTRACT,
+      ]);
+    });
+
+    it('can clear the allocation method', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveEntitlement: {
+          allocationMethod: LeaveAllocationMethod.PRORATED,
+          employmentTypes: [],
+          restrictedPeriods: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateLeaveEntitlementSettings(ORG_ID, {
+        allocationMethod: null,
+      });
+
+      expect(result.allocationMethod).toBeNull();
+      expect(result.allocationMethodLabel).toBeNull();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateLeaveEntitlementSettings(ORG_ID, {
+          allocationMethod: LeaveAllocationMethod.FIXED_DAYS,
+        }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('addLeaveRestrictedPeriod', () => {
+    it('adds a period with a slug id and de-duplicated department codes', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addLeaveRestrictedPeriod(ORG_ID, {
+        name: 'Financial Year-End',
+        startDate: '2026-01-24',
+        endDate: '2026-01-30',
+        departmentCodes: ['fin', 'fin', 'hr'],
+      });
+
+      expect(result.restrictedPeriods).toEqual([
+        {
+          id: 'financial_year_end',
+          name: 'Financial Year-End',
+          startDate: '2026-01-24',
+          endDate: '2026-01-30',
+          departmentCodes: ['fin', 'hr'],
+        },
+      ]);
+    });
+
+    it('appends a suffix when the slug already exists', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveEntitlement: {
+          allocationMethod: null,
+          employmentTypes: [],
+          restrictedPeriods: [
+            {
+              id: 'peak_business_seasons',
+              name: 'Peak Business Seasons',
+              startDate: '2026-01-24',
+              endDate: '2026-01-30',
+              departmentCodes: [],
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addLeaveRestrictedPeriod(ORG_ID, {
+        name: 'Peak Business Seasons',
+        startDate: '2026-02-01',
+        endDate: '2026-02-05',
+        departmentCodes: [],
+      });
+
+      expect(result.restrictedPeriods.map((period) => period.id)).toEqual([
+        'peak_business_seasons',
+        'peak_business_seasons_2',
+      ]);
+    });
+
+    it('rejects an end date before the start date', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.addLeaveRestrictedPeriod(ORG_ID, {
+          name: 'Reversed',
+          startDate: '2026-01-30',
+          endDate: '2026-01-24',
+          departmentCodes: [],
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addLeaveRestrictedPeriod(ORG_ID, {
+          name: 'Financial Year-End',
+          startDate: '2026-01-24',
+          endDate: '2026-01-30',
+        }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('updateLeaveRestrictedPeriod', () => {
+    it('applies only the provided fields', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveEntitlement: {
+          allocationMethod: null,
+          employmentTypes: [],
+          restrictedPeriods: [
+            {
+              id: 'financial_year_end',
+              name: 'Financial Year-End',
+              startDate: '2026-01-24',
+              endDate: '2026-01-30',
+              departmentCodes: ['fin'],
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateLeaveRestrictedPeriod(
+        ORG_ID,
+        'financial_year_end',
+        { endDate: '2026-02-02', departmentCodes: ['hr', 'hr'] },
+      );
+
+      expect(result.restrictedPeriods).toEqual([
+        {
+          id: 'financial_year_end',
+          name: 'Financial Year-End',
+          startDate: '2026-01-24',
+          endDate: '2026-02-02',
+          departmentCodes: ['hr'],
+        },
+      ]);
+    });
+
+    it('rejects an end date before the stored start date', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveEntitlement: {
+          allocationMethod: null,
+          employmentTypes: [],
+          restrictedPeriods: [
+            {
+              id: 'financial_year_end',
+              name: 'Financial Year-End',
+              startDate: '2026-01-24',
+              endDate: '2026-01-30',
+              departmentCodes: [],
+            },
+          ],
+        },
+      });
+
+      await expect(
+        service.updateLeaveRestrictedPeriod(ORG_ID, 'financial_year_end', {
+          endDate: '2026-01-01',
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the period is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateLeaveRestrictedPeriod(ORG_ID, 'missing', {
+          name: 'Nope',
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeLeaveRestrictedPeriod', () => {
+    it('removes a period by id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveEntitlement: {
+          allocationMethod: null,
+          employmentTypes: [],
+          restrictedPeriods: [
+            {
+              id: 'financial_year_end',
+              name: 'Financial Year-End',
+              startDate: '2026-01-24',
+              endDate: '2026-01-30',
+              departmentCodes: [],
+            },
+            {
+              id: 'peak_business_seasons',
+              name: 'Peak Business Seasons',
+              startDate: '2026-01-24',
+              endDate: '2026-01-30',
+              departmentCodes: [],
+            },
+          ],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.removeLeaveRestrictedPeriod(
+        ORG_ID,
+        'peak_business_seasons',
+      );
+
+      expect(result.restrictedPeriods).toEqual([
+        {
+          id: 'financial_year_end',
+          name: 'Financial Year-End',
+          startDate: '2026-01-24',
+          endDate: '2026-01-30',
+          departmentCodes: [],
+        },
+      ]);
+    });
+
+    it('throws a 404 when the period is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.removeLeaveRestrictedPeriod(ORG_ID, 'missing'),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });

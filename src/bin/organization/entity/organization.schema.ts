@@ -10,7 +10,10 @@ import {
   TaskType,
 } from '../../setting/employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../../setting/request-management/enum/request-management.enum';
-import { ApprovalDeadline } from '../../setting/leave-management/enum/leave-management.enum';
+import {
+  ApprovalDeadline,
+  LeaveAllocationMethod,
+} from '../../setting/leave-management/enum/leave-management.enum';
 
 export type OrganizationDocument = Organization & Document;
 
@@ -265,6 +268,44 @@ export class LeaveManagementSettings {
   holidaysCountAsLeave: boolean;
 }
 
+@Schema({ _id: false })
+export class LeaveRestrictedPeriod {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  name: string;
+
+  @Prop({ type: String, trim: true, default: null })
+  startDate: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  endDate: string | null;
+
+  @Prop({ type: [String], default: [] })
+  departmentCodes: string[];
+}
+
+@Schema({ _id: false })
+export class LeaveEntitlementSettings {
+  @Prop({
+    type: String,
+    enum: Object.values(LeaveAllocationMethod),
+    default: null,
+  })
+  allocationMethod: LeaveAllocationMethod | null;
+
+  @Prop({
+    type: [String],
+    enum: Object.values(EmploymentType),
+    default: [],
+  })
+  employmentTypes: EmploymentType[];
+
+  @Prop({ type: () => [LeaveRestrictedPeriod], default: [] })
+  restrictedPeriods: LeaveRestrictedPeriod[];
+}
+
 @Schema({ _id: true })
 export class RequestWorkflowStep {
   _id: Types.ObjectId;
@@ -426,6 +467,9 @@ export class Organization {
 
   @Prop({ type: () => LeaveManagementSettings, default: null })
   leaveManagement: LeaveManagementSettings | null;
+
+  @Prop({ type: () => LeaveEntitlementSettings, default: null })
+  leaveEntitlement: LeaveEntitlementSettings | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);

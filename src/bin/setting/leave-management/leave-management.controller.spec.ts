@@ -18,6 +18,11 @@ describe('LeaveManagementController (integration)', () => {
     updateLeaveManagementSettings: jest.Mock<AnyPromiseFn>;
     addLeaveCategory: jest.Mock<AnyPromiseFn>;
     removeLeaveCategory: jest.Mock<AnyPromiseFn>;
+    getLeaveEntitlementSettings: jest.Mock<AnyPromiseFn>;
+    updateLeaveEntitlementSettings: jest.Mock<AnyPromiseFn>;
+    addLeaveRestrictedPeriod: jest.Mock<AnyPromiseFn>;
+    updateLeaveRestrictedPeriod: jest.Mock<AnyPromiseFn>;
+    removeLeaveRestrictedPeriod: jest.Mock<AnyPromiseFn>;
   };
 
   const settings = {
@@ -28,6 +33,21 @@ describe('LeaveManagementController (integration)', () => {
     holidaysCountAsLeave: false,
   };
 
+  const entitlement = {
+    allocationMethod: 'fixed_days',
+    allocationMethodLabel: 'Fixed days',
+    employmentTypes: ['full_time', 'intern'],
+    restrictedPeriods: [
+      {
+        id: 'financial_year_end',
+        name: 'Financial Year-End',
+        startDate: '2026-01-24',
+        endDate: '2026-01-30',
+        departmentCodes: ['fin', 'hr'],
+      },
+    ],
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -36,6 +56,11 @@ describe('LeaveManagementController (integration)', () => {
       updateLeaveManagementSettings: jest.fn(),
       addLeaveCategory: jest.fn(),
       removeLeaveCategory: jest.fn(),
+      getLeaveEntitlementSettings: jest.fn(),
+      updateLeaveEntitlementSettings: jest.fn(),
+      addLeaveRestrictedPeriod: jest.fn(),
+      updateLeaveRestrictedPeriod: jest.fn(),
+      removeLeaveRestrictedPeriod: jest.fn(),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -175,6 +200,188 @@ describe('LeaveManagementController (integration)', () => {
 
       expect(response.status).toBe(400);
       expect(organisationService.removeLeaveCategory).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/leave-management/entitlement/retrieve', () => {
+    it('retrieves the leave entitlement settings', async () => {
+      organisationService.getLeaveEntitlementSettings.mockResolvedValue(
+        entitlement,
+      );
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/leave-management/entitlement/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(entitlement);
+      expect(
+        organisationService.getLeaveEntitlementSettings,
+      ).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('PATCH /setting/leave-management/entitlement/update', () => {
+    it('updates the leave entitlement settings', async () => {
+      organisationService.updateLeaveEntitlementSettings.mockResolvedValue(
+        entitlement,
+      );
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/leave-management/entitlement/update')
+        .send({
+          allocationMethod: 'fixed_days',
+          employmentTypes: ['full_time', 'intern'],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(entitlement);
+      expect(
+        organisationService.updateLeaveEntitlementSettings,
+      ).toHaveBeenCalledWith(ORG_ID, {
+        allocationMethod: 'fixed_days',
+        employmentTypes: ['full_time', 'intern'],
+      });
+    });
+
+    it('rejects an invalid allocation method', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/leave-management/entitlement/update')
+        .send({ allocationMethod: 'not_a_method' });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.updateLeaveEntitlementSettings,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid employment type', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/leave-management/entitlement/update')
+        .send({ employmentTypes: ['not_a_type'] });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.updateLeaveEntitlementSettings,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /setting/leave-management/entitlement/restricted-period/add', () => {
+    it('adds a leave restricted period', async () => {
+      organisationService.addLeaveRestrictedPeriod.mockResolvedValue(
+        entitlement,
+      );
+
+      const response = await request(app.getHttpServer())
+        .post('/setting/leave-management/entitlement/restricted-period/add')
+        .send({
+          name: 'Financial Year-End',
+          startDate: '2026-01-24',
+          endDate: '2026-01-30',
+          departmentCodes: ['fin', 'hr'],
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data).toEqual(entitlement);
+      expect(organisationService.addLeaveRestrictedPeriod).toHaveBeenCalledWith(
+        ORG_ID,
+        {
+          name: 'Financial Year-End',
+          startDate: '2026-01-24',
+          endDate: '2026-01-30',
+          departmentCodes: ['fin', 'hr'],
+        },
+      );
+    });
+
+    it('rejects an invalid date', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/leave-management/entitlement/restricted-period/add')
+        .send({
+          name: 'Financial Year-End',
+          startDate: 'not-a-date',
+          endDate: '2026-01-30',
+        });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.addLeaveRestrictedPeriod,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing name', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/leave-management/entitlement/restricted-period/add')
+        .send({ startDate: '2026-01-24', endDate: '2026-01-30' });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.addLeaveRestrictedPeriod,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/leave-management/entitlement/restricted-period/update', () => {
+    it('updates a leave restricted period by id', async () => {
+      organisationService.updateLeaveRestrictedPeriod.mockResolvedValue(
+        entitlement,
+      );
+
+      const response = await request(app.getHttpServer())
+        .patch(
+          '/setting/leave-management/entitlement/restricted-period/update?id=financial_year_end',
+        )
+        .send({ endDate: '2026-02-02' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(entitlement);
+      expect(
+        organisationService.updateLeaveRestrictedPeriod,
+      ).toHaveBeenCalledWith(ORG_ID, 'financial_year_end', {
+        endDate: '2026-02-02',
+      });
+    });
+
+    it('rejects a missing id', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/leave-management/entitlement/restricted-period/update')
+        .send({ name: 'Nope' });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.updateLeaveRestrictedPeriod,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DELETE /setting/leave-management/entitlement/restricted-period/remove', () => {
+    it('removes a leave restricted period by id', async () => {
+      organisationService.removeLeaveRestrictedPeriod.mockResolvedValue(
+        entitlement,
+      );
+
+      const response = await request(app.getHttpServer()).delete(
+        '/setting/leave-management/entitlement/restricted-period/remove?id=financial_year_end',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(entitlement);
+      expect(
+        organisationService.removeLeaveRestrictedPeriod,
+      ).toHaveBeenCalledWith(ORG_ID, 'financial_year_end');
+    });
+
+    it('rejects a missing id', async () => {
+      const response = await request(app.getHttpServer()).delete(
+        '/setting/leave-management/entitlement/restricted-period/remove',
+      );
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.removeLeaveRestrictedPeriod,
+      ).not.toHaveBeenCalled();
     });
   });
 });

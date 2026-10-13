@@ -21,6 +21,10 @@ import { SettingsDomainOrganisationService } from '../domain/settings.domain.org
 import { UpdateLeaveManagementDto } from './dto/update-leave-management.dto';
 import { AddLeaveCategoryDto } from './dto/add-leave-category.dto';
 import { LeaveCategoryQueryDto } from './dto/leave-category-query.dto';
+import { UpdateLeaveEntitlementDto } from './dto/update-leave-entitlement.dto';
+import { AddLeaveRestrictedPeriodDto } from './dto/add-leave-restricted-period.dto';
+import { UpdateLeaveRestrictedPeriodDto } from './dto/update-leave-restricted-period.dto';
+import { LeaveRestrictedPeriodQueryDto } from './dto/leave-restricted-period-query.dto';
 
 @Controller('setting/leave-management')
 @UseGuards(JwtAuthGuard, RoleGuard)
@@ -88,6 +92,93 @@ export class LeaveManagementController {
     );
     return AppResponse.success(
       'Leave category removed successfully',
+      200,
+      data,
+    );
+  }
+
+  @Get('entitlement/retrieve')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async retrieveEntitlement(@CurrentUser() user: ICurrentUser) {
+    const data = await this.organisationService.getLeaveEntitlementSettings(
+      user.organizationId!,
+    );
+    return AppResponse.success(
+      'Leave entitlement settings retrieved successfully',
+      200,
+      data,
+    );
+  }
+
+  @Patch('entitlement/update')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async updateEntitlement(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: UpdateLeaveEntitlementDto,
+  ) {
+    const data = await this.organisationService.updateLeaveEntitlementSettings(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success(
+      'Leave entitlement settings updated successfully',
+      200,
+      data,
+    );
+  }
+
+  @Post('entitlement/restricted-period/add')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  async addLeaveRestrictedPeriod(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: AddLeaveRestrictedPeriodDto,
+  ) {
+    const data = await this.organisationService.addLeaveRestrictedPeriod(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success(
+      'Leave restricted period added successfully',
+      201,
+      data,
+    );
+  }
+
+  @Patch('entitlement/restricted-period/update')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async updateLeaveRestrictedPeriod(
+    @CurrentUser() user: ICurrentUser,
+    @Query() { id }: LeaveRestrictedPeriodQueryDto,
+    @Body() dto: UpdateLeaveRestrictedPeriodDto,
+  ) {
+    const data = await this.organisationService.updateLeaveRestrictedPeriod(
+      user.organizationId!,
+      id,
+      dto,
+    );
+    return AppResponse.success(
+      'Leave restricted period updated successfully',
+      200,
+      data,
+    );
+  }
+
+  @Delete('entitlement/restricted-period/remove')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async removeLeaveRestrictedPeriod(
+    @CurrentUser() user: ICurrentUser,
+    @Query() { id }: LeaveRestrictedPeriodQueryDto,
+  ) {
+    const data = await this.organisationService.removeLeaveRestrictedPeriod(
+      user.organizationId!,
+      id,
+    );
+    return AppResponse.success(
+      'Leave restricted period removed successfully',
       200,
       data,
     );

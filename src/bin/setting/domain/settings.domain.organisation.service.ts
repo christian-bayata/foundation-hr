@@ -11,7 +11,9 @@ import {
   EmployeeWorkflowSettings,
   EmployerIssuedDocument,
   LeaveCategory,
+  LeaveEntitlementSettings,
   LeaveManagementSettings,
+  LeaveRestrictedPeriod,
   Location,
   NotificationPreferences,
   OnboardingDocument,
@@ -72,6 +74,10 @@ import {
 } from '../request-management/enum/request-management.enum';
 import { UpdateLeaveManagementDto } from '../leave-management/dto/update-leave-management.dto';
 import { AddLeaveCategoryDto } from '../leave-management/dto/add-leave-category.dto';
+import { UpdateLeaveEntitlementDto } from '../leave-management/dto/update-leave-entitlement.dto';
+import { AddLeaveRestrictedPeriodDto } from '../leave-management/dto/add-leave-restricted-period.dto';
+import { UpdateLeaveRestrictedPeriodDto } from '../leave-management/dto/update-leave-restricted-period.dto';
+import { LEAVE_ALLOCATION_METHOD_LABELS } from '../leave-management/enum/leave-management.enum';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -157,6 +163,12 @@ export const DEFAULT_LEAVE_MANAGEMENT_SETTINGS: LeaveManagementSettings = {
   autoApprovalEnabled: false,
   approvalDeadline: null,
   holidaysCountAsLeave: false,
+};
+
+export const DEFAULT_LEAVE_ENTITLEMENT_SETTINGS: LeaveEntitlementSettings = {
+  allocationMethod: null,
+  employmentTypes: [],
+  restrictedPeriods: [],
 };
 
 @Injectable()
@@ -3534,6 +3546,382 @@ export class SettingsDomainOrganisationService {
       return this.toLeaveManagementSettingsView(current);
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.removeLeaveCategory.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Deep-clone leave entitlement settings into mutable plain
+   * objects so the shared default constant is never mutated.
+   */
+  private cloneLeaveEntitlementSettings(
+    settings: LeaveEntitlementSettings,
+  ): LeaveEntitlementSettings {
+    return {
+      allocationMethod: settings.allocationMethod ?? null,
+      employmentTypes: [...(settings.employmentTypes ?? [])],
+      restrictedPeriods: (settings.restrictedPeriods ?? []).map((period) =>
+        this.toLeaveRestrictedPeriodPlain(period),
+      ),
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored restricted period into a mutable plain
+   * object.
+   */
+  private toLeaveRestrictedPeriodPlain(
+    period: LeaveRestrictedPeriod,
+  ): LeaveRestrictedPeriod {
+    return {
+      id: period.id,
+      name: period.name,
+      startDate: period.startDate ?? null,
+      endDate: period.endDate ?? null,
+      departmentCodes: [...(period.departmentCodes ?? [])],
+    };
+  }
+
+  /**
+   * @Responsibility: Present a restricted period in the shape consumed by the
+   * client.
+   */
+  private toLeaveRestrictedPeriodView(period: LeaveRestrictedPeriod) {
+    return {
+      id: period.id,
+      name: period.name,
+      startDate: period.startDate ?? null,
+      endDate: period.endDate ?? null,
+      departmentCodes: period.departmentCodes ?? [],
+    };
+  }
+
+  /**
+   * @Responsibility: Generate a restricted period id that is unique within an
+   * organization's restricted periods.
+   */
+  private uniqueLeaveRestrictedPeriodId(
+    settings: LeaveEntitlementSettings,
+    name: string,
+  ): string {
+    const existing = new Set(
+      (settings.restrictedPeriods ?? []).map((period) => period.id),
+    );
+    const base = this.slugify(name);
+    if (!existing.has(base)) return base;
+    let counter = 2;
+    while (existing.has(`${base}_${counter}`)) counter += 1;
+    return `${base}_${counter}`;
+  }
+
+  /**
+   * @Responsibility: Present leave entitlement settings in the shape consumed
+   * by the client.
+   */
+  private toLeaveEntitlementSettingsView(settings: LeaveEntitlementSettings) {
+    const allocationMethod = settings.allocationMethod ?? null;
+    return {
+      allocationMethod,
+      allocationMethodLabel: allocationMethod
+        ? LEAVE_ALLOCATION_METHOD_LABELS[allocationMethod]
+        : null,
+      employmentTypes: settings.employmentTypes ?? [],
+      restrictedPeriods: (settings.restrictedPeriods ?? []).map((period) =>
+        this.toLeaveRestrictedPeriodView(period),
+      ),
+    };
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's leave entitlement settings.
+   * The employment types and restricted periods start empty and grow as the
+   * organization configures them.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   *
+   * @throws {404} Organization not found
+   */
+  async getLeaveEntitlementSettings(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const settings =
+        organization!.leaveEntitlement ?? DEFAULT_LEAVE_ENTITLEMENT_SETTINGS;
+
+      return this.toLeaveEntitlementSettingsView(settings);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getLeaveEntitlementSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an organization's leave entitlement settings. Only
+   * the provided fields are changed; the remaining fields keep their current
+   * value.
+   *
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial leave entitlement settings payload
+   *
+   * @throws {404} Organization not found
+   */
+  async updateLeaveEntitlementSettings(
+    organizationId: string,
+    dto: UpdateLeaveEntitlementDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneLeaveEntitlementSettings(
+        found!.leaveEntitlement ?? DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
+      );
+
+      if (dto.allocationMethod !== undefined)
+        current.allocationMethod = dto.allocationMethod;
+      if (dto.employmentTypes !== undefined)
+        current.employmentTypes = [...new Set(dto.employmentTypes)];
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveEntitlement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization leave entitlement settings',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated leave entitlement settings for org ${organizationId}`,
+      );
+      return this.toLeaveEntitlementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateLeaveEntitlementSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add a leave restricted period to an organization's leave
+   * entitlement settings. The period id is generated from the name and the
+   * department codes are de-duplicated.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new restricted period payload
+   *
+   * @throws {400} End date is before the start date
+   * @throws {404} Organization not found
+   */
+  async addLeaveRestrictedPeriod(
+    organizationId: string,
+    dto: AddLeaveRestrictedPeriodDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      // if (dto.endDate < dto.startDate) {
+      //   AppResponse.error({
+      //     message: 'Restricted period end date cannot be before the start date',
+      //     status: HttpStatus.BAD_REQUEST,
+      //   });
+      // }
+
+      const current = this.cloneLeaveEntitlementSettings(
+        found!.leaveEntitlement ?? DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
+      );
+
+      const name = dto.name.trim();
+      current.restrictedPeriods.push({
+        id: this.uniqueLeaveRestrictedPeriodId(current, name),
+        name,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        departmentCodes: [...new Set(dto.departmentCodes ?? [])],
+      });
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveEntitlement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization leave restricted period',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added leave restricted period "${name}" for org ${organizationId}`,
+      );
+      return this.toLeaveEntitlementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addLeaveRestrictedPeriod.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update a leave restricted period of an organization's
+   * leave entitlement settings. Only the provided fields are changed.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The restricted period id to update
+   * @param dto - The partial restricted period payload
+   *
+   * @throws {400} End date is before the start date
+   * @throws {404} Organization or restricted period not found
+   */
+  async updateLeaveRestrictedPeriod(
+    organizationId: string,
+    id: string,
+    dto: UpdateLeaveRestrictedPeriodDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneLeaveEntitlementSettings(
+        found!.leaveEntitlement ?? DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
+      );
+
+      const period = current.restrictedPeriods.find((item) => item.id === id);
+      if (!period) {
+        AppResponse.error({
+          message: 'Leave restricted period not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.name !== undefined) period!.name = dto.name.trim();
+      if (dto.startDate !== undefined) period!.startDate = dto.startDate;
+      if (dto.endDate !== undefined) period!.endDate = dto.endDate;
+      if (dto.departmentCodes !== undefined)
+        period!.departmentCodes = [...new Set(dto.departmentCodes)];
+
+      if (
+        period!.startDate &&
+        period!.endDate &&
+        period!.endDate < period!.startDate
+      ) {
+        AppResponse.error({
+          message: 'Restricted period end date cannot be before the start date',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveEntitlement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization leave restricted period',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated leave restricted period "${id}" for org ${organizationId}`,
+      );
+      return this.toLeaveEntitlementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateLeaveRestrictedPeriod.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove a leave restricted period from an organization's
+   * leave entitlement settings by its id.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The restricted period id to remove
+   *
+   * @throws {404} Organization or restricted period not found
+   */
+  async removeLeaveRestrictedPeriod(organizationId: string, id: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneLeaveEntitlementSettings(
+        found!.leaveEntitlement ?? DEFAULT_LEAVE_ENTITLEMENT_SETTINGS,
+      );
+
+      const index = current.restrictedPeriods.findIndex(
+        (period) => period.id === id,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Leave restricted period not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.restrictedPeriods.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveEntitlement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to remove organization leave restricted period',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Removed leave restricted period "${id}" for org ${organizationId}`,
+      );
+      return this.toLeaveEntitlementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.removeLeaveRestrictedPeriod.name}`;
       AppResponse.error(error);
       throw error;
     }

@@ -14,3 +14,24 @@ export const APPROVAL_DEADLINE_LABELS: Record<ApprovalDeadline, string> = {
 
 export const APPROVAL_DEADLINES: ApprovalDeadline[] =
   Object.values(ApprovalDeadline);
+
+export enum LeaveAllocationMethod {
+  FIXED_DAYS = 'fixed_days',
+  ACCRUAL = 'accrual',
+  PRORATED = 'prorated',
+  TENURE = 'tenure',
+}
+
+export const LEAVE_ALLOCATION_METHOD_LABELS: Record<
+  LeaveAllocationMethod,
+  string
+> = {
+  [LeaveAllocationMethod.FIXED_DAYS]: 'Fixed days',
+  [LeaveAllocationMethod.ACCRUAL]: 'Accrual',
+  [LeaveAllocationMethod.PRORATED]: 'Prorated',
+  [LeaveAllocationMethod.TENURE]: 'Tenure',
+};
+
+export const LEAVE_ALLOCATION_METHODS: LeaveAllocationMethod[] = Object.values(
+  LeaveAllocationMethod,
+);
