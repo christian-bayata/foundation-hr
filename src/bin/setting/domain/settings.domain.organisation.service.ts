@@ -10,6 +10,8 @@ import {
   EmployeeProfileSettings,
   EmployeeWorkflowSettings,
   EmployerIssuedDocument,
+  LeaveCategory,
+  LeaveManagementSettings,
   Location,
   NotificationPreferences,
   OnboardingDocument,
@@ -68,6 +70,8 @@ import {
   REQUEST_TYPES,
   RequestType,
 } from '../request-management/enum/request-management.enum';
+import { UpdateLeaveManagementDto } from '../leave-management/dto/update-leave-management.dto';
+import { AddLeaveCategoryDto } from '../leave-management/dto/add-leave-category.dto';
 import { AddJobTitleDto } from '../organisation/dto/add-job-title.dto';
 import { UpdateJobTitleDto } from '../organisation/dto/update-job-title.dto';
 import {
@@ -145,6 +149,14 @@ export const DEFAULT_ONBOARDING_SETTINGS: OnboardingSettings = {
   educationalProfessionalCerts: [],
   medicalHealthRecords: [],
   employerIssuedDocuments: [],
+};
+
+export const DEFAULT_LEAVE_MANAGEMENT_SETTINGS: LeaveManagementSettings = {
+  leaveCategories: [],
+  allowCarryover: false,
+  autoApprovalEnabled: false,
+  approvalDeadline: null,
+  holidaysCountAsLeave: false,
 };
 
 @Injectable()
@@ -3239,6 +3251,289 @@ export class SettingsDomainOrganisationService {
       return 'Request workflow deleted';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.deleteRequestWorkflow.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Deep-clone leave management settings into mutable plain
+   * objects so the shared default constant is never mutated.
+   */
+  private cloneLeaveManagementSettings(
+    settings: LeaveManagementSettings,
+  ): LeaveManagementSettings {
+    return {
+      leaveCategories: (settings.leaveCategories ?? []).map((category) =>
+        this.toLeaveCategoryPlain(category),
+      ),
+      allowCarryover: settings.allowCarryover ?? false,
+      autoApprovalEnabled: settings.autoApprovalEnabled ?? false,
+      approvalDeadline: settings.approvalDeadline ?? null,
+      holidaysCountAsLeave: settings.holidaysCountAsLeave ?? false,
+    };
+  }
+
+  /**
+   * @Responsibility: Normalise a stored leave category into a mutable plain
+   * object.
+   */
+  private toLeaveCategoryPlain(category: LeaveCategory): LeaveCategory {
+    return {
+      id: category.id,
+      label: category.label,
+    };
+  }
+
+  /**
+   * @Responsibility: Present a leave category in the shape consumed by the
+   * client.
+   */
+  private toLeaveCategoryView(category: LeaveCategory) {
+    return {
+      id: category.id,
+      label: category.label,
+    };
+  }
+
+  /**
+   * @Responsibility: Generate a leave category id that is unique within an
+   * organization's categories.
+   */
+  private uniqueLeaveCategoryId(
+    settings: LeaveManagementSettings,
+    label: string,
+  ): string {
+    const existing = new Set(
+      (settings.leaveCategories ?? []).map((category) => category.id),
+    );
+    const base = this.slugify(label);
+    if (!existing.has(base)) return base;
+    let counter = 2;
+    while (existing.has(`${base}_${counter}`)) counter += 1;
+    return `${base}_${counter}`;
+  }
+
+  /**
+   * @Responsibility: Present leave management settings in the shape consumed by
+   * the client.
+   */
+  private toLeaveManagementSettingsView(settings: LeaveManagementSettings) {
+    return {
+      leaveCategories: (settings.leaveCategories ?? []).map((category) =>
+        this.toLeaveCategoryView(category),
+      ),
+      allowCarryover: settings.allowCarryover ?? false,
+      autoApprovalEnabled: settings.autoApprovalEnabled ?? false,
+      approvalDeadline: settings.approvalDeadline ?? null,
+      holidaysCountAsLeave: settings.holidaysCountAsLeave ?? false,
+    };
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's leave management settings. The
+   * leave categories start empty and grow as the organization adds them.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   *
+   * @throws {404} Organization not found
+   */
+  async getLeaveManagementSettings(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      const settings =
+        organization!.leaveManagement ?? DEFAULT_LEAVE_MANAGEMENT_SETTINGS;
+
+      return this.toLeaveManagementSettingsView(settings);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getLeaveManagementSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an organization's leave management settings. Only
+   * the provided fields are changed; the remaining fields keep their current
+   * value.
+   *
+   * @param organizationId - The organization to update settings for
+   * @param dto - The partial leave management settings payload
+   *
+   * @throws {404} Organization not found
+   */
+  async updateLeaveManagementSettings(
+    organizationId: string,
+    dto: UpdateLeaveManagementDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneLeaveManagementSettings(
+        found!.leaveManagement ?? DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
+      );
+
+      if (dto.allowCarryover !== undefined)
+        current.allowCarryover = dto.allowCarryover;
+      if (dto.autoApprovalEnabled !== undefined)
+        current.autoApprovalEnabled = dto.autoApprovalEnabled;
+      if (dto.approvalDeadline !== undefined)
+        current.approvalDeadline = dto.approvalDeadline;
+      if (dto.holidaysCountAsLeave !== undefined)
+        current.holidaysCountAsLeave = dto.holidaysCountAsLeave;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveManagement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization leave management settings',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated leave management settings for org ${organizationId}`,
+      );
+      return this.toLeaveManagementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateLeaveManagementSettings.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Add a leave category to an organization's leave
+   * management settings. The category id is generated from the label; existing
+   * categories are kept and duplicates (by label, ignoring case) are ignored.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The new category payload
+   *
+   * @throws {404} Organization not found
+   */
+  async addLeaveCategory(organizationId: string, dto: AddLeaveCategoryDto) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneLeaveManagementSettings(
+        found!.leaveManagement ?? DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
+      );
+
+      const label = dto.label.trim();
+      const exists = current.leaveCategories.some(
+        (category) => category.label.toLowerCase() === label.toLowerCase(),
+      );
+      if (!exists) {
+        current.leaveCategories.push({
+          id: this.uniqueLeaveCategoryId(current, label),
+          label,
+        });
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveManagement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to add organization leave category',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Added leave category "${label}" for org ${organizationId}`,
+      );
+      return this.toLeaveManagementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.addLeaveCategory.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Remove a leave category from an organization's leave
+   * management settings by its id.
+   *
+   * @param organizationId - The organization to update
+   * @param id - The category id to remove
+   *
+   * @throws {404} Organization or leave category not found
+   */
+  async removeLeaveCategory(organizationId: string, id: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneLeaveManagementSettings(
+        found!.leaveManagement ?? DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
+      );
+
+      const index = current.leaveCategories.findIndex(
+        (category) => category.id === id,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Leave category not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      current.leaveCategories.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveManagement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to remove organization leave category',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Removed leave category "${id}" for org ${organizationId}`,
+      );
+      return this.toLeaveManagementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.removeLeaveCategory.name}`;
       AppResponse.error(error);
       throw error;
     }

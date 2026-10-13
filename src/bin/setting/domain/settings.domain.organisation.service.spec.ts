@@ -14,6 +14,7 @@ import { AuthUtility } from '../../auth/auth.utility';
 import {
   DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
   DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+  DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
   DEFAULT_NOTIFICATION_PREFERENCES,
   SettingsDomainOrganisationService,
 } from './settings.domain.organisation.service';
@@ -22,6 +23,7 @@ import {
   ResponsibleParty,
 } from '../employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../request-management/enum/request-management.enum';
+import { ApprovalDeadline } from '../leave-management/enum/leave-management.enum';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const DIRECTOR_ID = '64f1b2c3d4e5f678901234ba';
@@ -2724,6 +2726,231 @@ describe('SettingsDomainOrganisationService', () => {
 
       await expect(
         service.deleteRequestWorkflow(ORG_ID, 'missing'),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getLeaveManagementSettings', () => {
+    it('returns the defaults when no settings are stored', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.getLeaveManagementSettings(ORG_ID);
+
+      expect(result).toEqual(DEFAULT_LEAVE_MANAGEMENT_SETTINGS);
+    });
+
+    it('returns the stored settings', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [
+            { id: 'annual_leave', label: 'Annual leave' },
+            { id: 'sick_leave', label: 'Sick leave' },
+          ],
+          allowCarryover: true,
+          autoApprovalEnabled: true,
+          approvalDeadline: ApprovalDeadline.THREE_DAYS_AFTER_REQUESTED,
+          holidaysCountAsLeave: true,
+        },
+      });
+
+      const result = await service.getLeaveManagementSettings(ORG_ID);
+
+      expect(result).toEqual({
+        leaveCategories: [
+          { id: 'annual_leave', label: 'Annual leave' },
+          { id: 'sick_leave', label: 'Sick leave' },
+        ],
+        allowCarryover: true,
+        autoApprovalEnabled: true,
+        approvalDeadline: ApprovalDeadline.THREE_DAYS_AFTER_REQUESTED,
+        holidaysCountAsLeave: true,
+      });
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(service.getLeaveManagementSettings(ORG_ID)).rejects.toThrow(
+        AppException,
+      );
+    });
+  });
+
+  describe('updateLeaveManagementSettings', () => {
+    it('applies only the provided fields', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+          allowCarryover: false,
+          autoApprovalEnabled: false,
+          approvalDeadline: null,
+          holidaysCountAsLeave: false,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateLeaveManagementSettings(ORG_ID, {
+        allowCarryover: true,
+        approvalDeadline: ApprovalDeadline.ONE_DAY_AFTER_REQUESTED,
+      } as any);
+
+      expect(result.allowCarryover).toBe(true);
+      expect(result.approvalDeadline).toBe(
+        ApprovalDeadline.ONE_DAY_AFTER_REQUESTED,
+      );
+      expect(result.leaveCategories).toEqual([
+        { id: 'annual_leave', label: 'Annual leave' },
+      ]);
+      expect(result.autoApprovalEnabled).toBe(false);
+      expect(result.holidaysCountAsLeave).toBe(false);
+    });
+
+    it('clears the approval deadline when null is provided', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [],
+          allowCarryover: false,
+          autoApprovalEnabled: false,
+          approvalDeadline: ApprovalDeadline.TWO_DAYS_AFTER_REQUESTED,
+          holidaysCountAsLeave: false,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateLeaveManagementSettings(ORG_ID, {
+        approvalDeadline: null,
+      } as any);
+
+      expect(result.approvalDeadline).toBeNull();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.updateLeaveManagementSettings(ORG_ID, {
+          allowCarryover: true,
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addLeaveCategory', () => {
+    it('appends a new category with a slug id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addLeaveCategory(ORG_ID, {
+        label: 'Annual leave',
+      } as any);
+
+      expect(result.leaveCategories).toEqual([
+        { id: 'annual_leave', label: 'Annual leave' },
+      ]);
+    });
+
+    it('ignores a duplicate category regardless of case', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+          allowCarryover: false,
+          autoApprovalEnabled: false,
+          approvalDeadline: null,
+          holidaysCountAsLeave: false,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addLeaveCategory(ORG_ID, {
+        label: 'annual leave',
+      } as any);
+
+      expect(result.leaveCategories).toEqual([
+        { id: 'annual_leave', label: 'Annual leave' },
+      ]);
+    });
+
+    it('trims the category label', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addLeaveCategory(ORG_ID, {
+        label: '  Sick leave  ',
+      } as any);
+
+      expect(result.leaveCategories).toEqual([
+        { id: 'sick_leave', label: 'Sick leave' },
+      ]);
+    });
+
+    it('suffixes the id when the slug already exists', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+          allowCarryover: false,
+          autoApprovalEnabled: false,
+          approvalDeadline: null,
+          holidaysCountAsLeave: false,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addLeaveCategory(ORG_ID, {
+        label: 'Annual-Leave',
+      } as any);
+
+      expect(result.leaveCategories).toEqual([
+        { id: 'annual_leave', label: 'Annual leave' },
+        { id: 'annual_leave_2', label: 'Annual-Leave' },
+      ]);
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.addLeaveCategory(ORG_ID, { label: 'Annual leave' } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeLeaveCategory', () => {
+    it('removes a category by id', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [
+            { id: 'annual_leave', label: 'Annual leave' },
+            { id: 'sick_leave', label: 'Sick leave' },
+          ],
+          allowCarryover: false,
+          autoApprovalEnabled: false,
+          approvalDeadline: null,
+          holidaysCountAsLeave: false,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.removeLeaveCategory(ORG_ID, 'sick_leave');
+
+      expect(result.leaveCategories).toEqual([
+        { id: 'annual_leave', label: 'Annual leave' },
+      ]);
+    });
+
+    it('throws a 404 when the category is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.removeLeaveCategory(ORG_ID, 'missing'),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });

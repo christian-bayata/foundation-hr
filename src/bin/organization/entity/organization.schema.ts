@@ -10,6 +10,7 @@ import {
   TaskType,
 } from '../../setting/employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../../setting/request-management/enum/request-management.enum';
+import { ApprovalDeadline } from '../../setting/leave-management/enum/leave-management.enum';
 
 export type OrganizationDocument = Organization & Document;
 
@@ -237,6 +238,33 @@ export class OnboardingSettings {
   employerIssuedDocuments: EmployerIssuedDocument[];
 }
 
+@Schema({ _id: false })
+export class LeaveCategory {
+  @Prop({ type: String, trim: true, required: true })
+  id: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  label: string;
+}
+
+@Schema({ _id: false })
+export class LeaveManagementSettings {
+  @Prop({ type: () => [LeaveCategory], default: [] })
+  leaveCategories: LeaveCategory[];
+
+  @Prop({ type: Boolean, default: false })
+  allowCarryover: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  autoApprovalEnabled: boolean;
+
+  @Prop({ type: String, enum: Object.values(ApprovalDeadline), default: null })
+  approvalDeadline: ApprovalDeadline | null;
+
+  @Prop({ type: Boolean, default: false })
+  holidaysCountAsLeave: boolean;
+}
+
 @Schema({ _id: true })
 export class RequestWorkflowStep {
   _id: Types.ObjectId;
@@ -395,6 +423,9 @@ export class Organization {
 
   @Prop({ type: () => [RequestWorkflow], default: [] })
   requestWorkflows: RequestWorkflow[];
+
+  @Prop({ type: () => LeaveManagementSettings, default: null })
+  leaveManagement: LeaveManagementSettings | null;
 }
 
 export const OrganizationSchema = SchemaFactory.createForClass(Organization);
