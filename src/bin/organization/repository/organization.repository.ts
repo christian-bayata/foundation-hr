@@ -78,6 +78,23 @@ export class OrganizationRepository {
   }
 
   /**
+   * @Responsibility: Repo to update an organization
+   *
+   * @param where
+   * @param data
+   * @returns {Promise<void>}
+   */
+  async updateOrg(where: PropDataInput, data: any): Promise<void> {
+    try {
+      await this.organizationModel.findOneAndUpdate(where, data, {
+        new: true,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to partially update an organization by its id
    *
    * @param organizationId - The organization's id

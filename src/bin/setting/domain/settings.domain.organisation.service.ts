@@ -832,42 +832,12 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      const current: Branding = found!.branding ?? {
-        logoUrl: null,
-        navigationBackgroundColor: null,
-        buttonColor: null,
-        customDomains: [],
-        loginPageImages: [],
-        selectedLoginImg: null,
-      };
-
-      const merged: Branding = { ...current };
-
-      if (dto.logoUrl !== undefined) merged.logoUrl = dto.logoUrl;
-      if (dto.navigationBackgroundColor !== undefined)
-        merged.navigationBackgroundColor = dto.navigationBackgroundColor;
-      if (dto.buttonColor !== undefined) merged.buttonColor = dto.buttonColor;
-      if (dto.customDomains !== undefined)
-        merged.customDomains = dto.customDomains;
-      if (dto.loginPageImages !== undefined)
-        merged.loginPageImages = dto.loginPageImages;
-      if (dto.selectedLoginImg !== undefined)
-        merged.selectedLoginImg = dto.selectedLoginImg;
-
-      const updated = await this.organizationRepository.updateById(
-        organizationId,
-        { branding: merged },
+      await this.organizationRepository.updateOrg(
+        { organizationId },
+        { ...dto },
       );
 
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update organization branding',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
-
-      this.logger.log(`Updated branding for org ${organizationId}`);
-      return updated!.branding ?? merged;
+      return 'Updated branding for org';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateBranding.name}`;
       AppResponse.error(error);

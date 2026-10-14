@@ -331,7 +331,7 @@ export class SettingsDomainAccessControlService {
       }
 
       return roles.map((role) => ({
-        ...role.toObject(),
+        ...role.toObject({ flattenMaps: true }),
         users: usersByRole.get(String(role._id)) ?? [],
       }));
     } catch (error: any) {
