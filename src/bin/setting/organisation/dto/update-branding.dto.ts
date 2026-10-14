@@ -33,4 +33,7 @@ export class UpdateBrandingDto {
   @IsString({ each: true, message: 'Each login page image must be a string.' })
   @IsOptional()
   loginPageImages?: string[];
+
+  @IsOptional()
+  selectedLoginImg?: string;
 }

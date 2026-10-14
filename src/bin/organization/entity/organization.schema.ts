@@ -86,6 +86,9 @@ export class Branding {
 
   @Prop({ type: [String], default: [] })
   loginPageImages: string[];
+
+  @Prop({ type: String, default: null })
+  selectedLoginImg?: string | null;
 }
 
 @Schema({ _id: false })

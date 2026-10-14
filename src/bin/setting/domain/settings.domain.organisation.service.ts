@@ -838,6 +838,7 @@ export class SettingsDomainOrganisationService {
         buttonColor: null,
         customDomains: [],
         loginPageImages: [],
+        selectedLoginImg: null,
       };
 
       const merged: Branding = { ...current };
@@ -850,6 +851,8 @@ export class SettingsDomainOrganisationService {
         merged.customDomains = dto.customDomains;
       if (dto.loginPageImages !== undefined)
         merged.loginPageImages = dto.loginPageImages;
+      if (dto.selectedLoginImg !== undefined)
+        merged.selectedLoginImg = dto.selectedLoginImg;
 
       const updated = await this.organizationRepository.updateById(
         organizationId,
