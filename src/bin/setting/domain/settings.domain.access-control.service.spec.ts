@@ -87,11 +87,13 @@ describe('SettingsDomainAccessControlService company admin', () => {
 
     roleRepository = {
       findById: jest.fn(),
+      findByOrganization: jest.fn(),
       findByOrganizationAndName: jest.fn(),
       findByOrganizationAndParentSystemRoles: jest.fn(),
     };
     userRoleRepository = {
       findByUserAndOrganization: jest.fn(),
+      findByOrganization: jest.fn(),
       findByIdAndOrganization: jest.fn(),
       findByFilters: jest.fn(),
       assign: jest.fn(),
@@ -978,6 +980,95 @@ describe('SettingsDomainAccessControlService company admin', () => {
       expect(userRoleRepository.assign).toHaveBeenCalledWith(
         expect.objectContaining({ systemSettings: true }),
       );
+    });
+  });
+
+  describe('getRolesByOrganization', () => {
+    const roleDoc = (over: Record<string, any> = {}) => {
+      const plain = {
+        _id: oid(HR_ROLE_ID),
+        organizationId: ORG_ID,
+        name: 'HR Admin',
+        description: null,
+        isSystemRole: false,
+        parentSystemRole: SystemRole.HR_ADMIN,
+        infoAccess: 'everyone',
+        modulePermissions: {},
+        ...over,
+      };
+      return { ...plain, toObject: () => plain };
+    };
+
+    it('attaches the users assigned to each role', async () => {
+      roleRepository.findByOrganization.mockResolvedValue([
+        roleDoc(),
+        roleDoc({
+          _id: oid(OWNER_ROLE_ID),
+          name: 'Owner',
+          parentSystemRole: SystemRole.COMPANY_OWNER,
+        }),
+      ]);
+
+      const hrUser = user({ _id: oid('64f1b2c3d4e5f6789010a001') });
+      const ownerUser = user({
+        _id: oid('64f1b2c3d4e5f6789010a002'),
+        firstName: 'Ada',
+        lastName: 'Obi',
+        email: 'ada@foundation.com',
+      });
+      userRoleRepository.findByOrganization.mockResolvedValue([
+        assignment({ roleId: oid(HR_ROLE_ID), userId: String(hrUser._id) }),
+        assignment({
+          _id: oid('64f1b2c3d4e5f6789010a0a9'),
+          roleId: oid(OWNER_ROLE_ID),
+          userId: String(ownerUser._id),
+        }),
+      ]);
+      inviteeUserRepository.findByIds.mockResolvedValue([hrUser, ownerUser]);
+
+      const result = await service.getRolesByOrganization(ORG_ID);
+
+      expect(inviteeUserRepository.findByIds).toHaveBeenCalledWith([
+        String(hrUser._id),
+        String(ownerUser._id),
+      ]);
+      expect(result[0].users).toEqual([
+        {
+          userId: String(hrUser._id),
+          firstName: 'Jobi',
+          lastName: 'Olusayo',
+          email: 'olusayo@foundation.com',
+        },
+      ]);
+      expect(result[1].users).toEqual([
+        {
+          userId: String(ownerUser._id),
+          firstName: 'Ada',
+          lastName: 'Obi',
+          email: 'ada@foundation.com',
+        },
+      ]);
+    });
+
+    it('returns an empty users array for a role with no assignments', async () => {
+      roleRepository.findByOrganization.mockResolvedValue([roleDoc()]);
+      userRoleRepository.findByOrganization.mockResolvedValue([]);
+
+      const result = await service.getRolesByOrganization(ORG_ID);
+
+      expect(result[0].users).toEqual([]);
+    });
+
+    it('skips assignments whose user can no longer be resolved', async () => {
+      roleRepository.findByOrganization.mockResolvedValue([roleDoc()]);
+      userRoleRepository.findByOrganization.mockResolvedValue([
+        assignment({ roleId: oid(HR_ROLE_ID) }),
+      ]);
+      inviteeUserRepository.findByIds.mockResolvedValue([]);
+
+      const result = await service.getRolesByOrganization(ORG_ID);
+
+      expect(result[0].users).toEqual([]);
     });
   });
 });

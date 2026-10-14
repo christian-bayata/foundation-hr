@@ -12,6 +12,7 @@ import {
   PaginatedResult,
 } from './access-control/interface/company-admin.interface';
 import { RoleDocument } from './access-control/entity/role.schema';
+import { RoleWithUsers } from './access-control/interface/role.interface';
 import { UpdateGeneralInfoDto } from './organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from './organisation/dto/update-locations.dto';
@@ -93,12 +94,13 @@ export class SettingService {
   }
 
   /**
-   * @Responsibility: Module-level facade to retrieve all roles (system + custom) for an organization
+   * @Responsibility: Module-level facade to retrieve all roles (system + custom) for an
+   * organization, each carrying the users assigned to it
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<RoleDocument[]>}
+   * @returns {Promise<RoleWithUsers[]>}
    */
-  getRolesByOrganization(organizationId: string): Promise<RoleDocument[]> {
+  getRolesByOrganization(organizationId: string): Promise<RoleWithUsers[]> {
     return this.accessControlDomainService.getRolesByOrganization(
       organizationId,
     );

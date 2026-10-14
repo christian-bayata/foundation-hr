@@ -93,6 +93,23 @@ export class UserRoleRepository {
   }
 
   /**
+   * @Responsibility: Repo to retrieve all role assignments in an organization.
+   * Used to hydrate every role at once without a per-role query.
+   *
+   * @param organizationId - The organization to scope the query to
+   * @returns {Promise<UserRoleDocument[]>}
+   */
+  async findByOrganization(
+    organizationId: string,
+  ): Promise<UserRoleDocument[]> {
+    try {
+      return await this.userRoleModel.find({ organizationId }).exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to retrieve every role assignment matching a company admin
    * filter, with each assignment's role document populated. Sorting and pagination
    * are applied by the domain service because the admin set is small and the

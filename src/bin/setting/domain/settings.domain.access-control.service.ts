@@ -25,6 +25,10 @@ import {
   PaginatedResult,
   TimestampedUserRole,
 } from '../access-control/interface/company-admin.interface';
+import {
+  RoleUserView,
+  RoleWithUsers,
+} from '../access-control/interface/role.interface';
 import { AppResponse } from '../../../common/response/app-response';
 import { EmailService } from '../../../email/email.service';
 import { roleInviteTemplate } from '../../../email/template/role-invite.template';
@@ -287,16 +291,49 @@ export class SettingsDomainAccessControlService {
   }
 
   /**
-   * @Responsibility: Get all roles (system + custom) for an organization
+   * @Responsibility: Get all roles (system + custom) for an organization, each
+   * carrying the users assigned to it. The roles, their assignments and the
+   * assignment users are resolved in three batched queries so the listing does
+   * not fan out into a per-role query.
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<RoleDocument[]>}
+   * @returns {Promise<RoleWithUsers[]>}
    */
   async getRolesByOrganization(
     organizationId: string,
-  ): Promise<RoleDocument[]> {
+  ): Promise<RoleWithUsers[]> {
     try {
-      return await this.roleRepository.findByOrganization(organizationId);
+      const roles =
+        await this.roleRepository.findByOrganization(organizationId);
+      const assignments =
+        await this.userRoleRepository.findByOrganization(organizationId);
+
+      const userIds = [
+        ...new Set(assignments.map((assignment) => assignment.userId)),
+      ];
+      const users = await this.inviteeUserRepository.findByIds(userIds);
+      const userById = new Map(users.map((user) => [String(user._id), user]));
+
+      const usersByRole = new Map<string, RoleUserView[]>();
+      for (const assignment of assignments) {
+        const user = userById.get(assignment.userId);
+        if (!user) continue;
+
+        const roleId = String(assignment.roleId);
+        const roleUsers = usersByRole.get(roleId) ?? [];
+        roleUsers.push({
+          userId: String(user._id),
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+        });
+        usersByRole.set(roleId, roleUsers);
+      }
+
+      return roles.map((role) => ({
+        ...role.toObject(),
+        users: usersByRole.get(String(role._id)) ?? [],
+      }));
     } catch (error: any) {
       this.logger.error(`Failed to get roles for org ${organizationId}`, error);
       throw error;
