@@ -642,6 +642,7 @@ export class SettingsDomainOrganisationService {
         code: this.authUtility.generateRandomString(),
         name,
         url: dto.url,
+        fileType: dto.fileType,
         publicId: this.fileUploadService.derivePublicId(dto.url),
         uploadedByUserId: actor?.userId ?? null,
         uploadedByEmail: actor?.email ?? null,

@@ -19,4 +19,10 @@ export class AddPolicyDto {
     { message: 'Document URL must be a valid URL.' },
   )
   url: string;
+
+  @IsString()
+  @IsNotEmpty({
+    message: 'Document File Type is required.',
+  })
+  fileType: string;
 }

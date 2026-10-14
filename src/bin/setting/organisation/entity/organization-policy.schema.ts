@@ -17,6 +17,9 @@ export class OrganizationPolicy {
   @Prop({ type: String, required: true })
   url: string;
 
+  @Prop({ type: String, required: true })
+  fileType: string;
+
   @Prop({ type: String, default: null })
   publicId: string | null;
 
