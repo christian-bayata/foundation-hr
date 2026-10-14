@@ -79,12 +79,19 @@ export class FileUploadService {
     const folder = `${this.folder}/${flag}`;
 
     try {
-      const result = await this.uploadToCloudinary(file, folder, resourceType);
+      const result = await this.uploadToCloudinary(
+        file,
+        folder,
+        resourceType,
+        extension,
+      );
+
+      const format = result.format || extension;
 
       return {
-        url: result.secure_url,
+        url: this.ensureExtension(result.secure_url, format),
         publicId: result.public_id,
-        format: result.format,
+        format,
         size: result.bytes,
       };
     } catch (error) {
@@ -165,12 +172,14 @@ export class FileUploadService {
     file: Express.Multer.File,
     folder: string,
     resourceType: 'image' | 'raw',
+    format: string,
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder,
           resource_type: resourceType,
+          format,
           use_filename: true,
           unique_filename: true,
         },
@@ -186,5 +195,28 @@ export class FileUploadService {
 
       uploadStream.end(file.buffer);
     });
+  }
+
+  /**
+   * @Responsibility: Guarantee a Cloudinary url/public id ends with its
+   * file extension (e.g. `.pdf`), regardless of how Cloudinary formatted
+   * the delivered url. Query strings and fragments are preserved.
+   *
+   * @param {string} value the secure_url or public_id returned by Cloudinary
+   * @param {string} format the file extension without a leading dot
+   * @returns {string}
+   */
+  private ensureExtension(value: string, format: string): string {
+    if (!value) return value;
+
+    const extension = `.${format.toLowerCase()}`;
+
+    const suffixIndex = value.search(/[?#]/);
+    const path = suffixIndex === -1 ? value : value.slice(0, suffixIndex);
+    const suffix = suffixIndex === -1 ? '' : value.slice(suffixIndex);
+
+    if (path.toLowerCase().endsWith(extension)) return value;
+
+    return `${path}${extension}${suffix}`;
   }
 }

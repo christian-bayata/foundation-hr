@@ -58,4 +58,39 @@ describe('FileUploadService', () => {
       expect(service.derivePublicId(undefined as unknown as string)).toBeNull();
     });
   });
+
+  describe('ensureExtension', () => {
+    const ensure = (value: string, format: string) =>
+      (service as unknown as {
+        ensureExtension: (v: string, f: string) => string;
+      }).ensureExtension(value, format);
+
+    it('appends the extension when the url has none', () => {
+      expect(
+        ensure(
+          'https://res.cloudinary.com/bayata/raw/upload/v1791986460/foundation_hr_files/pdf/file_b7i987',
+          'pdf',
+        ),
+      ).toBe(
+        'https://res.cloudinary.com/bayata/raw/upload/v1791986460/foundation_hr_files/pdf/file_b7i987.pdf',
+      );
+    });
+
+    it('keeps a url that already ends with the extension', () => {
+      expect(
+        ensure(
+          'https://res.cloudinary.com/bayata/raw/upload/v1/foundation_hr_files/pdf/file_b7i987.pdf',
+          'pdf',
+        ),
+      ).toBe(
+        'https://res.cloudinary.com/bayata/raw/upload/v1/foundation_hr_files/pdf/file_b7i987.pdf',
+      );
+    });
+
+    it('preserves query strings and fragments when appending', () => {
+      expect(ensure('https://cdn.example.com/report?dl=1', 'pdf')).toBe(
+        'https://cdn.example.com/report.pdf?dl=1',
+      );
+    });
+  });
 });
