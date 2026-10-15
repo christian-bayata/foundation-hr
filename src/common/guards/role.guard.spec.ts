@@ -11,10 +11,30 @@ const USER_ID = 'usr-1';
 
 type AnyPromiseFn = (...args: any[]) => Promise<any>;
 
+/** A populated role document as returned by UserRoleRepository.populate('roleId'). */
+const role = (
+  parentSystemRole: SystemRole,
+  organizationId: string = ORG_ID,
+) => ({
+  parentSystemRole,
+  organizationId,
+});
+
+/** A user-role assignment as returned by UserRoleRepository (roleId populated). */
+const assignment = (over: Record<string, any> = {}) => ({
+  _id: 'assignment-1',
+  userId: USER_ID,
+  organizationId: ORG_ID,
+  roleId: role(SystemRole.HR_ADMIN),
+  systemSettings: true,
+  ...over,
+});
+
 describe('RoleGuard', () => {
   let guard: RoleGuard;
   let reflector: Record<string, jest.Mock<AnyPromiseFn>>;
-  let roleService: Record<string, jest.Mock<AnyPromiseFn>>;
+  let userRoleRepository: Record<string, jest.Mock<AnyPromiseFn>>;
+  let organizationRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let context: ExecutionContext;
 
   /** Builds a context whose request carries `user`, with the given metadata. */
@@ -48,29 +68,36 @@ describe('RoleGuard', () => {
     jest.clearAllMocks();
 
     reflector = { getAllAndOverride: jest.fn() };
-    roleService = {
-      getUserSystemRoles: jest
-        .fn()
-        .mockResolvedValue([SystemRole.HR_ADMIN]),
-      findOrganizationForUser: jest.fn().mockResolvedValue(ORG_ID),
-      hasSystemSettingsAccess: jest.fn().mockResolvedValue(true),
+    userRoleRepository = {
+      findByUserAndOrganization: jest.fn().mockResolvedValue([assignment()]),
+      findByUser: jest.fn().mockResolvedValue([assignment()]),
+    };
+    organizationRepository = {
+      isOwner: jest.fn().mockResolvedValue(false),
+      findOrganizationByOwner: jest.fn().mockResolvedValue(null),
     };
 
     guard = new RoleGuard(
       reflector as unknown as Reflector,
-      roleService as any,
+      userRoleRepository as any,
+      organizationRepository as any,
     );
-    context = contextFor(withRoles(), { userId: USER_ID, organizationId: ORG_ID });
+    context = contextFor(withRoles(), {
+      userId: USER_ID,
+      organizationId: ORG_ID,
+    });
   });
 
   describe('without @RequiresSystemSettings', () => {
     it('allows a user holding a required role', async () => {
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(roleService.hasSystemSettingsAccess).not.toHaveBeenCalled();
+      expect(organizationRepository.isOwner).toHaveBeenCalledTimes(1);
     });
 
     it('denies a user without a required role', async () => {
-      roleService.getUserSystemRoles.mockResolvedValue([SystemRole.EMPLOYEE]);
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([
+        assignment({ roleId: role(SystemRole.EMPLOYEE) }),
+      ]);
 
       await expect(guard.canActivate(context)).resolves.toBe(false);
     });
@@ -79,8 +106,10 @@ describe('RoleGuard', () => {
       context = contextFor({}, { userId: USER_ID, organizationId: ORG_ID });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(roleService.getUserSystemRoles).not.toHaveBeenCalled();
-      expect(roleService.hasSystemSettingsAccess).not.toHaveBeenCalled();
+      expect(
+        userRoleRepository.findByUserAndOrganization,
+      ).not.toHaveBeenCalled();
+      expect(organizationRepository.isOwner).not.toHaveBeenCalled();
     });
   });
 
@@ -92,14 +121,16 @@ describe('RoleGuard', () => {
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(roleService.hasSystemSettingsAccess).toHaveBeenCalledWith(
+      expect(userRoleRepository.findByUserAndOrganization).toHaveBeenCalledWith(
         USER_ID,
         ORG_ID,
       );
     });
 
     it('denies a user whose settings access was revoked', async () => {
-      roleService.hasSystemSettingsAccess.mockResolvedValue(false);
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([
+        assignment({ systemSettings: false }),
+      ]);
       context = contextFor(withRoles(true), {
         userId: USER_ID,
         organizationId: ORG_ID,
@@ -109,37 +140,64 @@ describe('RoleGuard', () => {
     });
 
     it('denies before the access check when the user lacks a required role', async () => {
-      roleService.getUserSystemRoles.mockResolvedValue([SystemRole.EMPLOYEE]);
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([
+        assignment({ roleId: role(SystemRole.EMPLOYEE) }),
+      ]);
       context = contextFor(withRoles(true), {
         userId: USER_ID,
         organizationId: ORG_ID,
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(false);
-      expect(roleService.hasSystemSettingsAccess).not.toHaveBeenCalled();
+      expect(
+        userRoleRepository.findByUserAndOrganization,
+      ).toHaveBeenCalledTimes(1);
     });
 
     it('still enforces settings access on a route with no @Roles', async () => {
-      roleService.hasSystemSettingsAccess.mockResolvedValue(false);
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([
+        assignment({ systemSettings: false }),
+      ]);
       context = contextFor(
         { [REQUIRES_SYSTEM_SETTINGS_KEY]: true },
         { userId: USER_ID, organizationId: ORG_ID },
       );
 
       await expect(guard.canActivate(context)).resolves.toBe(false);
-      expect(roleService.getUserSystemRoles).not.toHaveBeenCalled();
-      expect(roleService.hasSystemSettingsAccess).toHaveBeenCalled();
+      expect(
+        userRoleRepository.findByUserAndOrganization,
+      ).toHaveBeenCalledTimes(1);
     });
 
-    it('resolves the organization from the role service when the token omits it', async () => {
+    it('resolves the organization from the user roles when the token omits it', async () => {
       context = contextFor(withRoles(true), { userId: USER_ID });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(roleService.findOrganizationForUser).toHaveBeenCalledWith(USER_ID);
-      expect(roleService.hasSystemSettingsAccess).toHaveBeenCalledWith(
+      expect(userRoleRepository.findByUser).toHaveBeenCalledWith(USER_ID);
+      expect(userRoleRepository.findByUserAndOrganization).toHaveBeenCalledWith(
         USER_ID,
         ORG_ID,
       );
+    });
+  });
+
+  describe('organization owner', () => {
+    it('grants a required owner role to an owner with no assignments', async () => {
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([]);
+      organizationRepository.isOwner.mockResolvedValue(true);
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+
+    it('grants settings access to an owner with no assignments', async () => {
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([]);
+      organizationRepository.isOwner.mockResolvedValue(true);
+      context = contextFor(withRoles(true), {
+        userId: USER_ID,
+        organizationId: ORG_ID,
+      });
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
     });
   });
 
@@ -151,16 +209,15 @@ describe('RoleGuard', () => {
     });
 
     it('denies when the organization cannot be resolved', async () => {
-      roleService.findOrganizationForUser.mockResolvedValue(null);
+      userRoleRepository.findByUser.mockResolvedValue([]);
+      organizationRepository.findOrganizationByOwner.mockResolvedValue(null);
       context = contextFor(withRoles(true), { userId: USER_ID });
 
       await expect(guard.canActivate(context)).resolves.toBe(false);
     });
 
     it('denies when the access lookup throws', async () => {
-      roleService.hasSystemSettingsAccess.mockRejectedValue(
-        new Error('db down'),
-      );
+      organizationRepository.isOwner.mockRejectedValue(new Error('db down'));
       context = contextFor(withRoles(true), {
         userId: USER_ID,
         organizationId: ORG_ID,

@@ -92,6 +92,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
       findByOrganizationAndParentSystemRoles: jest.fn(),
     };
     userRoleRepository = {
+      findByUser: jest.fn(),
       findByUserAndOrganization: jest.fn(),
       findByOrganization: jest.fn(),
       findByIdAndOrganization: jest.fn(),
@@ -99,7 +100,11 @@ describe('SettingsDomainAccessControlService company admin', () => {
       assign: jest.fn(),
       updateById: jest.fn(),
     };
-    organizationRepository = { findOrg: jest.fn() };
+    organizationRepository = {
+      findOrg: jest.fn(),
+      isOwner: jest.fn(),
+      findOrganizationByOwner: jest.fn(),
+    };
     inviteeUserRepository = {
       findByEmails: jest.fn(),
       findByIds: jest.fn(),
@@ -120,6 +125,8 @@ describe('SettingsDomainAccessControlService company admin', () => {
     configService = { get: jest.fn().mockReturnValue(FRONTEND_URL) };
 
     organizationRepository.findOrg.mockResolvedValue({ name: 'Foundation' });
+    organizationRepository.isOwner.mockResolvedValue(false);
+    organizationRepository.findOrganizationByOwner.mockResolvedValue(null);
     employeeRepository.findByOrganizationEmails.mockResolvedValue([]);
     employeeRepository.findEmailsByOrganizationJobTitleCodes.mockResolvedValue(
       [],
@@ -967,6 +974,122 @@ describe('SettingsDomainAccessControlService company admin', () => {
 
     it('denies a user with no assignments in the organization', async () => {
       await expect(allowed([])).resolves.toBe(false);
+    });
+
+    it('allows the organization owner with no assignments', async () => {
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([]);
+      organizationRepository.isOwner.mockResolvedValue(true);
+
+      await expect(
+        service.hasSystemSettingsAccess('64f1b2c3d4e5f6789010a001', ORG_ID),
+      ).resolves.toBe(true);
+    });
+  });
+
+  describe('findOrganizationForUser', () => {
+    it('resolves the org from an assignment', async () => {
+      userRoleRepository.findByUser.mockResolvedValue([
+        assignment({ roleId: role({ organizationId: ORG_ID }) }),
+      ]);
+
+      await expect(
+        service.findOrganizationForUser('64f1b2c3d4e5f6789010a001'),
+      ).resolves.toBe(ORG_ID);
+    });
+
+    it('falls back to organization ownership when there are no assignments', async () => {
+      userRoleRepository.findByUser.mockResolvedValue([]);
+      organizationRepository.findOrganizationByOwner.mockResolvedValue({
+        _id: { toString: () => ORG_ID },
+      });
+
+      await expect(
+        service.findOrganizationForUser('64f1b2c3d4e5f6789010a001'),
+      ).resolves.toBe(ORG_ID);
+    });
+
+    it('returns null when the user has no assignment and owns no organization', async () => {
+      userRoleRepository.findByUser.mockResolvedValue([]);
+      organizationRepository.findOrganizationByOwner.mockResolvedValue(null);
+
+      await expect(
+        service.findOrganizationForUser('64f1b2c3d4e5f6789010a001'),
+      ).resolves.toBeNull();
+    });
+  });
+
+  describe('getUserSystemRoles', () => {
+    const rolesFor = async (rows: any[]) => {
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue(rows);
+      return service.getUserSystemRoles('64f1b2c3d4e5f6789010a001', ORG_ID);
+    };
+
+    it('grants the parent system role of a custom role (isSystemRole false)', async () => {
+      await expect(
+        rolesFor([
+          assignment({
+            roleId: role({
+              isSystemRole: false,
+              parentSystemRole: SystemRole.HR_ADMIN,
+            }),
+          }),
+        ]),
+      ).resolves.toEqual([SystemRole.HR_ADMIN]);
+    });
+
+    it('grants the parent system role of a seeded system role', async () => {
+      await expect(
+        rolesFor([assignment({ roleId: ownerRole({ isSystemRole: true }) })]),
+      ).resolves.toEqual([SystemRole.COMPANY_OWNER]);
+    });
+
+    it('ignores roles without a parent system role', async () => {
+      await expect(
+        rolesFor([assignment({ roleId: role({ parentSystemRole: null }) })]),
+      ).resolves.toEqual([]);
+    });
+
+    it('dedupes repeated system roles across assignments', async () => {
+      await expect(
+        rolesFor([
+          assignment({
+            roleId: role({ parentSystemRole: SystemRole.HR_ADMIN }),
+          }),
+          assignment({
+            _id: oid('64f1b2c3d4e5f6789010a0a2'),
+            roleId: role({ parentSystemRole: SystemRole.HR_ADMIN }),
+          }),
+        ]),
+      ).resolves.toEqual([SystemRole.HR_ADMIN]);
+    });
+
+    it('grants COMPANY_OWNER to the organization owner with no assignments', async () => {
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([]);
+      organizationRepository.isOwner.mockResolvedValue(true);
+
+      await expect(
+        service.getUserSystemRoles('64f1b2c3d4e5f6789010a001', ORG_ID),
+      ).resolves.toEqual([SystemRole.COMPANY_OWNER]);
+    });
+
+    it('returns no roles for a user without assignments who does not own the org', async () => {
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([]);
+      organizationRepository.isOwner.mockResolvedValue(false);
+
+      await expect(
+        service.getUserSystemRoles('64f1b2c3d4e5f6789010a001', ORG_ID),
+      ).resolves.toEqual([]);
+    });
+
+    it('does not duplicate COMPANY_OWNER for an owner who also holds an owner role', async () => {
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([
+        assignment({ roleId: ownerRole({ isSystemRole: true }) }),
+      ]);
+      organizationRepository.isOwner.mockResolvedValue(true);
+
+      await expect(
+        service.getUserSystemRoles('64f1b2c3d4e5f6789010a001', ORG_ID),
+      ).resolves.toEqual([SystemRole.COMPANY_OWNER]);
     });
   });
 

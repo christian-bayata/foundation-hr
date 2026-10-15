@@ -237,14 +237,15 @@ export class EmployeeRepository {
    */
   async findEmailsByOrganizationJobTitleCodes(
     organizationId: string,
-    jobTitleCodes: string[],
+    jobTitleCode: string,
   ): Promise<string[]> {
     try {
-      if (jobTitleCodes.length === 0) {
+      if (!jobTitleCode) {
         return [];
       }
+
       const emails = await this.employeeModel
-        .find({ organizationId, jobTitleCode: { $in: jobTitleCodes } })
+        .find({ organizationId, jobTitleCode })
         .select('email')
         .lean()
         .exec();
@@ -279,7 +280,10 @@ export class EmployeeRepository {
         return [];
       }
       return await this.employeeModel
-        .find({ email: { $in: emails }, organizationId: { $in: organizationIds } })
+        .find({
+          email: { $in: emails },
+          organizationId: { $in: organizationIds },
+        })
         .select('firstName lastName email jobTitleCode organizationId')
         .exec();
     } catch (error) {

@@ -40,7 +40,27 @@ export class OrganizationRepository {
     owner: string,
   ): Promise<OrganizationDocument | null> {
     try {
-      return await this.organizationModel.findOne({ owner });
+      return await this.organizationModel.findOne({ ownerId: owner });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Repo to check whether a user owns an organization. Used to
+   * recognize the owner even when they hold no role assignment.
+   *
+   * @param organizationId - The organization's id
+   * @param userId - The user's ObjectId
+   * @returns {Promise<boolean>}
+   */
+  async isOwner(organizationId: string, userId: string): Promise<boolean> {
+    try {
+      const exists = await this.organizationModel.exists({
+        _id: organizationId,
+        ownerId: userId,
+      });
+      return Boolean(exists);
     } catch (error) {
       throw error;
     }

@@ -26,7 +26,6 @@ import {
   OrganizationPolicySchema,
 } from './organisation/entity/organization-policy.schema';
 import { OrganizationPolicyRepository } from './organisation/repository/organization-policy.repository';
-import { ROLE_SERVICE } from '../../common/guards/role.guard';
 import { EmailModule } from '../../email/email.module';
 import { OrganizationModule } from '../organization/organization.module';
 import { EmployeeModule } from '../employee/employee.module';
@@ -77,7 +76,6 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
     InvoiceRepository,
     JobTitleRepository,
     EmployeeRepository,
-    { provide: ROLE_SERVICE, useExisting: SettingsDomainAccessControlService },
     AuthUtility,
     JobTitleRepository,
     OrganizationPolicyRepository,
@@ -87,7 +85,6 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
     SettingService,
     SettingsDomainAccessControlService,
     SettingsDomainOrganisationService,
-    ROLE_SERVICE,
   ],
 })
 export class SettingModule {}

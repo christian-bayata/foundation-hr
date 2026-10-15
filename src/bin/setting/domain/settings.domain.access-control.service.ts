@@ -212,7 +212,10 @@ export class SettingsDomainAccessControlService {
 
   /**
    * @Responsibility: Get a user's system roles for an organization.
-   * Used by the RoleGuard to check authorization.
+   * Used by the RoleGuard to check authorization. A role grants its parent
+   * system role whether it is a seeded system role or a custom role, since a
+   * custom role always carries a required parentSystemRole. This mirrors
+   * {@link hasSystemSettingsAccess} and the admin-tier checks.
    *
    * @param userId - The user to resolve roles for
    * @param organizationId - The organization to scope the query to
@@ -232,9 +235,13 @@ export class SettingsDomainAccessControlService {
 
       for (const ur of userRoles) {
         const role = ur.roleId as unknown as RoleDocument;
-        if (role?.isSystemRole && role?.parentSystemRole) {
+        if (role?.parentSystemRole) {
           systemRoles.push(role.parentSystemRole);
         }
+      }
+
+      if (await this.organizationRepository.isOwner(userId, organizationId)) {
+        systemRoles.push(SystemRole.COMPANY_OWNER);
       }
 
       return [...new Set(systemRoles)];
@@ -263,6 +270,10 @@ export class SettingsDomainAccessControlService {
     organizationId: string,
   ): Promise<boolean> {
     try {
+      if (await this.organizationRepository.isOwner(userId, organizationId)) {
+        return true;
+      }
+
       const userRoles = await this.userRoleRepository.findByUserAndOrganization(
         userId,
         organizationId,
@@ -809,7 +820,9 @@ export class SettingsDomainAccessControlService {
       const userRoles = await this.userRoleRepository.findByUser(userId);
 
       if (userRoles.length === 0) {
-        return null;
+        const ownedOrg =
+          await this.organizationRepository.findOrganizationByOwner(userId);
+        return ownedOrg?._id?.toString() ?? null;
       }
 
       const role = userRoles[0].roleId as unknown as RoleDocument;
@@ -852,8 +865,6 @@ export class SettingsDomainAccessControlService {
         authorizedRepresentative,
         systemSettings,
       } = addCompanyAdminDto;
-
-      console.log(addedById);
 
       const role = await this.resolveAdminTierRole(organizationId);
       const findJobTitle = await this.jobTitleRepository.findByCodeOrName(
@@ -1228,20 +1239,19 @@ export class SettingsDomainAccessControlService {
     }
 
     if (query.job_title?.trim()) {
-      const jobTitles = await this.jobTitleRepository.findByOrganization(
+      const jobTitle = await this.jobTitleRepository.findByCode(
         organizationId,
-        '',
         query.job_title.trim(),
       );
-      if (jobTitles.length === 0) {
+      if (!jobTitle) {
         return null;
       }
-      filters.jobTitleCodes = jobTitles.map((jobTitle) => jobTitle.code);
+      // filters.jobTitleCodes = jobTitles.map((jobTitle) => jobTitle.code);
 
       const emails =
         await this.employeeRepository.findEmailsByOrganizationJobTitleCodes(
           organizationId,
-          filters.jobTitleCodes,
+          jobTitle.code,
         );
       const employees = await this.inviteeUserRepository.findByEmails(emails);
       filters.jobTitleUserIds = employees.map((employee) =>
