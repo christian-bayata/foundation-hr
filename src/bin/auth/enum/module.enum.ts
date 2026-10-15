@@ -1,5 +1,7 @@
 export enum PermissionModule {
   TALENT_MANAGEMENT = 'talent_management',
+  TALENT_ACQUISITION = 'talent_acquisition',
+  TALENT_ENGAGEMENT = 'talent_engagement',
   PERFORMANCE_MANAGEMENT = 'performance_management',
   COMPENSATION_AND_BENEFITS = 'compensation_and_benefits',
   LEARNING_AND_DEVELOPMENT = 'learning_and_development',
