@@ -833,8 +833,8 @@ export class SettingsDomainOrganisationService {
       }
 
       await this.organizationRepository.updateOrg(
-        { organizationId },
-        { ...dto },
+        { _id: organizationId },
+        { branding: dto },
       );
 
       return 'Updated branding for org';

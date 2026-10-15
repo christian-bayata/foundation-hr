@@ -84,7 +84,10 @@ export class OrganizationRepository {
    * @param data
    * @returns {Promise<void>}
    */
-  async updateOrg(where: PropDataInput, data: any): Promise<void> {
+  async updateOrg(
+    where: PropDataInput,
+    data: Partial<Organization> | Record<string, any>,
+  ): Promise<void> {
     try {
       await this.organizationModel.findOneAndUpdate(where, data, {
         new: true,
