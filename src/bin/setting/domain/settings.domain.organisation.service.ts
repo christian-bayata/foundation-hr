@@ -890,7 +890,7 @@ export class SettingsDomainOrganisationService {
   async updateNotifications(
     organizationId: string,
     dto: UpdateNotificationPreferencesDto,
-  ): Promise<NotificationPreferences> {
+  ): Promise<string> {
     try {
       const found = await this.organizationRepository.findOrg({
         _id: organizationId,
@@ -902,45 +902,39 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      const current: NotificationPreferences = found!.notifications ?? {
-        ...DEFAULT_NOTIFICATION_PREFERENCES,
-      };
+      // const current: NotificationPreferences = found!.notifications ?? {
+      //   ...DEFAULT_NOTIFICATION_PREFERENCES,
+      // };
 
-      const merged: NotificationPreferences = { ...current };
+      // const merged: NotificationPreferences = { ...current };
 
-      if (dto.newsAndUpdates !== undefined)
-        merged.newsAndUpdates = dto.newsAndUpdates;
-      if (dto.remindersAndEvents !== undefined)
-        merged.remindersAndEvents = dto.remindersAndEvents;
-      if (dto.promotionsAndOffers !== undefined)
-        merged.promotionsAndOffers = dto.promotionsAndOffers;
-      if (dto.emailNotifications !== undefined)
-        merged.emailNotifications = dto.emailNotifications;
-      if (dto.pushNotifications !== undefined)
-        merged.pushNotifications = dto.pushNotifications;
-      if (dto.smsNotifications !== undefined)
-        merged.smsNotifications = dto.smsNotifications;
-      if (dto.leaveAndAttendance !== undefined)
-        merged.leaveAndAttendance = dto.leaveAndAttendance;
-      if (dto.deadlineNotification !== undefined)
-        merged.deadlineNotification = dto.deadlineNotification;
+      // if (dto.newsAndUpdates !== undefined)
+      //   merged.newsAndUpdates = dto.newsAndUpdates;
+      // if (dto.remindersAndEvents !== undefined)
+      //   merged.remindersAndEvents = dto.remindersAndEvents;
+      // if (dto.promotionsAndOffers !== undefined)
+      //   merged.promotionsAndOffers = dto.promotionsAndOffers;
+      // if (dto.emailNotifications !== undefined)
+      //   merged.emailNotifications = dto.emailNotifications;
+      // if (dto.pushNotifications !== undefined)
+      //   merged.pushNotifications = dto.pushNotifications;
+      // if (dto.smsNotifications !== undefined)
+      //   merged.smsNotifications = dto.smsNotifications;
+      // if (dto.leaveAndAttendance !== undefined)
+      //   merged.leaveAndAttendance = dto.leaveAndAttendance;
+      // if (dto.deadlineNotification !== undefined)
+      //   merged.deadlineNotification = dto.deadlineNotification;
 
-      const updated = await this.organizationRepository.updateById(
-        organizationId,
-        { notifications: merged },
+      const updated = await this.organizationRepository.updateOrg(
+        {_id: organizationId},
+        { notifications: dto },
       );
-
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update organization notification preferences',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
 
       this.logger.log(
         `Updated notification preferences for org ${organizationId}`,
       );
-      return updated!.notifications ?? merged;
+
+      return 'Updated notification preferences';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateNotifications.name}`;
       AppResponse.error(error);
