@@ -926,7 +926,7 @@ export class SettingsDomainOrganisationService {
       //   merged.deadlineNotification = dto.deadlineNotification;
 
       const updated = await this.organizationRepository.updateOrg(
-        {_id: organizationId},
+        { _id: organizationId },
         { notifications: dto },
       );
 
@@ -990,7 +990,7 @@ export class SettingsDomainOrganisationService {
   async updateEmployeeProfileSettings(
     organizationId: string,
     dto: UpdateEmployeeProfileSettingsDto,
-  ): Promise<EmployeeProfileSettings> {
+  ): Promise<string> {
     try {
       const found = await this.organizationRepository.findOrg({
         _id: organizationId,
@@ -1002,35 +1002,12 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      const current: EmployeeProfileSettings = found!.employeeProfiles ?? {
-        ...DEFAULT_EMPLOYEE_PROFILE_SETTINGS,
-      };
-
-      const merged: EmployeeProfileSettings = { ...current };
-
-      if (dto.useEmployeeIdGenerator !== undefined)
-        merged.useEmployeeIdGenerator = dto.useEmployeeIdGenerator;
-      if (dto.documentFormats !== undefined)
-        merged.documentFormats = dto.documentFormats;
-      if (dto.employmentTypes !== undefined)
-        merged.employmentTypes = dto.employmentTypes;
-
-      const updated = await this.organizationRepository.updateById(
-        organizationId,
-        { employeeProfiles: merged },
+      await this.organizationRepository.updateOrg(
+        { organizationId },
+        { employeeProfiles: dto },
       );
 
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update organization employee profile settings',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
-
-      this.logger.log(
-        `Updated employee profile settings for org ${organizationId}`,
-      );
-      return updated!.employeeProfiles ?? merged;
+      return 'Updated employee profile settings';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateEmployeeProfileSettings.name}`;
       AppResponse.error(error);
@@ -1224,41 +1201,41 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      const current = this.cloneWorkflowSettings(
-        found!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+      // const current = this.cloneWorkflowSettings(
+      //   found!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+      // );
+
+      // const target = this.findWorkflowStep(current, stepId);
+      // if (!target) {
+      //   AppResponse.error({
+      //     message: 'Workflow step not found',
+      //     status: HttpStatus.NOT_FOUND,
+      //   });
+      // }
+
+      // if (dto.stepName !== undefined) target!.stepName = dto.stepName;
+      // if (dto.responsibleParty !== undefined)
+      //   target!.responsibleParty = dto.responsibleParty;
+      // if (dto.taskType !== undefined) target!.taskType = dto.taskType;
+      // if (dto.dueDate !== undefined) target!.dueDate = dto.dueDate;
+      // if (dto.instructions !== undefined)
+      //   target!.instructions = dto.instructions;
+      // if (dto.attachmentUrls !== undefined)
+      //   target!.attachmentUrls = dto.attachmentUrls;
+      // if (dto.completionRequirements !== undefined)
+      //   target!.completionRequirements = dto.completionRequirements;
+
+      await this.organizationRepository.updateOrg(
+        { organizationId },
+        { employeeWorkflow: dto },
       );
 
-      const target = this.findWorkflowStep(current, stepId);
-      if (!target) {
-        AppResponse.error({
-          message: 'Workflow step not found',
-          status: HttpStatus.NOT_FOUND,
-        });
-      }
-
-      if (dto.stepName !== undefined) target!.stepName = dto.stepName;
-      if (dto.responsibleParty !== undefined)
-        target!.responsibleParty = dto.responsibleParty;
-      if (dto.taskType !== undefined) target!.taskType = dto.taskType;
-      if (dto.dueDate !== undefined) target!.dueDate = dto.dueDate;
-      if (dto.instructions !== undefined)
-        target!.instructions = dto.instructions;
-      if (dto.attachmentUrls !== undefined)
-        target!.attachmentUrls = dto.attachmentUrls;
-      if (dto.completionRequirements !== undefined)
-        target!.completionRequirements = dto.completionRequirements;
-
-      const updated = await this.organizationRepository.updateById(
-        organizationId,
-        { employeeWorkflow: current },
-      );
-
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update organization employee workflow step',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
+      // if (!updated) {
+      //   AppResponse.error({
+      //     message: 'Failed to update organization employee workflow step',
+      //     status: HttpStatus.INTERNAL_SERVER_ERROR,
+      //   });
+      // }
 
       return 'Updated employee workflow step';
     } catch (error: any) {
@@ -1537,6 +1514,123 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
+   * @Responsibility: Update a pension fund administrator in an organization's
+   * list of administrators.
+   *
+   * @param organizationId - The organization to update
+   * @param pfaId - The id of the pension fund administrator
+   * @param dto - The update payload
+   */
+  async updatePensionFundAdministrator(
+    organizationId: string,
+    pfaId: string,
+    dto: { name?: string },
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const administrators = [...(found!.pensionFundAdministrators ?? [])];
+      const index = administrators.findIndex(
+        (administrator) => String(administrator._id) === pfaId,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Pension fund administrator not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.name !== undefined) {
+        administrators[index].name = dto.name.trim();
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { pensionFundAdministrators: administrators },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization pension fund administrator',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated pension fund administrator for org ${organizationId}`,
+      );
+      return this.toPensionFundAdministratorView(administrators[index]);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updatePensionFundAdministrator.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Delete a pension fund administrator from an organization's
+   * list of administrators.
+   *
+   * @param organizationId - The organization to update
+   * @param pfaId - The id of the pension fund administrator
+   */
+  async deletePensionFundAdministrator(organizationId: string, pfaId: string) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const administrators = [...(found!.pensionFundAdministrators ?? [])];
+      const index = administrators.findIndex(
+        (administrator) => String(administrator._id) === pfaId,
+      );
+      if (index === -1) {
+        AppResponse.error({
+          message: 'Pension fund administrator not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      administrators.splice(index, 1);
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { pensionFundAdministrators: administrators },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to delete organization pension fund administrator',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Deleted pension fund administrator for org ${organizationId}`,
+      );
+      return 'Deleted pension fund administrator';
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.deletePensionFundAdministrator.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Convert an onboarding document into its API representation.
    *
    * @param document - The stored onboarding document
@@ -1577,6 +1671,7 @@ export class SettingsDomainOrganisationService {
       id: document.id,
       name: document.name,
       fileType: document.fileType ?? null,
+      url: document.url ?? null,
       requiresSignature: document.requiresSignature ?? false,
     };
   }
@@ -1637,6 +1732,7 @@ export class SettingsDomainOrganisationService {
           id: document.id,
           name: document.name,
           fileType: document.fileType ?? null,
+          url: document.url ?? null,
           requiresSignature: document.requiresSignature ?? false,
         }),
       ),
@@ -1750,33 +1846,33 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      const current = this.cloneOnboardingSettings(
-        found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      // const current = this.cloneOnboardingSettings(
+      //   found!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS,
+      // );
+
+      // if (dto.welcomeMessageEnabled !== undefined)
+      //   current.welcomeMessageEnabled = dto.welcomeMessageEnabled;
+      // if (dto.welcomeMessage !== undefined)
+      //   current.welcomeMessage = dto.welcomeMessage;
+      // if (dto.defaultDurationEnabled !== undefined)
+      //   current.defaultDurationEnabled = dto.defaultDurationEnabled;
+      // if (dto.defaultDuration !== undefined)
+      // current.defaultDuration = dto.defaultDuration;
+
+      await this.organizationRepository.updateOrg(
+        { organizationId },
+        { onboarding: dto },
       );
 
-      if (dto.welcomeMessageEnabled !== undefined)
-        current.welcomeMessageEnabled = dto.welcomeMessageEnabled;
-      if (dto.welcomeMessage !== undefined)
-        current.welcomeMessage = dto.welcomeMessage;
-      if (dto.defaultDurationEnabled !== undefined)
-        current.defaultDurationEnabled = dto.defaultDurationEnabled;
-      if (dto.defaultDuration !== undefined)
-        current.defaultDuration = dto.defaultDuration;
-
-      const updated = await this.organizationRepository.updateById(
-        organizationId,
-        { onboarding: current },
-      );
-
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update organization onboarding settings',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
+      // if (!updated) {
+      //   AppResponse.error({
+      //     message: 'Failed to update organization onboarding settings',
+      //     status: HttpStatus.INTERNAL_SERVER_ERROR,
+      //   });
+      // }
 
       this.logger.log(`Updated onboarding settings for org ${organizationId}`);
-      return this.toOnboardingSettingsView(current);
+      return 'Updated onboarding settings';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateOnboardingSettings.name}`;
       AppResponse.error(error);
@@ -2026,6 +2122,7 @@ export class SettingsDomainOrganisationService {
         id: this.uniqueEmployerIssuedDocumentId(current, dto.name),
         name: dto.name.trim(),
         fileType: dto.fileType ?? null,
+        url: dto.url ?? null,
         requiresSignature: false,
       };
 

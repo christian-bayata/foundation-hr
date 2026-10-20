@@ -23,6 +23,7 @@ import { AddWorkflowStepDto } from './dto/add-workflow-step.dto';
 import { UpdateWorkflowStepDto } from './dto/update-workflow-step.dto';
 import { AddResponsiblePartyDto } from './dto/add-responsible-party.dto';
 import { AddPensionFundAdministratorDto } from './dto/add-pension-fund-administrator.dto';
+import { UpdatePensionFundAdministratorDto } from './dto/update-pension-fund-administrator.dto';
 
 @Controller('setting/employee-profiles')
 @UseGuards(JwtAuthGuard, RoleGuard)
@@ -178,6 +179,44 @@ export class EmployeeProfilesController {
     return AppResponse.success(
       'Pension fund administrator added successfully',
       201,
+      data,
+    );
+  }
+
+  @Patch('pension-fund-administrators/update')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async updatePensionFundAdministrator(
+    @CurrentUser() user: ICurrentUser,
+    @Query('pfaId') pfaId: string,
+    @Body() dto: UpdatePensionFundAdministratorDto,
+  ) {
+    const data = await this.organisationService.updatePensionFundAdministrator(
+      user.organizationId!,
+      pfaId,
+      dto,
+    );
+    return AppResponse.success(
+      'Pension fund administrator updated successfully',
+      200,
+      data,
+    );
+  }
+
+  @Delete('pension-fund-administrators/delete')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async deletePensionFundAdministrator(
+    @CurrentUser() user: ICurrentUser,
+    @Query('pfaId') pfaId: string,
+  ) {
+    const data = await this.organisationService.deletePensionFundAdministrator(
+      user.organizationId!,
+      pfaId,
+    );
+    return AppResponse.success(
+      'Pension fund administrator deleted successfully',
+      200,
       data,
     );
   }

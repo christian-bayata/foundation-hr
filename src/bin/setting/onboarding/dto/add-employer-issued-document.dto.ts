@@ -12,4 +12,7 @@ export class AddEmployerIssuedDocumentDto {
   @MaxLength(40, { message: 'File type must be at most 40 characters.' })
   @IsOptional()
   fileType?: string;
+
+  @IsOptional()
+  url?: string;
 }

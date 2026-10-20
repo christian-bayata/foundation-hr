@@ -214,6 +214,9 @@ export class EmployerIssuedDocument {
   @Prop({ type: String, trim: true, default: null })
   fileType: string | null;
 
+  @Prop({ type: String, trim: true, default: null })
+  url: string | null;
+
   @Prop({ type: Boolean, default: false })
   requiresSignature: boolean;
 }

@@ -19,6 +19,8 @@ const ALLOWED_EXTENSIONS: Record<FileExtensionType, string[]> = {
     'xlsx',
     'ppt',
     'pptx',
+    'tif',
+    'mov',
   ],
 };
 
