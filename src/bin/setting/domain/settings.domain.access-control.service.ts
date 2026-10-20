@@ -558,6 +558,7 @@ export class SettingsDomainAccessControlService {
       if (dto.description !== undefined)
         updateData.description = dto.description;
       if (dto.infoAccess !== undefined) updateData.infoAccess = dto.infoAccess;
+      if (dto.parentSystemRole !== undefined) updateData.parentSystemRole = dto.parentSystemRole;
 
       if (dto.modulePermissions) {
         const existing = new Map(
