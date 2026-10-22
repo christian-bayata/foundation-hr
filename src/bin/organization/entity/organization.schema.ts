@@ -479,6 +479,9 @@ export class Organization {
   @Prop({ type: String, required: true })
   slug: string;
 
+  @Prop({ type: String, trim: true, lowercase: true, default: null })
+  domainPrefix: string | null;
+
   @Prop({ type: String, required: true })
   ownerId: string;
 
@@ -565,4 +568,15 @@ export const OrganizationSchema = SchemaFactory.createForClass(Organization);
 OrganizationSchema.index(
   { ownerId: 1 },
   { name: 'organization_owner_idx', unique: true },
+);
+OrganizationSchema.index(
+  { domainPrefix: 1 },
+  {
+    name: 'organization_domain_prefix_idx',
+    unique: true,
+    // Only organizations that actually have a prefix take part in the
+    // constraint, so the many organizations that have not set one yet (the
+    // field is persisted as null) never collide with each other.
+    partialFilterExpression: { domainPrefix: { $type: 'string' } },
+  },
 );

@@ -9,6 +9,8 @@ import { JobTitle, JobTitleSchema } from './entity/job-title.schema';
 import { OrganizationRepository } from './repository/organization.repository';
 import { OrganizationDepartmentRepository } from './repository/organization-department.repository';
 import { JobTitleRepository } from './repository/job-title.repository';
+import { OrganizationService } from './organization.service';
+import { OrganizationUtility } from './organization.utility';
 import { AuthUtility } from '../auth/auth.utility';
 
 @Module({
@@ -26,12 +28,16 @@ import { AuthUtility } from '../auth/auth.utility';
     OrganizationRepository,
     OrganizationDepartmentRepository,
     JobTitleRepository,
+    OrganizationService,
+    OrganizationUtility,
     AuthUtility,
   ],
   exports: [
     OrganizationRepository,
     OrganizationDepartmentRepository,
     JobTitleRepository,
+    OrganizationService,
+    OrganizationUtility,
   ],
 })
 export class OrganizationModule {}

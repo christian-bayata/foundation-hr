@@ -28,6 +28,7 @@ import {
 import { passwordResetTemplate } from '../../email/template/password-reset.template';
 import { emailVerificationTemplate } from '../../email/template/email-verification.template';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
+import { OrganizationService } from '../organization/organization.service';
 import { OrganizationDocument } from '../organization/entity/organization.schema';
 import { SettingService } from '../setting/setting.service';
 import { EmployeeRepository } from '../employee/repository/employee.repository';
@@ -67,6 +68,8 @@ export class AuthService {
     @Inject(AuthUtility) private readonly authUtility: AuthUtility,
     @Inject(OrganizationRepository)
     private readonly organizationRepository: OrganizationRepository,
+    @Inject(OrganizationService)
+    private readonly organizationService: OrganizationService,
     @Inject(SettingService) private readonly settingService: SettingService,
     @Inject(EmployeeRepository)
     private readonly employeeRepository: EmployeeRepository,
@@ -610,12 +613,18 @@ export class AuthService {
           status: HttpStatus.NOT_FOUND,
         });
 
+      const domainPrefix =
+        await this.organizationService.generateAvailableDomainPrefix(
+          organisationName,
+        );
+
       const organization = await this.organizationRepository.createOrganization(
         {
           name: organisationName,
           size: organisationSize,
           country,
           slug: `oRg-${uuidv4()}`,
+          domainPrefix,
           ownerId: owner?._id.toString(),
           products: [],
           marketingOptIn,

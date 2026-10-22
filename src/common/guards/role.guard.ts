@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { REQUIRES_SYSTEM_SETTINGS_KEY } from '../decorators/requires-system-settings.decorator';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { SystemRole } from '../../bin/auth/enum/role.enum';
 import { CurrentUser, IRequest } from '../interfaces/request.interface';
 import { UserRoleRepository } from '../../bin/setting/access-control/repository/user-role.repository';
@@ -24,6 +25,15 @@ export class RoleGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
     const requiredRoles = this.reflector.getAllAndOverride<SystemRole[]>(
       ROLES_KEY,
       [context.getHandler(), context.getClass()],

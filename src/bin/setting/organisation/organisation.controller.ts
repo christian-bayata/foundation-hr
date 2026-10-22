@@ -10,7 +10,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { AppResponse, JoiValidationPipe, Roles } from '../../../common';
+import { Throttle } from '@nestjs/throttler';
+import { AppResponse, JoiValidationPipe, Public, Roles } from '../../../common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RoleGuard } from '../../../common/guards/role.guard';
 import { RequiresSystemSettings } from '../../../common/decorators/requires-system-settings.decorator';
@@ -18,6 +19,11 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser } from '../../../common';
 import { SystemRole } from '../../auth/enum/role.enum';
 import { SettingsDomainOrganisationService } from '../domain/settings.domain.organisation.service';
+import { OrganizationService } from '../../organization/organization.service';
+import {
+  DomainPrefixQueryDto,
+  UpdateDomainPrefixDto,
+} from '../../organization/dto/domain-prefix.dto';
 import { UpdateGeneralInfoDto } from './dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from './dto/update-business-details.dto';
 import { UpdateLocationsDto } from './dto/update-locations.dto';
@@ -40,10 +46,7 @@ import {
 } from './dto/update-job-title.dto';
 import { AddPolicyDto } from './dto/add-policy.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
-import {
-  ListPolicyQueryDto,
-  PolicyCodeQueryDto,
-} from './dto/policy-query.dto';
+import { ListPolicyQueryDto, PolicyCodeQueryDto } from './dto/policy-query.dto';
 import {
   orgBusinessDetailsSchema,
   orgGeneralInfoSchema,
@@ -55,6 +58,7 @@ import {
 export class OrganisationController {
   constructor(
     private readonly organisationService: SettingsDomainOrganisationService,
+    private readonly organizationService: OrganizationService,
   ) {}
 
   @Get('general-info/retrieve')
@@ -270,6 +274,30 @@ export class OrganisationController {
       dto,
     );
     return AppResponse.success('Branding updated successfully', 200, data);
+  }
+
+  @Public()
+  @Get('branding/public/from-prefix')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async retrievePublicBranding(@Query() query: DomainPrefixQueryDto) {
+    const data = await this.organizationService.getPublicBrandingByDomainPrefix(
+      query.domainPrefix,
+    );
+    return AppResponse.success('Branding retrieved successfully', 200, data);
+  }
+
+  @Patch('domain-prefix/update')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async updateDomainPrefix(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: UpdateDomainPrefixDto,
+  ) {
+    const data = await this.organizationService.updateDomainPrefix(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success('Domain prefix updated successfully', 200, data);
   }
 
   @Get('departments/retrieve')

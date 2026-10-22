@@ -4,8 +4,10 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RoleGuard } from '../../../common/guards/role.guard';
+import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator';
 import { OrganisationController } from './organisation.controller';
 import { SettingsDomainOrganisationService } from '../domain/settings.domain.organisation.service';
+import { OrganizationService } from '../../organization/organization.service';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 
@@ -34,6 +36,10 @@ describe('OrganisationController (integration)', () => {
     updateBilling: jest.Mock<AnyPromiseFn>;
     getInvoices: jest.Mock<AnyPromiseFn>;
   };
+  let organizationService: {
+    getPublicBrandingByDomainPrefix: jest.Mock<AnyPromiseFn>;
+    updateDomainPrefix: jest.Mock<AnyPromiseFn>;
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -60,6 +66,11 @@ describe('OrganisationController (integration)', () => {
       getInvoices: jest.fn(),
     };
 
+    organizationService = {
+      getPublicBrandingByDomainPrefix: jest.fn(),
+      updateDomainPrefix: jest.fn(),
+    };
+
     const { Test } = await import('@nestjs/testing');
     const module = await Test.createTestingModule({
       controllers: [OrganisationController],
@@ -67,6 +78,10 @@ describe('OrganisationController (integration)', () => {
         {
           provide: SettingsDomainOrganisationService,
           useValue: organisationService,
+        },
+        {
+          provide: OrganizationService,
+          useValue: organizationService,
         },
       ],
     })
@@ -470,6 +485,105 @@ describe('OrganisationController (integration)', () => {
 
       expect(response.status).toBe(400);
       expect(organisationService.updateBranding).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/branding/public', () => {
+    it('is reachable without an access token', () => {
+      const metadata = Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        OrganisationController.prototype.retrievePublicBranding,
+      );
+
+      expect(metadata).toBe(true);
+    });
+
+    it('returns the branding of the organization that owns the prefix', async () => {
+      const branding = {
+        logoUrl: 'https://cdn.example.com/logo.png',
+        navigationBackgroundColor: '#FAFDFF',
+        buttonColor: '#1E88E5',
+        loginPageImages: ['https://cdn.example.com/login-hero.png'],
+        selectedLoginImg: 'https://cdn.example.com/login-hero.png',
+      };
+      organizationService.getPublicBrandingByDomainPrefix.mockResolvedValue(
+        branding,
+      );
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/branding/public?domainPrefix=mavins',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(branding);
+      expect(
+        organizationService.getPublicBrandingByDomainPrefix,
+      ).toHaveBeenCalledWith('mavins');
+    });
+
+    it('rejects a request without the domain prefix', async () => {
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/branding/public',
+      );
+
+      expect(response.status).toBe(400);
+      expect(
+        organizationService.getPublicBrandingByDomainPrefix,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/organization/domain-prefix/update', () => {
+    it('updates the domain prefix of the authenticated organization', async () => {
+      organizationService.updateDomainPrefix.mockResolvedValue({
+        domainPrefix: 'mavins',
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({ domainPrefix: 'mavins' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual({ domainPrefix: 'mavins' });
+      expect(organizationService.updateDomainPrefix).toHaveBeenCalledWith(
+        ORG_ID,
+        { domainPrefix: 'mavins' },
+      );
+    });
+
+    it('lowercases the submitted domain prefix', async () => {
+      organizationService.updateDomainPrefix.mockResolvedValue({
+        domainPrefix: 'mavins',
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({ domainPrefix: 'Mavins' });
+
+      expect(response.status).toBe(200);
+      expect(organizationService.updateDomainPrefix).toHaveBeenCalledWith(
+        ORG_ID,
+        { domainPrefix: 'mavins' },
+      );
+    });
+
+    it('rejects an invalid domain prefix', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({ domainPrefix: '-mavins-' });
+
+      expect(response.status).toBe(400);
+      expect(organizationService.updateDomainPrefix).not.toHaveBeenCalled();
+    });
+
+    it('rejects a payload missing the domain prefix', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(organizationService.updateDomainPrefix).not.toHaveBeenCalled();
     });
   });
 

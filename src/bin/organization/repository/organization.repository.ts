@@ -81,6 +81,33 @@ export class OrganizationRepository {
   }
 
   /**
+   * @Responsibility: Repo to check whether a domain prefix is already claimed by
+   * another organization. The prefix is the organization's public subdomain, so
+   * it has to stay unique across every organization.
+   *
+   * @param domainPrefix - The normalized domain prefix to look for
+   * @param excludeOrganizationId - Optional organization that is ignored, used
+   * when an organization re-saves its own prefix
+   * @returns {Promise<boolean>}
+   */
+  async isDomainPrefixTaken(
+    domainPrefix: string,
+    excludeOrganizationId?: string,
+  ): Promise<boolean> {
+    try {
+      const exists = await this.organizationModel.exists({
+        domainPrefix,
+        ...(excludeOrganizationId
+          ? { _id: { $ne: excludeOrganizationId } }
+          : {}),
+      });
+      return Boolean(exists);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Repo to retrieve an organization by its id
    *
    * @param organizationId - The organization's id

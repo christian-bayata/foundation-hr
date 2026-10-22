@@ -7,6 +7,7 @@ import { TokenService } from './token.service';
 import { AuthUtility } from './auth.utility';
 import { UserRepository } from './repository/user.repository';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
+import { OrganizationService } from '../organization/organization.service';
 import { SettingService } from '../setting/setting.service';
 import { EmployeeRepository } from '../employee/repository/employee.repository';
 import { PrincipalType } from './enum/principal-type.enum';
@@ -52,6 +53,9 @@ describe('AuthService (unified principal flow)', () => {
   };
   let emailService: { brevoEmailDispatcher: jest.Mock<AnyPromiseFn> };
   let organizationRepository: { findOrg: jest.Mock<AnyPromiseFn> };
+  let organizationService: {
+    generateAvailableDomainPrefix: jest.Mock<AnyPromiseFn>;
+  };
   let settingService: {
     getUserSystemRoles: jest.Mock<AnyPromiseFn>;
     findOrganizationForUser: jest.Mock<AnyPromiseFn>;
@@ -150,6 +154,11 @@ describe('AuthService (unified principal flow)', () => {
     organizationRepository = {
       findOrg: jest.fn<AnyPromiseFn>().mockResolvedValue(organization()),
     };
+    organizationService = {
+      generateAvailableDomainPrefix: jest
+        .fn<AnyPromiseFn>()
+        .mockResolvedValue('acme'),
+    };
     settingService = {
       getUserSystemRoles: jest
         .fn<AnyPromiseFn>()
@@ -178,6 +187,7 @@ describe('AuthService (unified principal flow)', () => {
         { provide: EmailService, useValue: emailService },
         { provide: ConfigService, useValue: configService },
         { provide: OrganizationRepository, useValue: organizationRepository },
+        { provide: OrganizationService, useValue: organizationService },
         { provide: SettingService, useValue: settingService },
       ],
     }).compile();
