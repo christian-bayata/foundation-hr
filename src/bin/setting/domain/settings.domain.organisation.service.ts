@@ -1003,7 +1003,7 @@ export class SettingsDomainOrganisationService {
       }
 
       await this.organizationRepository.updateOrg(
-        { organizationId },
+        { _id: organizationId },
         { employeeProfiles: dto },
       );
 
