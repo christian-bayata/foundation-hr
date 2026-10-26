@@ -31,7 +31,7 @@ export class RequestManagementController {
     private readonly organisationService: SettingsDomainOrganisationService,
   ) {}
 
-  @Get('workflow/retrieve')
+  @Get('workflow/retrieve/all')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   async retrieveRequestWorkflows(
     @CurrentUser() user: ICurrentUser,
@@ -48,7 +48,7 @@ export class RequestManagementController {
     );
   }
 
-  @Get('workflow/retrieve')
+  @Get('workflow/retrieve/single')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   async retrieveRequestWorkflow(
     @CurrentUser() user: ICurrentUser,
