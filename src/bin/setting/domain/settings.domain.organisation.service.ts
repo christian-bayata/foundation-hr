@@ -177,6 +177,9 @@ export const DEFAULT_LEAVE_MANAGEMENT_SETTINGS: LeaveManagementSettings = {
   autoApprovalEnabled: false,
   approvalDeadline: null,
   holidaysCountAsLeave: false,
+  maxCarryOverLimit: null,
+  leaveExpiry: null,
+  autoApprovedLeaveTypes: [],
 };
 
 export const DEFAULT_LEAVE_ENTITLEMENT_SETTINGS: LeaveEntitlementSettings = {
@@ -1977,21 +1980,10 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      if (dto.label !== undefined) target!.label = dto.label;
-      if (dto.selected !== undefined) target!.selected = dto.selected;
-      if (dto.optional !== undefined) target!.optional = dto.optional;
-
-      const updated = await this.organizationRepository.updateById(
-        organizationId,
-        { onboarding: current },
+      await this.organizationRepository.updateOrg(
+        { organizationId },
+        { onboarding: dto },
       );
-
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update organization onboarding document',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
 
       return this.toOnboardingDocumentView(target!);
     } catch (error: any) {
@@ -3375,6 +3367,9 @@ export class SettingsDomainOrganisationService {
       autoApprovalEnabled: settings.autoApprovalEnabled ?? false,
       approvalDeadline: settings.approvalDeadline ?? null,
       holidaysCountAsLeave: settings.holidaysCountAsLeave ?? false,
+      maxCarryOverLimit: settings.maxCarryOverLimit ?? null,
+      leaveExpiry: settings.leaveExpiry ?? null,
+      autoApprovedLeaveTypes: [...(settings.autoApprovedLeaveTypes ?? [])],
     };
   }
 
@@ -3431,6 +3426,9 @@ export class SettingsDomainOrganisationService {
       autoApprovalEnabled: settings.autoApprovalEnabled ?? false,
       approvalDeadline: settings.approvalDeadline ?? null,
       holidaysCountAsLeave: settings.holidaysCountAsLeave ?? false,
+      maxCarryOverLimit: settings.maxCarryOverLimit ?? null,
+      leaveExpiry: settings.leaveExpiry ?? null,
+      autoApprovedLeaveTypes: settings.autoApprovedLeaveTypes ?? [],
     };
   }
 
@@ -3499,6 +3497,11 @@ export class SettingsDomainOrganisationService {
         current.approvalDeadline = dto.approvalDeadline;
       if (dto.holidaysCountAsLeave !== undefined)
         current.holidaysCountAsLeave = dto.holidaysCountAsLeave;
+      if (dto.maxCarryOverLimit !== undefined)
+        current.maxCarryOverLimit = dto.maxCarryOverLimit;
+      if (dto.leaveExpiry !== undefined) current.leaveExpiry = dto.leaveExpiry;
+      if (dto.autoApprovedLeaveTypes !== undefined)
+        current.autoApprovedLeaveTypes = dto.autoApprovedLeaveTypes;
 
       const updated = await this.organizationRepository.updateById(
         organizationId,
@@ -4578,6 +4581,7 @@ export class SettingsDomainOrganisationService {
       id: document.id,
       name: document.name,
       fileType: document.fileType ?? null,
+      url: document.url ?? null,
       requiresSignature: document.requiresSignature ?? false,
     };
   }
@@ -4591,6 +4595,7 @@ export class SettingsDomainOrganisationService {
       id: document.id,
       name: document.name,
       fileType: document.fileType ?? null,
+      url: document.url ?? null,
       requiresSignature: document.requiresSignature ?? false,
     };
   }
@@ -4684,6 +4689,7 @@ export class SettingsDomainOrganisationService {
           id: this.uniqueOffboardingItemId(current.employerExitDocuments, name),
           name,
           fileType: dto.fileType?.trim() || null,
+          url: dto.url || null,
           requiresSignature: false,
         });
       }
@@ -4751,28 +4757,18 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      if (dto.name !== undefined) document!.name = dto.name.trim();
-      if (dto.fileType !== undefined)
-        document!.fileType = dto.fileType?.trim() || null;
-      if (dto.requiresSignature !== undefined)
-        document!.requiresSignature = dto.requiresSignature;
+      // if (dto.name !== undefined) document!.name = dto.name.trim();
+      // if (dto.fileType !== undefined)
+      //   document!.fileType = dto.fileType?.trim() || null;
+      // if (dto.requiresSignature !== undefined)
+      //   document!.requiresSignature = dto.requiresSignature;
 
-      const updated = await this.organizationRepository.updateById(
-        organizationId,
-        { offboardingDocuments: current },
+      await this.organizationRepository.updateOrg(
+        { organizationId },
+        { offboardingDocuments: dto },
       );
 
-      if (!updated) {
-        AppResponse.error({
-          message: 'Failed to update organization employer exit document',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        });
-      }
-
-      this.logger.log(
-        `Updated employer exit document "${id}" for org ${organizationId}`,
-      );
-      return this.toOffboardingDocumentsSettingsView(current);
+      return 'Updated employer exit document';
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateEmployerExitDocument.name}`;
       AppResponse.error(error);

@@ -8,6 +8,9 @@ export class UpdateEmployerExitDocumentDto {
   @IsOptional()
   name?: string;
 
+  @IsOptional()
+  url?: string;
+
   @IsString({ message: 'File type must be a string.' })
   @MaxLength(40, { message: 'File type must be at most 40 characters.' })
   @IsOptional()

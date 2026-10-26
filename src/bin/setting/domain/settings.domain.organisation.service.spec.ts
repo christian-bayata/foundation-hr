@@ -2774,6 +2774,9 @@ describe('SettingsDomainOrganisationService', () => {
         autoApprovalEnabled: true,
         approvalDeadline: ApprovalDeadline.THREE_DAYS_AFTER_REQUESTED,
         holidaysCountAsLeave: true,
+        maxCarryOverLimit: null,
+        leaveExpiry: null,
+        autoApprovedLeaveTypes: [],
       });
     });
 
@@ -2820,11 +2823,14 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         leaveManagement: {
-          leaveCategories: [],
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
           allowCarryover: false,
           autoApprovalEnabled: false,
-          approvalDeadline: ApprovalDeadline.TWO_DAYS_AFTER_REQUESTED,
+          approvalDeadline: null,
           holidaysCountAsLeave: false,
+          maxCarryOverLimit: null,
+          leaveExpiry: null,
+          autoApprovedLeaveTypes: [],
         },
       });
       organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });

@@ -15,6 +15,24 @@ export const APPROVAL_DEADLINE_LABELS: Record<ApprovalDeadline, string> = {
 export const APPROVAL_DEADLINES: ApprovalDeadline[] =
   Object.values(ApprovalDeadline);
 
+export enum LeaveExpiry {
+  END_OF_YEAR = 'end_of_year',
+  END_OF_MONTH = 'end_of_month',
+  AFTER_30_DAYS = 'after_30_days',
+  AFTER_90_DAYS = 'after_90_days',
+  NEVER = 'never',
+}
+
+export const LEAVE_EXPIRY_LABELS: Record<LeaveExpiry, string> = {
+  [LeaveExpiry.END_OF_YEAR]: 'End of year',
+  [LeaveExpiry.END_OF_MONTH]: 'End of month',
+  [LeaveExpiry.AFTER_30_DAYS]: 'After 30 days',
+  [LeaveExpiry.AFTER_90_DAYS]: 'After 90 days',
+  [LeaveExpiry.NEVER]: 'Never',
+};
+
+export const LEAVE_EXPIRIES: LeaveExpiry[] = Object.values(LeaveExpiry);
+
 export enum LeaveAllocationMethod {
   FIXED_DAYS = 'fixed_days',
   ACCRUAL = 'accrual',

@@ -1,10 +1,13 @@
 import {
   IsBoolean,
   IsEmail,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
 } from 'class-validator';
+
+export type AdminType = 'internal' | 'external';
 
 export class AddCompanyAdminDto {
   @IsString()
@@ -23,6 +26,10 @@ export class AddCompanyAdminDto {
   @IsString()
   @IsNotEmpty({ message: 'Job title is required.' })
   jobTitle: string;
+
+  @IsOptional()
+  @IsIn(['internal', 'external'], { message: 'Admin type must be internal or external.' })
+  adminType?: AdminType;
 
   @IsBoolean()
   @IsOptional()

@@ -8,6 +8,10 @@ export class UpdateOnboardingDocumentDto {
   @IsOptional()
   label?: string;
 
+  @IsString({ message: 'url must be a string.' })
+  @IsOptional()
+  url?: string;
+
   @IsBoolean({ message: 'Document selected flag must be a boolean.' })
   @IsOptional()
   selected?: boolean;

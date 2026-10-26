@@ -13,6 +13,7 @@ import { RequestType } from '../../setting/request-management/enum/request-manag
 import {
   ApprovalDeadline,
   LeaveAllocationMethod,
+  LeaveExpiry,
 } from '../../setting/leave-management/enum/leave-management.enum';
 import { DataRetentionPeriod } from '../../setting/offboarding/enum/offboarding.enum';
 
@@ -273,6 +274,15 @@ export class LeaveManagementSettings {
 
   @Prop({ type: Boolean, default: false })
   holidaysCountAsLeave: boolean;
+
+  @Prop({ type: Number, default: null })
+  maxCarryOverLimit: number | null;
+
+  @Prop({ type: String, enum: Object.values(LeaveExpiry), default: null })
+  leaveExpiry: LeaveExpiry | null;
+
+  @Prop({ type: [String], default: [] })
+  autoApprovedLeaveTypes: string[];
 }
 
 @Schema({ _id: false })
@@ -365,6 +375,9 @@ export class EmployerExitDocument {
 
   @Prop({ type: String, trim: true, required: true })
   name: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  url: string | null;
 
   @Prop({ type: String, trim: true, default: null })
   fileType: string | null;

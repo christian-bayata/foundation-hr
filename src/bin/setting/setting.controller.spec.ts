@@ -242,6 +242,30 @@ describe('SettingController access control (integration)', () => {
       expect(response.status).toBe(400);
       expect(settingService.addCompanyAdmin).not.toHaveBeenCalled();
     });
+
+    it('forwards adminType: internal to the service', async () => {
+      settingService.addCompanyAdmin.mockResolvedValue(adminRow);
+
+      const response = await request(app.getHttpServer())
+        .post('/setting/access-control/company-admin/create')
+        .send({ ...validCreatePayload, adminType: 'internal' });
+
+      expect(response.status).toBe(201);
+      expect(settingService.addCompanyAdmin).toHaveBeenCalledWith(
+        ORG_ID,
+        ACTOR_ID,
+        expect.objectContaining({ adminType: 'internal' }),
+      );
+    });
+
+    it('rejects an invalid adminType', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/access-control/company-admin/create')
+        .send({ ...validCreatePayload, adminType: 'contractor' });
+
+      expect(response.status).toBe(400);
+      expect(settingService.addCompanyAdmin).not.toHaveBeenCalled();
+    });
   });
 
   describe('PATCH /setting/access-control/company-admin/update-role/:id', () => {

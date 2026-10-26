@@ -36,6 +36,7 @@ import { MailDispatcherDto } from '../../../email/dto/send-mail.dto';
 import { OrganizationRepository } from '../../organization/repository/organization.repository';
 import { JobTitleRepository } from '../../organization/repository/job-title.repository';
 import { EmployeeRepository } from '../../employee/repository/employee.repository';
+import { EmployeeDocument } from '../../employee/entity/employee.schema';
 import { AuthUtility } from '../../auth/auth.utility';
 import { UserRoleFlag } from '../organisation/enum/organisation.enum';
 
@@ -865,24 +866,58 @@ export class SettingsDomainAccessControlService {
         billingContact,
         authorizedRepresentative,
         systemSettings,
+        adminType = 'external',
       } = addCompanyAdminDto;
 
-      const role = await this.resolveAdminTierRole(organizationId);
-      const findJobTitle = await this.jobTitleRepository.findByCodeOrName(
-        organizationId,
-        jobTitle.trim(),
-      );
+      const isInternal = adminType === 'internal';
 
-      if (!findJobTitle) {
-        AppResponse.error({
-          message: `Job title not found in this organization`,
-          status: HttpStatus.NOT_FOUND,
+      const role = await this.resolveAdminTierRole(organizationId);
+
+      let employee: EmployeeDocument | null = null;
+      let resolvedFirstName = firstName.trim();
+      let resolvedLastName = lastName.trim();
+      let resolvedEmail = email.trim().toLowerCase();
+      let resolvedJobTitleCode: string | null = null;
+
+      let externalJobTitleName: string | null = null;
+
+      if (isInternal) {
+        employee = await this.employeeRepository.findOne({
+          email: resolvedEmail,
+          organizationId,
         });
+
+        if (!employee) {
+          AppResponse.error({
+            message: `No employee found with email ${resolvedEmail} in this organization`,
+            status: HttpStatus.NOT_FOUND,
+          });
+        }
+
+        resolvedFirstName = employee!.firstName ?? resolvedFirstName;
+        resolvedLastName = employee!.lastName ?? resolvedLastName;
+        resolvedEmail = employee!.email ?? resolvedEmail;
+        resolvedJobTitleCode = employee!.jobTitleCode ?? null;
+      } else {
+        const findJobTitle = await this.jobTitleRepository.findByCodeOrName(
+          organizationId,
+          jobTitle.trim(),
+        );
+
+        if (!findJobTitle) {
+          AppResponse.error({
+            message: `Job title not found in this organization`,
+            status: HttpStatus.NOT_FOUND,
+          });
+        }
+        resolvedJobTitleCode = findJobTitle!.code;
+        externalJobTitleName = findJobTitle!.name;
       }
+
       const user = await this.resolveOrCreateInviteeUser({
-        email: email.trim().toLowerCase(),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        email: resolvedEmail,
+        firstName: resolvedFirstName,
+        lastName: resolvedLastName,
       });
 
       const existingRoles =
@@ -910,25 +945,36 @@ export class SettingsDomainAccessControlService {
         userId: user._id as unknown as string,
         organizationId,
         roleId: role._id as Types.ObjectId,
-        status: AdminStatus.CREATED,
+        status: isInternal ? AdminStatus.ACTIVE : AdminStatus.CREATED,
         addedById,
-        jobTitleCode: findJobTitle!.code,
+        jobTitleCode: resolvedJobTitleCode ?? '',
         isBillingContact: billingContact ?? false,
         isAuthorizedRepresentative: authorizedRepresentative ?? false,
         systemSettings: systemSettings ?? true,
       });
 
       this.logger.log(
-        `Added company admin ${email} to org ${organizationId} with role "${role.name}"`,
+        `Added company admin ${resolvedEmail} to org ${organizationId} as ${adminType} with role "${role.name}"`,
       );
 
-      await this.dispatchCompanyAdminInvite(
-        user.email,
-        user.firstName,
-        role.name,
-        String(role._id),
-        organizationId,
-      );
+      if (!isInternal) {
+        await this.dispatchCompanyAdminInvite(
+          user.email,
+          user.firstName,
+          role.name,
+          String(role._id),
+          organizationId,
+        );
+      }
+
+      const jobTitleName = isInternal
+        ? resolvedJobTitleCode
+          ? (await this.jobTitleRepository.findByCode(
+              organizationId,
+              resolvedJobTitleCode,
+            ))?.name ?? null
+          : null
+        : externalJobTitleName;
 
       return this.toCompanyAdminRow(assignment, {
         user: {
@@ -938,7 +984,7 @@ export class SettingsDomainAccessControlService {
           email: user.email,
         },
         role,
-        jobTitleName: findJobTitle!.name,
+        jobTitleName,
       });
     } catch (error: any) {
       error.location = `SettingsDomainAccessControlService.${this.addCompanyAdmin.name}`;

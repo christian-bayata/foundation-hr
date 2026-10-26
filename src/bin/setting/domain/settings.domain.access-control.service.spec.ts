@@ -113,12 +113,14 @@ describe('SettingsDomainAccessControlService company admin', () => {
     };
     jobTitleRepository = {
       findByCodeOrName: jest.fn(),
+      findByCode: jest.fn(),
       findByCodes: jest.fn(),
       findByOrganization: jest.fn(),
     };
     employeeRepository = {
       findEmailsByOrganizationJobTitleCodes: jest.fn(),
       findByOrganizationEmails: jest.fn(),
+      findOne: jest.fn(),
     };
     authUtility = { randomToken: jest.fn() };
     emailService = { brevoEmailDispatcher: jest.fn() };
@@ -131,6 +133,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
     employeeRepository.findEmailsByOrganizationJobTitleCodes.mockResolvedValue(
       [],
     );
+    employeeRepository.findOne.mockResolvedValue(null);
     inviteeUserRepository.findByIds.mockResolvedValue([]);
     inviteeUserRepository.findIdsBySearchTerm.mockResolvedValue([]);
     jobTitleRepository.findByCodes.mockResolvedValue([]);
@@ -168,7 +171,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
     };
 
     beforeEach(() => {
-      roleRepository.findById.mockResolvedValue(role());
+      roleRepository.findByOrganizationAndName.mockResolvedValue(role());
       jobTitleRepository.findByCodeOrName.mockResolvedValue({
         code: 'HR',
         name: 'Human resource',
@@ -319,6 +322,65 @@ describe('SettingsDomainAccessControlService company admin', () => {
       ).resolves.toBeDefined();
     });
 
+    it('promotes an internal employee to admin with ACTIVE status and skips the invite email', async () => {
+      const employee = {
+        _id: oid('64f1b2c3d4e5f6789010e001'),
+        firstName: 'Emp',
+        lastName: 'Staff',
+        email: 'emp@foundation.com',
+        jobTitleCode: 'HR',
+        organizationId: ORG_ID,
+      };
+      employeeRepository.findOne.mockResolvedValue(employee);
+      inviteeUserRepository.findByEmails.mockResolvedValue([]);
+      inviteeUserRepository.create.mockResolvedValue(
+        user({ email: 'emp@foundation.com' }),
+      );
+      userRoleRepository.findByUserAndOrganization.mockResolvedValue([]);
+      userRoleRepository.assign.mockImplementation(async (data: any) =>
+        assignment(data),
+      );
+      jobTitleRepository.findByCode.mockResolvedValue({
+        code: 'HR',
+        name: 'Human resource',
+      });
+
+      const row = await service.addCompanyAdmin(ORG_ID, ACTOR_ID, {
+        ...dto,
+        adminType: 'internal',
+        email: 'emp@foundation.com',
+      });
+
+      expect(employeeRepository.findOne).toHaveBeenCalledWith({
+        email: 'emp@foundation.com',
+        organizationId: ORG_ID,
+      });
+      expect(userRoleRepository.assign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: AdminStatus.ACTIVE,
+          jobTitleCode: 'HR',
+          addedById: ACTOR_ID,
+        }),
+      );
+      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
+      expect(row.status).toBe(AdminStatus.ACTIVE);
+      expect(row.email).toBe('emp@foundation.com');
+    });
+
+    it('rejects with 404 when no employee matches the email for an internal admin', async () => {
+      employeeRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.addCompanyAdmin(ORG_ID, ACTOR_ID, {
+          ...dto,
+          adminType: 'internal',
+          email: 'unknown@foundation.com',
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(userRoleRepository.assign).not.toHaveBeenCalled();
+      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
+    });
+
     it('rejects with 404 when the job title is not in the organization', async () => {
       jobTitleRepository.findByCodeOrName.mockResolvedValue(null);
 
@@ -329,7 +391,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
     });
 
     it('rejects with 404 when the role does not exist', async () => {
-      roleRepository.findById.mockResolvedValue(null);
+      roleRepository.findByOrganizationAndName.mockResolvedValue(null);
 
       await expect(
         service.addCompanyAdmin(ORG_ID, ACTOR_ID, dto),
@@ -337,7 +399,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
     });
 
     it('rejects with 403 when the role belongs to another organization', async () => {
-      roleRepository.findById.mockResolvedValue(
+      roleRepository.findByOrganizationAndName.mockResolvedValue(
         role({ organizationId: '64f1b2c3d4e5f67890deadbe' }),
       );
 
@@ -346,17 +408,12 @@ describe('SettingsDomainAccessControlService company admin', () => {
       ).rejects.toMatchObject({ status: 403 });
     });
 
-    it('rejects with 400 when the role is outside the admin tier', async () => {
-      roleRepository.findById.mockResolvedValue(
-        role({
-          name: 'Finance',
-          parentSystemRole: SystemRole.FINANCE,
-        }),
-      );
+    it('proceeds when the resolved admin-tier role belongs to the organization', async () => {
+      roleRepository.findByOrganizationAndName.mockResolvedValue(role());
 
       await expect(
         service.addCompanyAdmin(ORG_ID, ACTOR_ID, dto),
-      ).rejects.toMatchObject({ status: 400 });
+      ).resolves.toBeDefined();
     });
   });
 
