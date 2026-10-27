@@ -6,12 +6,20 @@ import {
   IsString,
   IsUrl,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import {
-  CompletionRequirement,
   DueDate,
   TaskType,
 } from '../enum/employee-profile.enum';
+
+export class CompletionRequirementTaskDto {
+  @IsString({ message: 'Task step must be a string.' })
+  step: string;
+
+  isCompleted: boolean;
+}
 
 export class UpdateWorkflowStepDto {
   @IsString({ message: 'Step name must be a string.' })
@@ -46,13 +54,8 @@ export class UpdateWorkflowStepDto {
   attachmentUrls?: string[];
 
   @IsArray({ message: 'Completion requirements must be an array.' })
-  @ArrayUnique({
-    message: 'Completion requirements must not contain duplicates.',
-  })
-  @IsEnum(CompletionRequirement, {
-    each: true,
-    message: 'One or more completion requirements are not valid.',
-  })
+  @ValidateNested({ each: true })
+  @Type(() => CompletionRequirementTaskDto)
   @IsOptional()
-  completionRequirements?: CompletionRequirement[];
+  completionRequirements?: CompletionRequirementTaskDto[];
 }

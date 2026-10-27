@@ -198,7 +198,9 @@ describe('EmployeeProfilesController (integration)', () => {
         responsibleParty: 'New hire',
         taskType: 'upload_documents',
         dueDate: '1_day_after_joining',
-        completionRequirements: ['marked_as_complete'],
+        completionRequirements: [
+          { step: 'Admin adds employment details', isCompleted: true },
+        ],
       };
       const created = { id: '64f1b2c3d4e5f678901234ff', ...payload };
       organisationService.addWorkflowStep.mockResolvedValue(created);
@@ -240,7 +242,7 @@ describe('EmployeeProfilesController (integration)', () => {
         .send({
           type: 'onboarding',
           stepName: 'Sign employee agreement',
-          completionRequirements: ['not_a_requirement'],
+          completionRequirements: [{ step: '', isCompleted: true }],
         });
 
       expect(response.status).toBe(400);

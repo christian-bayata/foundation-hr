@@ -155,7 +155,42 @@ export const DEFAULT_EMPLOYEE_PROFILE_SETTINGS: EmployeeProfileSettings = {
 };
 
 export const DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS: EmployeeWorkflowSettings = {
-  onboarding: [],
+  onboarding: [
+    {
+      _id: new Types.ObjectId(),
+      stepName: 'Adding and inviting new employee',
+      responsibleParty: null,
+      taskType: null,
+      dueDate: null,
+      instructions: null,
+      attachmentUrls: [],
+      completionRequirements: [
+        { step: 'Admin adds employment details', isCompleted: false },
+        {
+          step: 'Admin invites employees to Foundation HR',
+          isCompleted: false,
+        },
+      ],
+      isSystem: true,
+      isCompleted: false,
+    },
+    {
+      _id: new Types.ObjectId(),
+      stepName: 'Self-enrolment',
+      responsibleParty: null,
+      taskType: null,
+      dueDate: null,
+      instructions: null,
+      attachmentUrls: [],
+      completionRequirements: [
+        { step: 'Employee creates an account', isCompleted: false },
+        { step: 'Employee completes personal details', isCompleted: false },
+        { step: 'Employee uploads required documents', isCompleted: false },
+      ],
+      isSystem: true,
+      isCompleted: false,
+    },
+  ],
   leave: [],
   offboarding: [],
 };
@@ -1035,6 +1070,7 @@ export class SettingsDomainOrganisationService {
       instructions: step.instructions ?? null,
       attachmentUrls: step.attachmentUrls ?? [],
       completionRequirements: step.completionRequirements ?? [],
+      isSystem: step.isSystem ?? false,
     };
   }
 
@@ -1055,6 +1091,8 @@ export class SettingsDomainOrganisationService {
       instructions: step.instructions ?? null,
       attachmentUrls: [...(step.attachmentUrls ?? [])],
       completionRequirements: [...(step.completionRequirements ?? [])],
+      isSystem: step.isSystem ?? false,
+      isCompleted: step.isCompleted ?? false,
     };
   }
 
@@ -1099,14 +1137,21 @@ export class SettingsDomainOrganisationService {
       const settings =
         organization!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS;
 
+      const storedOnboarding = settings.onboarding ?? [];
+      const storedLeave = settings.leave ?? [];
+      const storedOffboarding = settings.offboarding ?? [];
+
       return {
-        onboarding: (settings.onboarding ?? []).map((step) =>
-          this.toWorkflowStepView(step),
-        ),
-        leave: (settings.leave ?? []).map((step) =>
-          this.toWorkflowStepView(step),
-        ),
-        offboarding: (settings.offboarding ?? []).map((step) =>
+        onboarding: [
+          ...(DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding ?? []).map((step) =>
+            this.toWorkflowStepView(step),
+          ),
+          ...storedOnboarding
+            .filter((step: WorkflowStep) => !step.isSystem)
+            .map((step) => this.toWorkflowStepView(step)),
+        ],
+        leave: storedLeave.map((step) => this.toWorkflowStepView(step)),
+        offboarding: storedOffboarding.map((step) =>
           this.toWorkflowStepView(step),
         ),
       };
@@ -1140,7 +1185,11 @@ export class SettingsDomainOrganisationService {
       }
 
       const current = this.cloneWorkflowSettings(
-        found!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
+        found!.employeeWorkflow ?? {
+          onboarding: [],
+          leave: [],
+          offboarding: [],
+        },
       );
 
       const step: WorkflowStep = {
@@ -1152,6 +1201,8 @@ export class SettingsDomainOrganisationService {
         instructions: dto.instructions ?? null,
         attachmentUrls: dto.attachmentUrls ?? [],
         completionRequirements: dto.completionRequirements ?? [],
+        isSystem: false,
+        isCompleted: false,
       };
 
       current[dto.type].push(step);
@@ -1204,43 +1255,54 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      // const current = this.cloneWorkflowSettings(
-      //   found!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS,
-      // );
-
-      // const target = this.findWorkflowStep(current, stepId);
-      // if (!target) {
-      //   AppResponse.error({
-      //     message: 'Workflow step not found',
-      //     status: HttpStatus.NOT_FOUND,
-      //   });
-      // }
-
-      // if (dto.stepName !== undefined) target!.stepName = dto.stepName;
-      // if (dto.responsibleParty !== undefined)
-      //   target!.responsibleParty = dto.responsibleParty;
-      // if (dto.taskType !== undefined) target!.taskType = dto.taskType;
-      // if (dto.dueDate !== undefined) target!.dueDate = dto.dueDate;
-      // if (dto.instructions !== undefined)
-      //   target!.instructions = dto.instructions;
-      // if (dto.attachmentUrls !== undefined)
-      //   target!.attachmentUrls = dto.attachmentUrls;
-      // if (dto.completionRequirements !== undefined)
-      //   target!.completionRequirements = dto.completionRequirements;
-
-      await this.organizationRepository.updateOrg(
-        { organizationId },
-        { employeeWorkflow: dto },
+      const current = this.cloneWorkflowSettings(
+        found!.employeeWorkflow ?? {
+          onboarding: [],
+          leave: [],
+          offboarding: [],
+        },
       );
 
-      // if (!updated) {
-      //   AppResponse.error({
-      //     message: 'Failed to update organization employee workflow step',
-      //     status: HttpStatus.INTERNAL_SERVER_ERROR,
-      //   });
-      // }
+      const target = this.findWorkflowStep(current, stepId);
+      if (!target) {
+        AppResponse.error({
+          message: 'Workflow step not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
 
-      return 'Updated employee workflow step';
+      if (target!.isSystem) {
+        AppResponse.error({
+          message: 'System workflow steps cannot be modified',
+          status: HttpStatus.FORBIDDEN,
+        });
+      }
+
+      if (dto.stepName !== undefined) target!.stepName = dto.stepName;
+      if (dto.responsibleParty !== undefined)
+        target!.responsibleParty = dto.responsibleParty;
+      if (dto.taskType !== undefined) target!.taskType = dto.taskType;
+      if (dto.dueDate !== undefined) target!.dueDate = dto.dueDate;
+      if (dto.instructions !== undefined)
+        target!.instructions = dto.instructions;
+      if (dto.attachmentUrls !== undefined)
+        target!.attachmentUrls = dto.attachmentUrls;
+      if (dto.completionRequirements !== undefined)
+        target!.completionRequirements = dto.completionRequirements;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { employeeWorkflow: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization employee workflow step',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return this.toWorkflowStepView(target!);
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateWorkflowStep.name}`;
       AppResponse.error(error);
@@ -1285,6 +1347,12 @@ export class SettingsDomainOrganisationService {
           (step) => String(step._id) === stepId,
         );
         if (index !== -1) {
+          if (current[type][index].isSystem) {
+            AppResponse.error({
+              message: 'System workflow steps cannot be deleted',
+              status: HttpStatus.FORBIDDEN,
+            });
+          }
           current[type].splice(index, 1);
           removed = true;
           break;
@@ -1310,7 +1378,7 @@ export class SettingsDomainOrganisationService {
         });
       }
 
-      return 'Deleted employee workflow step';
+      return { id: stepId };
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.deleteWorkflowStep.name}`;
       AppResponse.error(error);

@@ -42,6 +42,11 @@ export enum CompletionRequirement {
   AUTOMATIC_COMPLETION = 'automatic_completion',
 }
 
+export interface CompletionRequirementTask {
+  step: string;
+  isCompleted: boolean;
+}
+
 // export enum ResponsibleParty {
 //   ADMIN = 'admin',
 //   ONBOARDING_MANAGER = 'onboarding_manager',

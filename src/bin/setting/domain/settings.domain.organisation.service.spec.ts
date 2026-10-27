@@ -1709,8 +1709,16 @@ describe('SettingsDomainOrganisationService', () => {
 
       const result = await service.getEmployeeWorkflow(ORG_ID);
 
-      expect(result.onboarding).toHaveLength(1);
-      expect(result.onboarding[0]).toEqual({
+      expect(result.onboarding).toHaveLength(3);
+      expect(result.onboarding[0]).toMatchObject({
+        stepName: 'Adding and inviting new employee',
+        isSystem: true,
+      });
+      expect(result.onboarding[1]).toMatchObject({
+        stepName: 'Self-enrolment',
+        isSystem: true,
+      });
+      expect(result.onboarding[2]).toEqual({
         id: String(step._id),
         stepName: 'Kickoff',
         responsibleParty: 'Admin',
@@ -1719,8 +1727,9 @@ describe('SettingsDomainOrganisationService', () => {
         instructions: null,
         attachmentUrls: [],
         completionRequirements: [],
+        isSystem: false,
       });
-      expect((result.onboarding[0] as any)._id).toBeUndefined();
+      expect((result.onboarding[2] as any)._id).toBeUndefined();
     });
 
     it('falls back to the default workflow steps when none are stored', async () => {
@@ -1876,6 +1885,24 @@ describe('SettingsDomainOrganisationService', () => {
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
+
+    it('throws a 403 when attempting to update a system step', async () => {
+      const systemStep = buildStoredStep({
+        stepName: 'Adding and inviting new employee',
+        isSystem: true,
+      });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [systemStep], leave: [], offboarding: [] },
+      });
+
+      await expect(
+        service.updateWorkflowStep(ORG_ID, String(systemStep._id), {
+          stepName: 'Tampered',
+        } as any),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
   });
 
   describe('deleteWorkflowStep', () => {
@@ -1893,6 +1920,22 @@ describe('SettingsDomainOrganisationService', () => {
         organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
       expect(saved.onboarding).toHaveLength(0);
       expect(result).toEqual({ id: String(step._id) });
+    });
+
+    it('throws a 403 when attempting to delete a system step', async () => {
+      const systemStep = buildStoredStep({
+        stepName: 'Self-enrolment',
+        isSystem: true,
+      });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [systemStep], leave: [], offboarding: [] },
+      });
+
+      await expect(
+        service.deleteWorkflowStep(ORG_ID, String(systemStep._id)),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
 
     it('throws a 404 when the step does not exist', async () => {

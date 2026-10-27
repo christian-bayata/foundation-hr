@@ -3,7 +3,6 @@ import { Document, Types } from 'mongoose';
 import { Product } from '../../auth/enum/product.enum';
 import { BusinessType } from '../../setting/organisation/enum/organisation.enum';
 import {
-  CompletionRequirement,
   DocumentFormat,
   DueDate,
   EmploymentType,
@@ -161,12 +160,14 @@ export class WorkflowStep {
   @Prop({ type: [String], default: [] })
   attachmentUrls: string[];
 
-  @Prop({
-    type: [String],
-    enum: Object.values(CompletionRequirement),
-    default: [],
-  })
-  completionRequirements: CompletionRequirement[];
+  @Prop({ type: [{ step: String, isCompleted: Boolean }], default: [] })
+  completionRequirements: { step: string; isCompleted: boolean }[];
+
+  @Prop({ type: Boolean, default: false })
+  isSystem: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  isCompleted: boolean;
 }
 
 @Schema({ _id: false })
