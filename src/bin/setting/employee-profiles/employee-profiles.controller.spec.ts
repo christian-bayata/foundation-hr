@@ -20,6 +20,7 @@ describe('EmployeeProfilesController (integration)', () => {
     addWorkflowStep: jest.Mock<AnyPromiseFn>;
     updateWorkflowStep: jest.Mock<AnyPromiseFn>;
     deleteWorkflowStep: jest.Mock<AnyPromiseFn>;
+    completeWorkflowStep: jest.Mock<AnyPromiseFn>;
     getResponsibleParties: jest.Mock<AnyPromiseFn>;
     addResponsibleParty: jest.Mock<AnyPromiseFn>;
     getPensionFundAdministrators: jest.Mock<AnyPromiseFn>;
@@ -36,6 +37,7 @@ describe('EmployeeProfilesController (integration)', () => {
       addWorkflowStep: jest.fn(),
       updateWorkflowStep: jest.fn(),
       deleteWorkflowStep: jest.fn(),
+      completeWorkflowStep: jest.fn(),
       getResponsibleParties: jest.fn(),
       addResponsibleParty: jest.fn(),
       getPensionFundAdministrators: jest.fn(),
@@ -324,6 +326,47 @@ describe('EmployeeProfilesController (integration)', () => {
         ORG_ID,
         stepId,
       );
+    });
+  });
+
+  describe('PATCH /setting/employee-profiles/workflow/complete', () => {
+    it('completes a workflow step with a valid payload', async () => {
+      const stepId = '64f1b2c3d4e5f678901234ff';
+      const payload = {
+        completionRequirements: [
+          { step: 'Admin adds employment details', isCompleted: true },
+        ],
+        isCompleted: true,
+      };
+      organisationService.completeWorkflowStep.mockResolvedValue({
+        id: stepId,
+        ...payload,
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/setting/employee-profiles/workflow/complete?stepId=${stepId}`)
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual({
+        id: stepId,
+        ...payload,
+      });
+      expect(organisationService.completeWorkflowStep).toHaveBeenCalledWith(
+        ORG_ID,
+        stepId,
+        payload,
+      );
+    });
+
+    it('rejects a completion with missing completion requirements', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/employee-profiles/workflow/complete?stepId=abc')
+        .send({ isCompleted: true });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.completeWorkflowStep).not.toHaveBeenCalled();
     });
   });
 

@@ -1728,6 +1728,7 @@ describe('SettingsDomainOrganisationService', () => {
         attachmentUrls: [],
         completionRequirements: [],
         isSystem: false,
+        isCompleted: false,
       });
       expect((result.onboarding[2] as any)._id).toBeUndefined();
     });
@@ -1956,6 +1957,69 @@ describe('SettingsDomainOrganisationService', () => {
       await expect(
         service.deleteWorkflowStep(ORG_ID, 'missing'),
       ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('completeWorkflowStep', () => {
+    const completionPayload = {
+      completionRequirements: [
+        { step: 'Admin adds employment details', isCompleted: true },
+        { step: 'Admin invites employees to Foundation HR', isCompleted: true },
+      ],
+      isCompleted: true,
+    };
+
+    it('completes a workflow step and returns updated view', async () => {
+      const step = buildStoredStep({
+        stepName: 'Sign employee agreement',
+        completionRequirements: [],
+        isCompleted: false,
+      });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [step], leave: [], offboarding: [] },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.completeWorkflowStep(
+        ORG_ID,
+        String(step._id),
+        completionPayload,
+      );
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
+      expect(saved.onboarding[0].completionRequirements).toEqual(
+        completionPayload.completionRequirements,
+      );
+      expect(saved.onboarding[0].isCompleted).toBe(true);
+      expect(result).toMatchObject({
+        id: String(step._id),
+        stepName: 'Sign employee agreement',
+        completionRequirements: completionPayload.completionRequirements,
+        isCompleted: true,
+      });
+    });
+
+    it('throws a 404 when the step does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: { onboarding: [], leave: [], offboarding: [] },
+      });
+
+      await expect(
+        service.completeWorkflowStep(ORG_ID, 'missing', completionPayload),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.completeWorkflowStep(ORG_ID, 'missing', completionPayload),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
   });
 

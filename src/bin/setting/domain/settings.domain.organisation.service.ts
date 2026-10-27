@@ -54,6 +54,7 @@ import { UpdateDepartmentDto } from '../organisation/dto/update-departments.dto'
 import { UpdateNotificationPreferencesDto } from '../notifications/dto/update-notification-preferences.dto';
 import { UpdateEmployeeProfileSettingsDto } from '../employee-profiles/dto/update-employee-profile-settings.dto';
 import { AddWorkflowStepDto } from '../employee-profiles/dto/add-workflow-step.dto';
+import { CompleteWorkflowStepDto } from '../employee-profiles/dto/complete-workflow-step.dto';
 import { UpdateWorkflowStepDto } from '../employee-profiles/dto/update-workflow-step.dto';
 import { AddResponsiblePartyDto } from '../employee-profiles/dto/add-responsible-party.dto';
 import { AddPensionFundAdministratorDto } from '../employee-profiles/dto/add-pension-fund-administrator.dto';
@@ -1071,6 +1072,7 @@ export class SettingsDomainOrganisationService {
       attachmentUrls: step.attachmentUrls ?? [],
       completionRequirements: step.completionRequirements ?? [],
       isSystem: step.isSystem ?? false,
+      isCompleted: step.isCompleted ?? false,
     };
   }
 
@@ -1381,6 +1383,72 @@ export class SettingsDomainOrganisationService {
       return { id: stepId };
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.deleteWorkflowStep.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Complete a single workflow step by updating its
+   * completion requirements and overall completion status.
+   *
+   * @param organizationId - The organization to update
+   * @param stepId - The id of the step to complete
+   * @param dto - The completion requirements and overall completion status
+   * @returns The updated step
+   *
+   * @throws {404} Organization or step not found
+   */
+  async completeWorkflowStep(
+    organizationId: string,
+    stepId: string,
+    dto: CompleteWorkflowStepDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneWorkflowSettings(
+        found!.employeeWorkflow ?? {
+          onboarding: [],
+          leave: [],
+          offboarding: [],
+        },
+      );
+
+      const target = this.findWorkflowStep(current, stepId);
+      if (!target) {
+        AppResponse.error({
+          message: 'Workflow step not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      target!.completionRequirements = dto.completionRequirements;
+      target!.isCompleted = dto.isCompleted;
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { employeeWorkflow: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to complete organization employee workflow step',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      return this.toWorkflowStepView(target!);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.completeWorkflowStep.name}`;
       AppResponse.error(error);
       throw error;
     }

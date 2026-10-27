@@ -18,6 +18,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser } from '../../../common';
 import { SystemRole } from '../../auth/enum/role.enum';
 import { SettingsDomainOrganisationService } from '../domain/settings.domain.organisation.service';
+import { CompleteWorkflowStepDto } from './dto/complete-workflow-step.dto';
 import { UpdateEmployeeProfileSettingsDto } from './dto/update-employee-profile-settings.dto';
 import { AddWorkflowStepDto } from './dto/add-workflow-step.dto';
 import { UpdateWorkflowStepDto } from './dto/update-workflow-step.dto';
@@ -119,6 +120,22 @@ export class EmployeeProfilesController {
       stepId,
     );
     return AppResponse.success('Workflow step deleted successfully', 200, data);
+  }
+
+  @Patch('workflow/complete')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async completeWorkflowStep(
+    @CurrentUser() user: ICurrentUser,
+    @Query('stepId') stepId: string,
+    @Body() dto: CompleteWorkflowStepDto,
+  ) {
+    const data = await this.organisationService.completeWorkflowStep(
+      user.organizationId!,
+      stepId,
+      dto,
+    );
+    return AppResponse.success('Workflow step completed successfully', 200, data);
   }
 
   @Get('workflow/responsible-parties/retrieve')
