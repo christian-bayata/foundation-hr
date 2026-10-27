@@ -188,6 +188,24 @@ export class OnboardingProgress {
 export const OnboardingProgressSchema =
   SchemaFactory.createForClass(OnboardingProgress);
 
+@Schema({ _id: false })
+export class EmployeeOnboardingStep {
+  @Prop({ type: String, trim: true, required: true })
+  stepId: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  stepName: string;
+
+  @Prop({ type: Boolean, default: false })
+  isCompleted: boolean;
+
+  @Prop({ type: [{ step: String, isCompleted: Boolean }], default: [] })
+  completionRequirements: { step: string; isCompleted: boolean }[];
+}
+
+export const EmployeeOnboardingStepSchema =
+  SchemaFactory.createForClass(EmployeeOnboardingStep);
+
 @Schema({ timestamps: true })
 export class Employee {
   @Prop({
@@ -312,6 +330,12 @@ export class Employee {
 
   @Prop({ type: OnboardingProgressSchema, default: null })
   onboarding: OnboardingProgress | null;
+
+  @Prop({
+    type: () => [EmployeeOnboardingStepSchema],
+    default: [],
+  })
+  employeeOnboardingSteps: EmployeeOnboardingStep[];
 }
 
 export const EmployeeSchema = SchemaFactory.createForClass(Employee);

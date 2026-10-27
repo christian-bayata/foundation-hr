@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './bin/auth/auth.module';
 import { EmployeeModule } from './bin/employee/employee.module';
+import { OnboardingModule } from './bin/onboarding/onboarding.module';
 import { SettingModule } from './bin/setting/setting.module';
 import { FileUploadModule } from './file-upload/file-upload.module';
 import { HttpExceptionFilter } from './common';
@@ -22,6 +23,7 @@ import { RoleGuard } from './common/guards/role.guard';
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     AuthModule,
     EmployeeModule,
+    OnboardingModule,
     SettingModule,
     FileUploadModule,
     MongooseModule.forRootAsync({
