@@ -19,6 +19,7 @@ import { SystemRole } from '../auth/enum/role.enum';
 import { OnboardingService } from './onboarding.service';
 import {
   AddEmployeeOnboardingDto,
+  ListEmployeeOnboardingQueryDto,
   RetrieveEmployeeOnboardingDto,
   UpdateEmployeeOnboardingStepDto,
 } from './dto/employee-onboarding.dto';
@@ -88,9 +89,13 @@ export class OnboardingController {
 
   @Get('employee/list')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
-  async listEmployeeOnboarding(@CurrentUser() user: ICurrentUser) {
+  async listEmployeeOnboarding(
+    @CurrentUser() user: ICurrentUser,
+    @Query() query: ListEmployeeOnboardingQueryDto,
+  ) {
     const data = await this.onboardingService.listEmployeeOnboarding(
       user.organizationId!,
+      query,
     );
     return AppResponse.success(
       'Employee onboarding list retrieved successfully',

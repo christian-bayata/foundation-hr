@@ -11,13 +11,15 @@ const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const EMPLOYEE_ID = '64f1b2c3d4e5f678901234ba';
 const STEP_ID = '64f1b2c3d4e5f678901234c1';
 
+type AnyPromiseFn = (...args: any[]) => Promise<any>;
+
 describe('OnboardingController (integration)', () => {
   let app: INestApplication<App>;
   let onboardingService: {
-    addEmployeeOnboarding: jest.Mock;
-    getEmployeeOnboarding: jest.Mock;
-    updateEmployeeOnboardingStep: jest.Mock;
-    listEmployeeOnboarding: jest.Mock;
+    addEmployeeOnboarding: jest.Mock<AnyPromiseFn>;
+    getEmployeeOnboarding: jest.Mock<AnyPromiseFn>;
+    updateEmployeeOnboardingStep: jest.Mock<AnyPromiseFn>;
+    listEmployeeOnboarding: jest.Mock<AnyPromiseFn>;
   };
 
   beforeEach(async () => {
@@ -127,6 +129,7 @@ describe('OnboardingController (integration)', () => {
       const payload = {
         stepId: STEP_ID,
         isCompleted: true,
+        dueDate: '1_day_after_joining',
         completionRequirements: [
           { step: 'Employee creates an account', isCompleted: true },
         ],
@@ -134,6 +137,7 @@ describe('OnboardingController (integration)', () => {
       const updated = {
         stepId: STEP_ID,
         stepName: 'Self-enrolment',
+        dueDate: '1_day_after_joining',
         isCompleted: true,
         completionRequirements: payload.completionRequirements,
       };
@@ -159,16 +163,22 @@ describe('OnboardingController (integration)', () => {
 
   describe('GET /onboarding/employee/list', () => {
     it('lists all employees with onboarding progress', async () => {
-      const list = [
-        {
-          employeeId: EMPLOYEE_ID,
-          employeeName: 'John Doe',
-          email: 'john@example.com',
-          overallProgress: 50,
-          completedSteps: 1,
-          totalSteps: 2,
-        },
-      ];
+      const list = {
+        data: [
+          {
+            employeeId: EMPLOYEE_ID,
+            employeeName: 'John Doe',
+            email: 'john@example.com',
+            status: 'incomplete',
+            overallProgress: 50,
+            completedSteps: 1,
+            totalSteps: 2,
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 10,
+      };
       onboardingService.listEmployeeOnboarding.mockResolvedValue(list);
 
       const response = await request(app.getHttpServer()).get(
@@ -180,6 +190,40 @@ describe('OnboardingController (integration)', () => {
       expect(response.body.data).toEqual(list);
       expect(onboardingService.listEmployeeOnboarding).toHaveBeenCalledWith(
         ORG_ID,
+        {},
+      );
+    });
+
+    it('passes batch, limit, role, status, startDate, and endDate query params to the service', async () => {
+      onboardingService.listEmployeeOnboarding.mockResolvedValue({
+        data: [],
+        total: 0,
+        page: 2,
+        limit: 5,
+      });
+
+      const response = await request(app.getHttpServer())
+        .get('/onboarding/employee/list')
+        .query({
+          batch: 2,
+          limit: 5,
+          role: 'Engineer',
+          status: 'overdue',
+          startDate: '2026-01-01',
+          endDate: '2026-01-31',
+        });
+
+      expect(response.status).toBe(200);
+      expect(onboardingService.listEmployeeOnboarding).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          batch: 2,
+          limit: 5,
+          role: 'Engineer',
+          status: 'overdue',
+          startDate: '2026-01-01',
+          endDate: '2026-01-31',
+        }),
       );
     });
   });

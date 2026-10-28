@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JobTitle, JobTitleDocument } from '../entity/job-title.schema';
+import { PropDataInput } from '../../../common/util/util.interface';
 
 /**
  * Escapes user-supplied input before it is embedded in a RegExp so a job title
@@ -60,9 +61,26 @@ export class JobTitleRepository {
     code: string,
   ): Promise<JobTitleDocument | null> {
     try {
-      return await this.jobTitleModel
-        .findOne({ organizationId, code })
-        .exec();
+      return await this.jobTitleModel.findOne({ organizationId, code }).exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve a single job title by its unique code within an
+   * organization.
+   *
+   * @param organizationId - Organization id to scope the query to
+   * @param code - The unique job title code to match
+   * @returns {Promise<JobTitleDocument | null>}
+   */
+  async findJobTitle(
+    where: PropDataInput,
+    attributes: string | '',
+  ): Promise<JobTitleDocument | null> {
+    try {
+      return await this.jobTitleModel.findOne(where).select(attributes).exec();
     } catch (error) {
       throw error;
     }
@@ -84,7 +102,10 @@ export class JobTitleRepository {
       return await this.jobTitleModel
         .findOne({
           organizationId,
-          $or: [{ code: value }, { name: new RegExp(`^${escapeRegex(value)}$`, 'i') }],
+          $or: [
+            { code: value },
+            { name: new RegExp(`^${escapeRegex(value)}$`, 'i') },
+          ],
         })
         .exec();
     } catch (error) {

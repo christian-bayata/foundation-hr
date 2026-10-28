@@ -15,6 +15,7 @@ import {
   VoluntaryContribution,
   WorkMode,
 } from '../enum/employee.enum';
+import { DueDate } from '../../setting/employee-profiles/enum/employee-profile.enum';
 
 export type EmployeeDocument = Employee & Document;
 
@@ -195,6 +196,9 @@ export class EmployeeOnboardingStep {
 
   @Prop({ type: String, trim: true, required: true })
   stepName: string;
+
+  @Prop({ type: String, enum: Object.values(DueDate), default: null })
+  dueDate: DueDate | null;
 
   @Prop({ type: Boolean, default: false })
   isCompleted: boolean;

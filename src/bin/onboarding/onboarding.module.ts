@@ -15,6 +15,11 @@ import {
   Organization,
   OrganizationSchema,
 } from '../organization/entity/organization.schema';
+import { JobTitleRepository } from '../organization/repository/job-title.repository';
+import {
+  JobTitle,
+  JobTitleSchema,
+} from '../organization/entity/job-title.schema';
 
 @Module({
   imports: [
@@ -22,12 +27,18 @@ import {
       { name: Employee.name, schema: EmployeeSchema },
       { name: UserRole.name, schema: UserRoleSchema },
       { name: Organization.name, schema: OrganizationSchema },
+      { name: JobTitle.name, schema: JobTitleSchema },
     ]),
     EmployeeModule,
     SettingModule,
   ],
   controllers: [OnboardingController],
-  providers: [OnboardingService, UserRoleRepository, OrganizationRepository],
+  providers: [
+    OnboardingService,
+    UserRoleRepository,
+    OrganizationRepository,
+    JobTitleRepository,
+  ],
   exports: [OnboardingService],
 })
 export class OnboardingModule {}
