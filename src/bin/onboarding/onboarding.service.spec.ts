@@ -36,6 +36,9 @@ describe('OnboardingService', () => {
   let jobTitleRepository: {
     findByOrganization: jest.Mock<AnyPromiseFn>;
   };
+  let settingsDomainOrganisationService: {
+    getEmployeeWorkflow: jest.Mock<AnyPromiseFn>;
+  };
   let service: OnboardingService;
 
   beforeEach(() => {
@@ -49,35 +52,73 @@ describe('OnboardingService', () => {
     jobTitleRepository = {
       findByOrganization: jest.fn(),
     };
+    settingsDomainOrganisationService = {
+      getEmployeeWorkflow: jest.fn(),
+    };
 
     service = new OnboardingService(
       employeeRepository as any,
       jobTitleRepository as any,
+      settingsDomainOrganisationService as any,
     );
   });
 
   describe('addEmployeeOnboarding', () => {
-    it('initializes onboarding with system steps for a valid employee', async () => {
+    it('initializes onboarding with the full organization workflow snapshot', async () => {
       employeeRepository.findById.mockResolvedValue(
         buildEmployee({ employeeOnboardingSteps: [] }),
       );
       employeeRepository.updateById.mockResolvedValue(buildEmployee());
+      settingsDomainOrganisationService.getEmployeeWorkflow.mockResolvedValue({
+        onboarding: [
+          {
+            ...DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding[0],
+            id: STEP_ID,
+          },
+          {
+            ...DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding[1],
+            id: 'step-2',
+          },
+          {
+            id: 'step-3',
+            stepName: 'Right to work check',
+            responsibleParty: 'New hire',
+            taskType: 'upload_documents',
+            dueDate: DueDate.ONE_DAY_AFTER_JOINING,
+            instructions: 'Upload a valid right to work document.',
+            attachmentUrls: ['https://example.com/guide.pdf'],
+            completionRequirements: [
+              { step: 'Employee uploads right to work document' },
+            ],
+            isSystem: false,
+            isCompleted: false,
+          },
+        ],
+      });
 
       const dto: AddEmployeeOnboardingDto = { employeeId: EMPLOYEE_ID };
 
       const result = await service.addEmployeeOnboarding(ORG_ID, dto);
 
       expect(result.employeeId).toBe(EMPLOYEE_ID);
-      expect(result.steps).toHaveLength(
-        DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.length,
-      );
-      expect(result.steps[0].stepName).toBe(
-        'Adding and inviting new employee',
-      );
+      expect(result.steps).toHaveLength(3);
+      expect(result.steps[0].stepName).toBe('Adding and inviting new employee');
       expect(result.steps[1].stepName).toBe('Self-enrolment');
+      expect(result.steps[2].stepName).toBe('Right to work check');
       expect(result.steps[0].dueDate).toBeNull();
-      expect(result.steps[1].dueDate).toBeNull();
+      expect(result.steps[2].dueDate).toBe('1_day_after_joining');
+      expect(result.steps[2].responsibleParty).toBe('New hire');
+      expect(result.steps[2].taskType).toBe('upload_documents');
+      expect(result.steps[2].attachmentUrls).toEqual([
+        'https://example.com/guide.pdf',
+      ]);
+      expect(result.steps[0].startedAt).toBeInstanceOf(Date);
+      expect(result.steps[1].startedAt).toBeNull();
+      expect(result.steps[2].startedAt).toBeNull();
       expect(result.overallProgress).toBe(0);
+      expect(
+        settingsDomainOrganisationService.getEmployeeWorkflow,
+      ).toHaveBeenCalledWith(ORG_ID);
       expect(employeeRepository.updateById).toHaveBeenCalledWith(
         EMPLOYEE_ID,
         expect.objectContaining({
@@ -111,38 +152,159 @@ describe('OnboardingService', () => {
         {
           stepId: STEP_ID,
           stepName: 'Adding and inviting new employee',
+          responsibleParty: 'Admin',
+          taskType: null,
           dueDate: null,
+          instructions: null,
+          attachmentUrls: [],
+          isSystem: true,
           isCompleted: true,
+          startedAt: new Date(2026, 0, 1),
+          completedAt: new Date(2026, 0, 1),
           completionRequirements: [
-            { step: 'Admin adds employment details', isCompleted: true },
-            { step: 'Admin invites employees to Foundation HR', isCompleted: true },
+            {
+              step: 'Admin adds employment details',
+              isCompleted: true,
+              completedAt: new Date(2026, 0, 1),
+            },
+            {
+              step: 'Admin invites employees to Foundation HR',
+              isCompleted: true,
+              completedAt: new Date(2026, 0, 1),
+            },
           ],
         },
         {
           stepId: 'step-2',
           stepName: 'Self-enrolment',
-          dueDate: DueDate.ONE_DAY_AFTER_JOINING,
+          responsibleParty: 'New hire',
+          taskType: 'complete_form',
+          dueDate: null,
+          instructions: 'Complete your employee profile.',
+          attachmentUrls: [],
+          isSystem: true,
           isCompleted: false,
+          startedAt: new Date(2026, 0, 2),
+          completedAt: null,
           completionRequirements: [
-            { step: 'Employee creates an account', isCompleted: false },
+            {
+              step: 'Employee creates an account',
+              isCompleted: false,
+              completedAt: null,
+            },
           ],
         },
       ];
       employeeRepository.findById.mockResolvedValue(
-        buildEmployee({ employeeOnboardingSteps: steps }),
+        buildEmployee({
+          employeeId: 'FHR2024',
+          avatarUrl: 'https://example.com/avatar.png',
+          employmentDate: new Date(2026, 0, 1),
+          jobTitleCode: 'eng',
+          employeeOnboardingSteps: steps,
+        }),
       );
+      jobTitleRepository.findByOrganization.mockResolvedValue([
+        { code: 'eng', name: 'Engineer' },
+      ]);
 
       const dto: RetrieveEmployeeOnboardingDto = { employeeId: EMPLOYEE_ID };
 
       const result = await service.getEmployeeOnboarding(ORG_ID, dto);
 
       expect(result.employeeId).toBe(EMPLOYEE_ID);
+      expect(result.employee).toEqual({
+        employeeId: EMPLOYEE_ID,
+        employeeName: 'John Doe',
+        email: 'john.doe@example.com',
+        avatarUrl: 'https://example.com/avatar.png',
+        employmentId: 'FHR2024',
+        role: 'Engineer',
+        startDate: '2026-01-01',
+      });
+      expect(result.workflow).toEqual({
+        name: 'Onboarding',
+        snapshotDate: '2026-01-01',
+      });
+      expect(result.status).toBe(OnboardingStatus.INCOMPLETE);
+      expect(result.currentStep).toEqual({
+        stepId: 'step-2',
+        stepName: 'Self-enrolment',
+        number: 2,
+        total: 2,
+      });
       expect(result.steps).toHaveLength(2);
       expect(result.steps[0].dueDate).toBeNull();
-      expect(result.steps[1].dueDate).toBe('1_day_after_joining');
+      expect(result.steps[1].dueDate).toBeNull();
+      expect(result.steps[1].resolvedDueDate).toBeNull();
+      expect(result.steps[0].isLocked).toBe(false);
+      expect(result.steps[1].isLocked).toBe(false);
+      expect(result.steps[0].startedAt).toBe('2026-01-01');
+      expect(result.steps[0].completedAt).toBe('2026-01-01');
+      expect(result.steps[0].completionRequirements[0]).toEqual({
+        step: 'Admin adds employment details',
+        isCompleted: true,
+        completedAt: '2026-01-01',
+        status: 'completed',
+      });
+      expect(result.steps[1].completionRequirements[0].status).toBe(
+        'to_complete',
+      );
       expect(result.completedSteps).toBe(1);
       expect(result.totalSteps).toBe(2);
       expect(result.overallProgress).toBe(50);
+      expect(result.stepProgress).toBe(100);
+    });
+
+    it('locks steps until earlier steps are complete', async () => {
+      const steps = [
+        {
+          stepId: STEP_ID,
+          stepName: 'Adding and inviting new employee',
+          isCompleted: false,
+          startedAt: new Date(2026, 0, 1),
+          completionRequirements: [],
+        },
+        {
+          stepId: 'step-2',
+          stepName: 'Self-enrolment',
+          isCompleted: false,
+          startedAt: null,
+          completionRequirements: [],
+        },
+        {
+          stepId: 'step-3',
+          stepName: 'Employment agreement',
+          isCompleted: false,
+          startedAt: null,
+          completionRequirements: [],
+        },
+      ];
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({ employeeOnboardingSteps: steps }),
+      );
+      jobTitleRepository.findByOrganization.mockResolvedValue([]);
+
+      const result = await service.getEmployeeOnboarding(ORG_ID, {
+        employeeId: EMPLOYEE_ID,
+      });
+
+      expect(result.currentStep).toEqual({
+        stepId: STEP_ID,
+        stepName: 'Adding and inviting new employee',
+        number: 1,
+        total: 3,
+      });
+      expect(result.stepProgress).toBe(33);
+      expect(result.steps[0].isLocked).toBe(false);
+      expect(result.steps[1].isLocked).toBe(true);
+      expect(result.steps[1].lockReason).toBe(
+        'Locked until Adding and inviting new employee is approved',
+      );
+      expect(result.steps[2].isLocked).toBe(true);
+      expect(result.steps[2].lockReason).toBe(
+        'Locked until Self-enrolment is approved',
+      );
     });
 
     it('throws 404 when employee does not exist', async () => {
@@ -162,9 +324,24 @@ describe('OnboardingService', () => {
           stepName: 'Self-enrolment',
           dueDate: null,
           isCompleted: false,
+          startedAt: null,
+          completedAt: null,
           completionRequirements: [
-            { step: 'Employee creates an account', isCompleted: false },
+            {
+              step: 'Employee creates an account',
+              isCompleted: false,
+              completedAt: null,
+            },
           ],
+        },
+        {
+          stepId: 'step-2',
+          stepName: 'Right to work check',
+          dueDate: null,
+          isCompleted: false,
+          startedAt: null,
+          completedAt: null,
+          completionRequirements: [],
         },
       ];
       employeeRepository.findById.mockResolvedValue(
@@ -190,11 +367,109 @@ describe('OnboardingService', () => {
 
       expect(result.isCompleted).toBe(true);
       expect(result.dueDate).toBe('1_day_after_joining');
+      expect(result.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(result.completedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(result.completionRequirements[0].isCompleted).toBe(true);
+      expect(result.completionRequirements[0].completedAt).toMatch(
+        /^\d{4}-\d{2}-\d{2}$/,
+      );
+      expect(result.completionRequirements[0].status).toBe('completed');
+
+      const updatedSteps =
+        employeeRepository.updateById.mock.calls[0][1].employeeOnboardingSteps;
+      expect(updatedSteps[1].startedAt).toBeInstanceOf(Date);
       expect(employeeRepository.updateById).toHaveBeenCalledWith(
         EMPLOYEE_ID,
         expect.objectContaining({ employeeOnboardingSteps: expect.any(Array) }),
       );
+    });
+
+    it('preserves the due date and startedAt when they are omitted from the update', async () => {
+      const steps = [
+        {
+          stepId: STEP_ID,
+          stepName: 'Self-enrolment',
+          dueDate: DueDate.TWO_DAYS_AFTER_JOINING,
+          isCompleted: false,
+          startedAt: new Date(2026, 0, 2),
+          completedAt: null,
+          completionRequirements: [
+            {
+              step: 'Employee creates an account',
+              isCompleted: false,
+              completedAt: null,
+            },
+          ],
+        },
+      ];
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({
+          employmentDate: new Date(2026, 0, 1),
+          employeeOnboardingSteps: steps,
+        }),
+      );
+      employeeRepository.updateById.mockResolvedValue(buildEmployee());
+
+      const result = await service.updateEmployeeOnboardingStep(
+        ORG_ID,
+        EMPLOYEE_ID,
+        STEP_ID,
+        {
+          stepId: STEP_ID,
+          isCompleted: false,
+          completionRequirements: [
+            { step: 'Employee creates an account', isCompleted: false },
+          ],
+        },
+      );
+
+      expect(result.dueDate).toBe('2_days_after_joining');
+      expect(result.resolvedDueDate).toBe('2026-01-03');
+      expect(result.startedAt).toBe('2026-01-02');
+      expect(result.completedAt).toBeNull();
+      expect(result.completionRequirements[0].completedAt).toBeNull();
+    });
+
+    it('clears completion timestamps when a step is reopened', async () => {
+      const steps = [
+        {
+          stepId: STEP_ID,
+          stepName: 'Self-enrolment',
+          dueDate: null,
+          isCompleted: true,
+          startedAt: new Date(2026, 0, 1),
+          completedAt: new Date(2026, 0, 2),
+          completionRequirements: [
+            {
+              step: 'Employee creates an account',
+              isCompleted: true,
+              completedAt: new Date(2026, 0, 2),
+            },
+          ],
+        },
+      ];
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({ employeeOnboardingSteps: steps }),
+      );
+      employeeRepository.updateById.mockResolvedValue(buildEmployee());
+
+      const result = await service.updateEmployeeOnboardingStep(
+        ORG_ID,
+        EMPLOYEE_ID,
+        STEP_ID,
+        {
+          stepId: STEP_ID,
+          isCompleted: false,
+          completionRequirements: [
+            { step: 'Employee creates an account', isCompleted: false },
+          ],
+        },
+      );
+
+      expect(result.isCompleted).toBe(false);
+      expect(result.completedAt).toBeNull();
+      expect(result.completionRequirements[0].completedAt).toBeNull();
+      expect(result.completionRequirements[0].status).toBe('to_complete');
     });
 
     it('throws 404 when step does not exist', async () => {

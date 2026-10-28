@@ -1,6 +1,5 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { AppResponse } from '../../common/response/app-response';
-import { DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS } from '../setting/domain/settings.domain.organisation.service';
 import {
   AddEmployeeOnboardingDto,
   ListEmployeeOnboardingQueryDto,
@@ -11,7 +10,10 @@ import { EmployeeRepository } from '../employee/repository/employee.repository';
 import { EmployeeOnboardingStep } from '../employee/entity/employee.schema';
 import { JobTitleRepository } from '../organization/repository/job-title.repository';
 import { DueDate } from '../setting/employee-profiles/enum/employee-profile.enum';
+import { SettingsDomainOrganisationService } from '../setting/domain/settings.domain.organisation.service';
 import { OnboardingStatus } from './enum/onboarding-status.enum';
+
+const ONBOARDING_WORKFLOW_NAME = 'Onboarding';
 
 @Injectable()
 export class OnboardingService {
@@ -22,13 +24,16 @@ export class OnboardingService {
     private readonly employeeRepository: EmployeeRepository,
     @Inject(JobTitleRepository)
     private readonly jobTitleRepository: JobTitleRepository,
+    @Inject(SettingsDomainOrganisationService)
+    private readonly settingsDomainOrganisationService: SettingsDomainOrganisationService,
   ) {}
 
   /**
    * @Responsibility: Initialize onboarding tracking for a new employee.
-   * Seeds the record with the two required system steps ("Adding and inviting
-   * new employee" and "Self-enrolment") plus any custom org steps from the
-   * default workflow settings. All completion requirements start as incomplete.
+   * Snapshots the organization's onboarding workflow, including the two
+   * required system steps ("Adding and inviting new employee" and
+   * "Self-enrolment") plus any custom steps. All completion requirements start
+   * as incomplete, and the first step is marked as started.
    *
    * @param organizationId - The organization to scope the employee to
    * @param dto - The employee ID to initialize onboarding for
@@ -54,17 +59,30 @@ export class OnboardingService {
         });
       }
 
-      const defaultSteps = DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding ?? [];
+      const workflow =
+        await this.settingsDomainOrganisationService.getEmployeeWorkflow(
+          organizationId,
+        );
+      const workflowSteps = workflow.onboarding ?? [];
+      const startedAt = new Date();
 
-      const onboardingSteps = defaultSteps.map((step) => ({
-        stepId: String(step._id),
+      const onboardingSteps = workflowSteps.map((step, index) => ({
+        stepId: step.id,
         stepName: step.stepName,
-        dueDate: null,
+        responsibleParty: step.responsibleParty ?? null,
+        taskType: step.taskType ?? null,
+        dueDate: step.dueDate ?? null,
+        instructions: step.instructions ?? null,
+        attachmentUrls: step.attachmentUrls ?? [],
+        isSystem: step.isSystem ?? false,
         isCompleted: false,
+        startedAt: index === 0 ? startedAt : null,
+        completedAt: null,
         completionRequirements: (step.completionRequirements ?? []).map(
           (req) => ({
             step: req.step,
             isCompleted: false,
+            completedAt: null,
           }),
         ),
       }));
@@ -92,9 +110,10 @@ export class OnboardingService {
   }
 
   /**
-   * @Responsibility: Retrieve an employee's onboarding progress.
-   * Returns each step with its completion status, due date, and completion
-   * requirements, plus an overall progress percentage.
+   * @Responsibility: Retrieve an employee's onboarding detail.
+   * Returns the employee header, workflow snapshot metadata, current step,
+   * overall and step progress, and every step with its owner, dates, lock
+   * state, and completion requirements.
    *
    * @param organizationId - The organization to scope the employee to
    * @param dto - The employee ID to retrieve onboarding for
@@ -120,20 +139,93 @@ export class OnboardingService {
         });
       }
 
-      const steps = (employee!.employeeOnboardingSteps ?? []).map((step) =>
-        this.toEmployeeOnboardingStepView(step),
-      );
-      const totalSteps = steps.length;
-      const completedSteps = steps.filter((s) => s.isCompleted).length;
+      const rawSteps = employee!.employeeOnboardingSteps ?? [];
+      const totalSteps = rawSteps.length;
+      const completedSteps = rawSteps.filter((s) => s.isCompleted).length;
       const overallProgress =
         totalSteps === 0 ? 0 : Math.round((completedSteps / totalSteps) * 100);
+      const firstIncompleteIndex = rawSteps.findIndex((s) => !s.isCompleted);
+      const currentStepIndex =
+        firstIncompleteIndex === -1
+          ? totalSteps > 0
+            ? totalSteps - 1
+            : -1
+          : firstIncompleteIndex;
+      const currentStepNumber =
+        currentStepIndex === -1 ? 0 : currentStepIndex + 1;
+      const stepProgress =
+        totalSteps === 0
+          ? 0
+          : Math.round((currentStepNumber / totalSteps) * 100);
+
+      const steps = rawSteps.map((step, index) => {
+        const previousIncompleteSteps = rawSteps
+          .slice(0, index)
+          .filter((previousStep) => !previousStep.isCompleted);
+        const isLocked =
+          !step.isCompleted && previousIncompleteSteps.length > 0;
+        const blockingStep =
+          previousIncompleteSteps[previousIncompleteSteps.length - 1];
+
+        return this.toEmployeeOnboardingStepView(
+          step,
+          employee!.employmentDate,
+          isLocked,
+          isLocked ? `Locked until ${blockingStep.stepName} is approved` : null,
+        );
+      });
+
+      const jobTitles = await this.jobTitleRepository.findByOrganization(
+        organizationId,
+        'code name',
+      );
+      const jobTitle = employee!.jobTitleCode
+        ? jobTitles.find((title) => title.code === employee!.jobTitleCode)
+        : null;
+      const currentStep =
+        currentStepIndex === -1
+          ? null
+          : {
+              stepId: rawSteps[currentStepIndex].stepId,
+              stepName: rawSteps[currentStepIndex].stepName,
+              number: currentStepNumber,
+              total: totalSteps,
+            };
 
       return {
         employeeId: dto.employeeId,
-        steps,
+        employeeUniqueId: employee.employeeId,
+        employee: {
+          employeeId: String(employee!._id),
+          employeeName:
+            `${employee!.firstName ?? ''} ${employee!.lastName ?? ''}`.trim() ||
+            employee!.email,
+          email: employee!.email,
+          avatarUrl: employee!.avatarUrl ?? null,
+          employmentId: employee!.employeeId ?? null,
+          role: jobTitle?.name ?? null,
+          startDate: employee!.employmentDate
+            ? this.formatDate(employee!.employmentDate)
+            : null,
+        },
+        workflow: {
+          name: ONBOARDING_WORKFLOW_NAME,
+          snapshotDate: this.getWorkflowSnapshotDate(
+            rawSteps,
+            employee!.employmentDate,
+          ),
+        },
+        status: this.getOnboardingStatus(
+          rawSteps,
+          employee!.employmentDate,
+          overallProgress,
+        ),
+        currentStep,
         overallProgress,
+        stepProgress,
         completedSteps,
         totalSteps,
+        steps,
       };
     } catch (error: any) {
       error.location = `OnboardingService.${this.getEmployeeOnboarding.name}`;
@@ -189,13 +281,48 @@ export class OnboardingService {
       const allRequirementsCompleted =
         dto.completionRequirements.length > 0 &&
         dto.completionRequirements.every((r) => r.isCompleted);
+      const now = new Date();
+      const currentStep = steps[stepIndex];
+      const isCompleted = dto.isCompleted || allRequirementsCompleted;
+      const existingRequirements = new Map(
+        (currentStep.completionRequirements ?? []).map((requirement) => [
+          requirement.step,
+          requirement,
+        ]),
+      );
+      const completionRequirements = dto.completionRequirements.map(
+        (requirement) => {
+          const existing = existingRequirements.get(requirement.step);
+          const completedAt = requirement.isCompleted
+            ? existing?.isCompleted
+              ? (existing.completedAt ?? now)
+              : now
+            : null;
+
+          return {
+            step: requirement.step,
+            isCompleted: requirement.isCompleted,
+            completedAt,
+          };
+        },
+      );
 
       steps[stepIndex] = {
-        ...steps[stepIndex],
-        isCompleted: dto.isCompleted || allRequirementsCompleted,
-        dueDate: dto.dueDate ?? null,
-        completionRequirements: dto.completionRequirements,
+        ...currentStep,
+        isCompleted,
+        dueDate: dto.dueDate ?? currentStep.dueDate ?? null,
+        startedAt: currentStep.startedAt ?? now,
+        completedAt: isCompleted ? (currentStep.completedAt ?? now) : null,
+        completionRequirements,
       };
+
+      if (isCompleted && !currentStep.isCompleted) {
+        const nextStep = steps[stepIndex + 1];
+
+        if (nextStep && !nextStep.startedAt) {
+          nextStep.startedAt = now;
+        }
+      }
 
       await this.employeeRepository.updateById(employeeId, {
         employeeOnboardingSteps: steps,
@@ -205,7 +332,10 @@ export class OnboardingService {
         `Updated onboarding step ${stepId} for employee ${employeeId}`,
       );
 
-      return this.toEmployeeOnboardingStepView(steps[stepIndex]);
+      return this.toEmployeeOnboardingStepView(
+        steps[stepIndex],
+        employee!.employmentDate,
+      );
     } catch (error: any) {
       error.location = `OnboardingService.${this.updateEmployeeOnboardingStep.name}`;
       AppResponse.error(error);
@@ -258,7 +388,9 @@ export class OnboardingService {
             (s): s is EmployeeOnboardingStep & { dueDate: DueDate } =>
               !s.isCompleted && s.dueDate != null,
           )
-          .map((s) => this.resolveStepDueDate(employee.employmentDate, s.dueDate))
+          .map((s) =>
+            this.resolveStepDueDate(employee.employmentDate, s.dueDate),
+          )
           .filter((date): date is Date => date !== null)
           .sort((a, b) => a.getTime() - b.getTime());
         const dueDate =
@@ -268,6 +400,7 @@ export class OnboardingService {
 
         return {
           employee,
+          employeeUniqueId: employee.employeeId,
           jobTitle,
           item: {
             employeeId: String(employee._id),
@@ -295,7 +428,10 @@ export class OnboardingService {
           return false;
         }
 
-        if (query.startDate && (!item.dueDate || item.dueDate < query.startDate)) {
+        if (
+          query.startDate &&
+          (!item.dueDate || item.dueDate < query.startDate)
+        ) {
           return false;
         }
 
@@ -322,9 +458,9 @@ export class OnboardingService {
 
       return {
         data,
-        total: filtered.length,
-        page: batch,
-        limit,
+        count: filtered.length,
+        // page: batch,
+        // limit,
       };
     } catch (error: any) {
       error.location = `OnboardingService.${this.listEmployeeOnboarding.name}`;
@@ -423,15 +559,64 @@ export class OnboardingService {
   }
 
   /**
+   * @Responsibility: Derive the date the onboarding workflow was snapshotted
+   * onto the employee. The first step is started at initialization, so its
+   * start date is the snapshot date. Falls back to the employment date for
+   * legacy records that have no step timestamps.
+   */
+  private getWorkflowSnapshotDate(
+    steps: EmployeeOnboardingStep[],
+    employmentDate: Date | null | undefined,
+  ): string | null {
+    const startedDates = steps
+      .map((step) => step.startedAt)
+      .filter((date): date is Date => date != null)
+      .sort((a, b) => a.getTime() - b.getTime());
+    const snapshotDate = startedDates[0] ?? employmentDate ?? null;
+
+    return snapshotDate ? this.formatDate(snapshotDate) : null;
+  }
+
+  /**
    * @Responsibility: Convert a stored onboarding step into its API view.
    */
-  private toEmployeeOnboardingStepView(step: EmployeeOnboardingStep) {
+  private toEmployeeOnboardingStepView(
+    step: EmployeeOnboardingStep,
+    employmentDate: Date | null | undefined = null,
+    isLocked = false,
+    lockReason: string | null = null,
+  ) {
+    const resolvedDueDate = step.dueDate
+      ? this.resolveStepDueDate(employmentDate, step.dueDate)
+      : null;
+
     return {
       stepId: step.stepId,
       stepName: step.stepName,
+      responsibleParty: step.responsibleParty ?? null,
+      taskType: step.taskType ?? null,
       dueDate: step.dueDate ?? null,
+      resolvedDueDate: resolvedDueDate
+        ? this.formatDate(resolvedDueDate)
+        : null,
+      instructions: step.instructions ?? null,
+      attachmentUrls: step.attachmentUrls ?? [],
+      isSystem: step.isSystem ?? false,
       isCompleted: step.isCompleted,
-      completionRequirements: step.completionRequirements,
+      isLocked,
+      lockReason,
+      startedAt: step.startedAt ? this.formatDate(step.startedAt) : null,
+      completedAt: step.completedAt ? this.formatDate(step.completedAt) : null,
+      completionRequirements: (step.completionRequirements ?? []).map(
+        (requirement) => ({
+          step: requirement.step,
+          isCompleted: requirement.isCompleted,
+          completedAt: requirement.completedAt
+            ? this.formatDate(requirement.completedAt)
+            : null,
+          status: requirement.isCompleted ? 'completed' : 'to_complete',
+        }),
+      ),
     };
   }
 }

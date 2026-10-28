@@ -15,7 +15,10 @@ import {
   VoluntaryContribution,
   WorkMode,
 } from '../enum/employee.enum';
-import { DueDate } from '../../setting/employee-profiles/enum/employee-profile.enum';
+import {
+  DueDate,
+  TaskType,
+} from '../../setting/employee-profiles/enum/employee-profile.enum';
 
 export type EmployeeDocument = Employee & Document;
 
@@ -197,18 +200,47 @@ export class EmployeeOnboardingStep {
   @Prop({ type: String, trim: true, required: true })
   stepName: string;
 
+  @Prop({ type: String, trim: true, default: null })
+  responsibleParty: string | null;
+
+  @Prop({ type: String, enum: Object.values(TaskType), default: null })
+  taskType: TaskType | null;
+
   @Prop({ type: String, enum: Object.values(DueDate), default: null })
   dueDate: DueDate | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  instructions: string | null;
+
+  @Prop({ type: [String], default: [] })
+  attachmentUrls: string[];
+
+  @Prop({ type: Boolean, default: false })
+  isSystem: boolean;
 
   @Prop({ type: Boolean, default: false })
   isCompleted: boolean;
 
-  @Prop({ type: [{ step: String, isCompleted: Boolean }], default: [] })
-  completionRequirements: { step: string; isCompleted: boolean }[];
+  @Prop({ type: Date, default: null })
+  startedAt: Date | null;
+
+  @Prop({ type: Date, default: null })
+  completedAt: Date | null;
+
+  @Prop({
+    type: [{ step: String, isCompleted: Boolean, completedAt: Date }],
+    default: [],
+  })
+  completionRequirements: {
+    step: string;
+    isCompleted: boolean;
+    completedAt: Date | null;
+  }[];
 }
 
-export const EmployeeOnboardingStepSchema =
-  SchemaFactory.createForClass(EmployeeOnboardingStep);
+export const EmployeeOnboardingStepSchema = SchemaFactory.createForClass(
+  EmployeeOnboardingStep,
+);
 
 @Schema({ timestamps: true })
 export class Employee {
