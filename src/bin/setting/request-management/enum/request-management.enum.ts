@@ -1,12 +1,12 @@
 export enum RequestType {
   EMPLOYEE_TERMINATION = 'employee_termination',
   CANCEL_HIRE_BEFORE_START_DATE = 'cancel_hire_before_start_date',
-  EMPLOYMENT_AGREEMENT_AMENDMENT = 'employment_agreement_amendment',
+  CONFIRMATION_REQUEST = 'confirmation_request',
   EMPLOYMENT_AGREEMENT_EXTENSION = 'employment_agreement_extension',
   EMPLOYMENT_AGREEMENT_RENEWAL = 'employment_agreement_renewal',
-  PROBATION_CONFIRMATION_LETTER = 'probation_confirmation_letter',
+  EMPLOYEE_MOBILITY = 'employee_mobility',
   PROBATION_EXTENSION = 'probation_extension',
-  CONFIRMATION_REQUEST = 'confirmation_request',
+  STAFF_DATA_UPDATE = 'staff_data_update',
   PERFORMANCE_IMPROVEMENT_PLAN = 'performance_improvement_plan',
   QUERY_REQUEST = 'query_request',
 }
@@ -14,14 +14,13 @@ export enum RequestType {
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   [RequestType.EMPLOYEE_TERMINATION]: 'Employee termination',
   [RequestType.CANCEL_HIRE_BEFORE_START_DATE]: 'Cancel hire before start date',
-  [RequestType.EMPLOYMENT_AGREEMENT_AMENDMENT]:
-    'Employment agreement amendment',
+  [RequestType.CONFIRMATION_REQUEST]: 'Confirmation request',
   [RequestType.EMPLOYMENT_AGREEMENT_EXTENSION]:
     'Employment agreement extension',
   [RequestType.EMPLOYMENT_AGREEMENT_RENEWAL]: 'Employment agreement renewal',
-  [RequestType.PROBATION_CONFIRMATION_LETTER]: 'Probation confirmation letter',
+  [RequestType.EMPLOYEE_MOBILITY]: 'Employee mobility',
   [RequestType.PROBATION_EXTENSION]: 'Probation extension',
-  [RequestType.CONFIRMATION_REQUEST]: 'Confirmation request',
+  [RequestType.STAFF_DATA_UPDATE]: 'Staff data update',
   [RequestType.PERFORMANCE_IMPROVEMENT_PLAN]: 'Performance improvement plan',
   [RequestType.QUERY_REQUEST]: 'Query request',
 };

@@ -66,7 +66,7 @@ describe('RequestManagementController (integration)', () => {
     await app.close();
   });
 
-  describe('GET /setting/request-management/workflow/retrieve', () => {
+  describe('GET /setting/request-management/workflow/retrieve/all', () => {
     it('retrieves the request workflows grouped by request type', async () => {
       const data = {
         requestTypes: [
@@ -80,7 +80,7 @@ describe('RequestManagementController (integration)', () => {
       organisationService.getRequestWorkflows.mockResolvedValue(data);
 
       const response = await request(app.getHttpServer()).get(
-        '/setting/request-management/workflow/retrieve',
+        '/setting/request-management/workflow/retrieve/all',
       );
 
       expect(response.status).toBe(200);
@@ -98,7 +98,7 @@ describe('RequestManagementController (integration)', () => {
       });
 
       const response = await request(app.getHttpServer()).get(
-        '/setting/request-management/workflow/retrieve?requestType=query_request',
+        '/setting/request-management/workflow/retrieve/all?requestType=query_request',
       );
 
       expect(response.status).toBe(200);
@@ -110,7 +110,7 @@ describe('RequestManagementController (integration)', () => {
 
     it('rejects an invalid request type filter', async () => {
       const response = await request(app.getHttpServer()).get(
-        '/setting/request-management/workflow/retrieve?requestType=not_a_type',
+        '/setting/request-management/workflow/retrieve/all?requestType=not_a_type',
       );
 
       expect(response.status).toBe(400);
@@ -118,7 +118,7 @@ describe('RequestManagementController (integration)', () => {
     });
   });
 
-  describe('GET /setting/request-management/workflow/retrieve/:workflowId', () => {
+  describe('GET /setting/request-management/workflow/retrieve/single', () => {
     it('retrieves a single workflow', async () => {
       const workflow = {
         id: 'wf-1',
@@ -130,7 +130,7 @@ describe('RequestManagementController (integration)', () => {
       organisationService.getRequestWorkflow.mockResolvedValue(workflow);
 
       const response = await request(app.getHttpServer()).get(
-        '/setting/request-management/workflow/retrieve/wf-1',
+        '/setting/request-management/workflow/retrieve/single?workflowId=wf-1',
       );
 
       expect(response.status).toBe(200);
@@ -181,7 +181,7 @@ describe('RequestManagementController (integration)', () => {
     });
   });
 
-  describe('PATCH /setting/request-management/workflow/update/:workflowId', () => {
+  describe('PATCH /setting/request-management/workflow/update', () => {
     it('updates a workflow', async () => {
       const updated = {
         id: 'wf-1',
@@ -193,7 +193,7 @@ describe('RequestManagementController (integration)', () => {
       organisationService.updateRequestWorkflow.mockResolvedValue(updated);
 
       const response = await request(app.getHttpServer())
-        .patch('/setting/request-management/workflow/update/wf-1')
+        .patch('/setting/request-management/workflow/update?workflowId=wf-1')
         .send({ name: 'Renamed', isDefault: true });
 
       expect(response.status).toBe(200);
@@ -207,7 +207,7 @@ describe('RequestManagementController (integration)', () => {
 
     it('rejects a non-boolean default flag', async () => {
       const response = await request(app.getHttpServer())
-        .patch('/setting/request-management/workflow/update/wf-1')
+        .patch('/setting/request-management/workflow/update?workflowId=wf-1')
         .send({ isDefault: 'yes' });
 
       expect(response.status).toBe(400);
@@ -215,14 +215,14 @@ describe('RequestManagementController (integration)', () => {
     });
   });
 
-  describe('DELETE /setting/request-management/workflow/delete/:workflowId', () => {
+  describe('DELETE /setting/request-management/workflow/delete', () => {
     it('deletes a workflow', async () => {
       organisationService.deleteRequestWorkflow.mockResolvedValue(
         'Request workflow deleted',
       );
 
       const response = await request(app.getHttpServer()).delete(
-        '/setting/request-management/workflow/delete/wf-1',
+        '/setting/request-management/workflow/delete?workflowId=wf-1',
       );
 
       expect(response.status).toBe(200);
