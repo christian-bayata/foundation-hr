@@ -79,6 +79,7 @@ import {
 } from '../request-management/enum/request-management.enum';
 import { UpdateLeaveManagementDto } from '../leave-management/dto/update-leave-management.dto';
 import { AddLeaveCategoryDto } from '../leave-management/dto/add-leave-category.dto';
+import { UpdateLeaveCategoryDto } from '../leave-management/dto/update-leave-category.dto';
 import { UpdateLeaveEntitlementDto } from '../leave-management/dto/update-leave-entitlement.dto';
 import { AddLeaveRestrictedPeriodDto } from '../leave-management/dto/add-leave-restricted-period.dto';
 import { UpdateLeaveRestrictedPeriodDto } from '../leave-management/dto/update-leave-restricted-period.dto';
@@ -3517,6 +3518,7 @@ export class SettingsDomainOrganisationService {
     return {
       id: category.id,
       label: category.label,
+      entitlementDays: category.entitlementDays ?? 0,
     };
   }
 
@@ -3528,6 +3530,7 @@ export class SettingsDomainOrganisationService {
     return {
       id: category.id,
       label: category.label,
+      entitlementDays: category.entitlementDays ?? 0,
     };
   }
 
@@ -3696,6 +3699,7 @@ export class SettingsDomainOrganisationService {
         current.leaveCategories.push({
           id: this.uniqueLeaveCategoryId(current, label),
           label,
+          entitlementDays: dto.entitlementDays ?? 0,
         });
       }
 
@@ -3717,6 +3721,87 @@ export class SettingsDomainOrganisationService {
       return this.toLeaveManagementSettingsView(current);
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.addLeaveCategory.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an existing leave category's label and entitlement
+   * days.
+   *
+   * @param organizationId - The organization to update
+   * @param dto - The category id and fields to change
+   *
+   * @throws {404} Organization or leave category not found
+   */
+  async updateLeaveCategory(
+    organizationId: string,
+    dto: UpdateLeaveCategoryDto,
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneLeaveManagementSettings(
+        found!.leaveManagement ?? DEFAULT_LEAVE_MANAGEMENT_SETTINGS,
+      );
+
+      const category = current.leaveCategories.find(
+        (entry) => entry.id === dto.id,
+      );
+      if (!category) {
+        AppResponse.error({
+          message: 'Leave category not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      if (dto.label !== undefined) {
+        const label = dto.label.trim();
+        const duplicate = current.leaveCategories.some(
+          (entry) =>
+            entry.id !== dto.id &&
+            entry.label.toLowerCase() === label.toLowerCase(),
+        );
+        if (duplicate) {
+          AppResponse.error({
+            message: 'Leave category already exists',
+            status: HttpStatus.CONFLICT,
+          });
+        }
+        category!.label = label;
+      }
+
+      if (dto.entitlementDays !== undefined) {
+        category!.entitlementDays = dto.entitlementDays;
+      }
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { leaveManagement: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to update organization leave category',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Updated leave category "${dto.id}" for org ${organizationId}`,
+      );
+      return this.toLeaveManagementSettingsView(current);
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.updateLeaveCategory.name}`;
       AppResponse.error(error);
       throw error;
     }

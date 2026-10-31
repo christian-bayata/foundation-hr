@@ -20,6 +20,7 @@ import { SystemRole } from '../../auth/enum/role.enum';
 import { SettingsDomainOrganisationService } from '../domain/settings.domain.organisation.service';
 import { UpdateLeaveManagementDto } from './dto/update-leave-management.dto';
 import { AddLeaveCategoryDto } from './dto/add-leave-category.dto';
+import { UpdateLeaveCategoryDto } from './dto/update-leave-category.dto';
 import { LeaveCategoryQueryDto } from './dto/leave-category-query.dto';
 import { UpdateLeaveEntitlementDto } from './dto/update-leave-entitlement.dto';
 import { AddLeaveRestrictedPeriodDto } from './dto/add-leave-restricted-period.dto';
@@ -77,6 +78,20 @@ export class LeaveManagementController {
       dto,
     );
     return AppResponse.success('Leave category added successfully', 201, data);
+  }
+
+  @Patch('general-policy/leave-category/update')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async updateLeaveCategory(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: UpdateLeaveCategoryDto,
+  ) {
+    const data = await this.organisationService.updateLeaveCategory(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success('Leave category updated successfully', 200, data);
   }
 
   @Delete('general-policy/leave-category/remove')

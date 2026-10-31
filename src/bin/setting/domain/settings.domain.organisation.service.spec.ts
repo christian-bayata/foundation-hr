@@ -2860,8 +2860,8 @@ describe('SettingsDomainOrganisationService', () => {
         _id: ORG_ID,
         leaveManagement: {
           leaveCategories: [
-            { id: 'annual_leave', label: 'Annual leave' },
-            { id: 'sick_leave', label: 'Sick leave' },
+            { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
+            { id: 'sick_leave', label: 'Sick leave', entitlementDays: 0 },
           ],
           allowCarryover: true,
           autoApprovalEnabled: true,
@@ -2874,8 +2874,8 @@ describe('SettingsDomainOrganisationService', () => {
 
       expect(result).toEqual({
         leaveCategories: [
-          { id: 'annual_leave', label: 'Annual leave' },
-          { id: 'sick_leave', label: 'Sick leave' },
+          { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
+          { id: 'sick_leave', label: 'Sick leave', entitlementDays: 0 },
         ],
         allowCarryover: true,
         autoApprovalEnabled: true,
@@ -2901,7 +2901,7 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         leaveManagement: {
-          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 }],
           allowCarryover: false,
           autoApprovalEnabled: false,
           approvalDeadline: null,
@@ -2920,7 +2920,7 @@ describe('SettingsDomainOrganisationService', () => {
         ApprovalDeadline.ONE_DAY_AFTER_REQUESTED,
       );
       expect(result.leaveCategories).toEqual([
-        { id: 'annual_leave', label: 'Annual leave' },
+        { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
       ]);
       expect(result.autoApprovalEnabled).toBe(false);
       expect(result.holidaysCountAsLeave).toBe(false);
@@ -2930,7 +2930,7 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         leaveManagement: {
-          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 }],
           allowCarryover: false,
           autoApprovalEnabled: false,
           approvalDeadline: null,
@@ -2971,7 +2971,21 @@ describe('SettingsDomainOrganisationService', () => {
       } as any);
 
       expect(result.leaveCategories).toEqual([
-        { id: 'annual_leave', label: 'Annual leave' },
+        { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
+      ]);
+    });
+
+    it('stores the category entitlement days', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.addLeaveCategory(ORG_ID, {
+        label: 'Annual leave',
+        entitlementDays: 20,
+      } as any);
+
+      expect(result.leaveCategories).toEqual([
+        { id: 'annual_leave', label: 'Annual leave', entitlementDays: 20 },
       ]);
     });
 
@@ -2979,7 +2993,7 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         leaveManagement: {
-          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 }],
           allowCarryover: false,
           autoApprovalEnabled: false,
           approvalDeadline: null,
@@ -2993,7 +3007,7 @@ describe('SettingsDomainOrganisationService', () => {
       } as any);
 
       expect(result.leaveCategories).toEqual([
-        { id: 'annual_leave', label: 'Annual leave' },
+        { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
       ]);
     });
 
@@ -3006,7 +3020,7 @@ describe('SettingsDomainOrganisationService', () => {
       } as any);
 
       expect(result.leaveCategories).toEqual([
-        { id: 'sick_leave', label: 'Sick leave' },
+        { id: 'sick_leave', label: 'Sick leave', entitlementDays: 0 },
       ]);
     });
 
@@ -3014,7 +3028,7 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         leaveManagement: {
-          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+          leaveCategories: [{ id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 }],
           allowCarryover: false,
           autoApprovalEnabled: false,
           approvalDeadline: null,
@@ -3028,8 +3042,8 @@ describe('SettingsDomainOrganisationService', () => {
       } as any);
 
       expect(result.leaveCategories).toEqual([
-        { id: 'annual_leave', label: 'Annual leave' },
-        { id: 'annual_leave_2', label: 'Annual-Leave' },
+        { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
+        { id: 'annual_leave_2', label: 'Annual-Leave', entitlementDays: 0 },
       ]);
     });
 
@@ -3043,14 +3057,82 @@ describe('SettingsDomainOrganisationService', () => {
     });
   });
 
+  describe('updateLeaveCategory', () => {
+    it('updates the label and entitlement days', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [
+            { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
+          ],
+          allowCarryover: false,
+          autoApprovalEnabled: false,
+          approvalDeadline: null,
+          holidaysCountAsLeave: false,
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.updateLeaveCategory(ORG_ID, {
+        id: 'annual_leave',
+        label: 'Paid annual leave',
+        entitlementDays: 24,
+      });
+
+      expect(result.leaveCategories).toEqual([
+        {
+          id: 'annual_leave',
+          label: 'Paid annual leave',
+          entitlementDays: 24,
+        },
+      ]);
+    });
+
+    it('rejects a duplicate label', async () => {
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        leaveManagement: {
+          leaveCategories: [
+            { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
+            { id: 'sick_leave', label: 'Sick leave', entitlementDays: 0 },
+          ],
+          allowCarryover: false,
+          autoApprovalEnabled: false,
+          approvalDeadline: null,
+          holidaysCountAsLeave: false,
+        },
+      });
+
+      await expect(
+        service.updateLeaveCategory(ORG_ID, {
+          id: 'annual_leave',
+          label: 'Sick leave',
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the category is missing', async () => {
+      organizationRepository.findOrg.mockResolvedValue({ _id: ORG_ID });
+
+      await expect(
+        service.updateLeaveCategory(ORG_ID, {
+          id: 'missing',
+          entitlementDays: 10,
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
   describe('removeLeaveCategory', () => {
     it('removes a category by id', async () => {
       organizationRepository.findOrg.mockResolvedValue({
         _id: ORG_ID,
         leaveManagement: {
           leaveCategories: [
-            { id: 'annual_leave', label: 'Annual leave' },
-            { id: 'sick_leave', label: 'Sick leave' },
+            { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
+            { id: 'sick_leave', label: 'Sick leave', entitlementDays: 0 },
           ],
           allowCarryover: false,
           autoApprovalEnabled: false,
@@ -3063,7 +3145,7 @@ describe('SettingsDomainOrganisationService', () => {
       const result = await service.removeLeaveCategory(ORG_ID, 'sick_leave');
 
       expect(result.leaveCategories).toEqual([
-        { id: 'annual_leave', label: 'Annual leave' },
+        { id: 'annual_leave', label: 'Annual leave', entitlementDays: 0 },
       ]);
     });
 

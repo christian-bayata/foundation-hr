@@ -257,6 +257,9 @@ export class LeaveCategory {
 
   @Prop({ type: String, trim: true, required: true })
   label: string;
+
+  @Prop({ type: Number, min: 0, default: 0 })
+  entitlementDays: number;
 }
 
 @Schema({ _id: false })

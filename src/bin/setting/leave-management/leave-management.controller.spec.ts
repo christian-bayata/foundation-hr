@@ -17,6 +17,7 @@ describe('LeaveManagementController (integration)', () => {
     getLeaveManagementSettings: jest.Mock<AnyPromiseFn>;
     updateLeaveManagementSettings: jest.Mock<AnyPromiseFn>;
     addLeaveCategory: jest.Mock<AnyPromiseFn>;
+    updateLeaveCategory: jest.Mock<AnyPromiseFn>;
     removeLeaveCategory: jest.Mock<AnyPromiseFn>;
     getLeaveEntitlementSettings: jest.Mock<AnyPromiseFn>;
     updateLeaveEntitlementSettings: jest.Mock<AnyPromiseFn>;
@@ -26,7 +27,9 @@ describe('LeaveManagementController (integration)', () => {
   };
 
   const settings = {
-    leaveCategories: [{ id: 'annual_leave', label: 'Annual leave' }],
+    leaveCategories: [
+      { id: 'annual_leave', label: 'Annual leave', entitlementDays: 20 },
+    ],
     allowCarryover: false,
     autoApprovalEnabled: false,
     approvalDeadline: null,
@@ -55,6 +58,7 @@ describe('LeaveManagementController (integration)', () => {
       getLeaveManagementSettings: jest.fn(),
       updateLeaveManagementSettings: jest.fn(),
       addLeaveCategory: jest.fn(),
+      updateLeaveCategory: jest.fn(),
       removeLeaveCategory: jest.fn(),
       getLeaveEntitlementSettings: jest.fn(),
       updateLeaveEntitlementSettings: jest.fn(),
@@ -174,6 +178,41 @@ describe('LeaveManagementController (integration)', () => {
 
       expect(response.status).toBe(400);
       expect(organisationService.addLeaveCategory).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/leave-management/general-policy/leave-category/update', () => {
+    it('updates a leave category', async () => {
+      organisationService.updateLeaveCategory.mockResolvedValue(settings);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/leave-management/general-policy/leave-category/update')
+        .send({ id: 'annual_leave', entitlementDays: 25 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(settings);
+      expect(organisationService.updateLeaveCategory).toHaveBeenCalledWith(
+        ORG_ID,
+        { id: 'annual_leave', entitlementDays: 25 },
+      );
+    });
+
+    it('rejects a negative entitlement', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/leave-management/general-policy/leave-category/update')
+        .send({ id: 'annual_leave', entitlementDays: -1 });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateLeaveCategory).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing category id', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/leave-management/general-policy/leave-category/update')
+        .send({ entitlementDays: 25 });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateLeaveCategory).not.toHaveBeenCalled();
     });
   });
 
