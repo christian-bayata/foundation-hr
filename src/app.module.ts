@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './bin/auth/auth.module';
 import { EmployeeModule } from './bin/employee/employee.module';
 import { LeaveModule } from './bin/leave/leave.module';
+import { OffboardingModule } from './bin/offboarding/offboarding.module';
 import { OnboardingModule } from './bin/onboarding/onboarding.module';
 import { RequestModule } from './bin/request/request.module';
 import { SettingModule } from './bin/setting/setting.module';
@@ -26,6 +27,7 @@ import { RoleGuard } from './common/guards/role.guard';
     AuthModule,
     EmployeeModule,
     LeaveModule,
+    OffboardingModule,
     OnboardingModule,
     RequestModule,
     SettingModule,

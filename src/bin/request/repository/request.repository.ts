@@ -59,6 +59,14 @@ export class RequestRepository {
     return { items, total };
   }
 
+  async findAll(
+    where: QueryFilter<EmployeeRequestDocument>,
+    sort: Record<string, 1 | -1>,
+    limit = 10000,
+  ): Promise<EmployeeRequestDocument[]> {
+    return this.requestModel.find(where).sort(sort).limit(limit).exec();
+  }
+
   async count(where: QueryFilter<EmployeeRequestDocument>): Promise<number> {
     return this.requestModel.countDocuments(where).exec();
   }

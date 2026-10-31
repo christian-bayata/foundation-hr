@@ -34,6 +34,6 @@ import {
     UserRoleRepository,
     RequestFormValidatorService,
   ],
-  exports: [RequestService],
+  exports: [RequestService, RequestRepository],
 })
 export class RequestModule {}

@@ -56,6 +56,7 @@ export enum EmployeeStatus {
   ACTIVE = 'active',
   ON_LEAVE = 'on_leave',
   SUSPENDED = 'suspended',
+  TERMINATED = 'terminated',
 }
 
 export enum Sex {
