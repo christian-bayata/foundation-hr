@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AnalyticsModule } from './bin/analytics/analytics.module';
 import { AuthModule } from './bin/auth/auth.module';
 import { EmployeeModule } from './bin/employee/employee.module';
 import { LeaveModule } from './bin/leave/leave.module';
@@ -24,6 +25,7 @@ import { RoleGuard } from './common/guards/role.guard';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    AnalyticsModule,
     AuthModule,
     EmployeeModule,
     LeaveModule,

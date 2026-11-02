@@ -74,6 +74,10 @@ export class LeaveRequestRepository {
     return this.leaveRequestModel.find(where).sort(sort).limit(limit).exec();
   }
 
+  async count(where: QueryFilter<LeaveRequestDocument>): Promise<number> {
+    return this.leaveRequestModel.countDocuments(where).exec();
+  }
+
   async findForSummary(
     organizationId: string,
     employeeIds: string[],
