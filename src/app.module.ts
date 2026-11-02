@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AnalyticsModule } from './bin/analytics/analytics.module';
 import { AuthModule } from './bin/auth/auth.module';
+import { DashboardModule } from './bin/dashboard/dashboard.module';
 import { EmployeeModule } from './bin/employee/employee.module';
 import { LeaveModule } from './bin/leave/leave.module';
 import { OffboardingModule } from './bin/offboarding/offboarding.module';
@@ -27,6 +28,7 @@ import { RoleGuard } from './common/guards/role.guard';
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     AnalyticsModule,
     AuthModule,
+    DashboardModule,
     EmployeeModule,
     LeaveModule,
     OffboardingModule,
