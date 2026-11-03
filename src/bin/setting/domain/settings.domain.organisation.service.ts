@@ -1232,6 +1232,94 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
+   * @Responsibility: Reorder the steps within one of an organization's employee
+   * workflows. The order of step ids in the dto defines the new index of each
+   * step. Steps not included in the list keep their relative order at the end.
+   *
+   * @param organizationId - The organization to update
+   * @param type - The workflow type to reorder (onboarding, leave, offboarding)
+   * @param stepIds - Ordered step ids defining the new sequence
+   * @returns The reordered workflow steps
+   *
+   * @throws {404} Organization or any referenced step not found
+   */
+  async reorderWorkflowSteps(
+    organizationId: string,
+    type: WorkflowType,
+    stepIds: string[],
+  ) {
+    try {
+      const found = await this.organizationRepository.findOrg({
+        _id: organizationId,
+      });
+      if (!found) {
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const current = this.cloneWorkflowSettings(
+        found!.employeeWorkflow ?? {
+          onboarding: [],
+          leave: [],
+          offboarding: [],
+        },
+      );
+
+      const steps = current[type];
+
+      const uniqueStepIds = [...new Set(stepIds)];
+
+      const missing = uniqueStepIds.filter(
+        (id) => !steps.some((step) => String(step._id) === id),
+      );
+
+      if (missing.length > 0) {
+        AppResponse.error({
+          message: `One or more workflow steps were not found: ${missing.join(
+            ', ',
+          )}`,
+          status: HttpStatus.NOT_FOUND,
+        });
+      }
+
+      const ordered = uniqueStepIds.map((id) => {
+        const target = steps.find((step) => String(step._id) === id);
+        return this.toWorkflowStepPlain(target!);
+      });
+
+      const remaining = steps.filter(
+        (step) => !uniqueStepIds.includes(String(step._id)),
+      );
+
+      current[type] = [...ordered, ...remaining];
+
+      const updated = await this.organizationRepository.updateById(
+        organizationId,
+        { employeeWorkflow: current },
+      );
+
+      if (!updated) {
+        AppResponse.error({
+          message: 'Failed to reorder organization employee workflow steps',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        });
+      }
+
+      this.logger.log(
+        `Reordered employee workflow steps for type ${type} in org ${organizationId}`,
+      );
+
+      return current[type].map((step) => this.toWorkflowStepView(step));
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.reorderWorkflowSteps.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
    * @Responsibility: Update a single step within any of an organization's
    * employee workflows. Only the provided fields are changed.
    *

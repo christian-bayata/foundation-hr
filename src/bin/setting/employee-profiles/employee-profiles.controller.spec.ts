@@ -18,6 +18,7 @@ describe('EmployeeProfilesController (integration)', () => {
     updateEmployeeProfileSettings: jest.Mock<AnyPromiseFn>;
     getEmployeeWorkflow: jest.Mock<AnyPromiseFn>;
     addWorkflowStep: jest.Mock<AnyPromiseFn>;
+    reorderWorkflowSteps: jest.Mock<AnyPromiseFn>;
     updateWorkflowStep: jest.Mock<AnyPromiseFn>;
     deleteWorkflowStep: jest.Mock<AnyPromiseFn>;
     completeWorkflowStep: jest.Mock<AnyPromiseFn>;
@@ -35,6 +36,7 @@ describe('EmployeeProfilesController (integration)', () => {
       updateEmployeeProfileSettings: jest.fn(),
       getEmployeeWorkflow: jest.fn(),
       addWorkflowStep: jest.fn(),
+      reorderWorkflowSteps: jest.fn(),
       updateWorkflowStep: jest.fn(),
       deleteWorkflowStep: jest.fn(),
       completeWorkflowStep: jest.fn(),
@@ -275,6 +277,58 @@ describe('EmployeeProfilesController (integration)', () => {
 
       expect(response.status).toBe(400);
       expect(organisationService.addWorkflowStep).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/employee-profiles/workflow/reorder', () => {
+    it('reorders workflow steps by step id order', async () => {
+      const stepIds = ['step-1', 'step-2', 'step-3'];
+      const reordered = stepIds.map((id, i) => ({
+        id,
+        stepName: `Step ${i + 1}`,
+        index: i,
+      }));
+      organisationService.reorderWorkflowSteps.mockResolvedValue(reordered);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/employee-profiles/workflow/reorder')
+        .send({ type: 'onboarding', steps: stepIds.map((id) => ({ stepId: id })) });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(reordered);
+      expect(organisationService.reorderWorkflowSteps).toHaveBeenCalledWith(
+        ORG_ID,
+        'onboarding',
+        stepIds,
+      );
+    });
+
+    it('rejects a missing workflow type', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/employee-profiles/workflow/reorder')
+        .send({ steps: [{ stepId: 'step-1' }] });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.reorderWorkflowSteps).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid workflow type', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/employee-profiles/workflow/reorder')
+        .send({ type: 'invalid', steps: [{ stepId: 'step-1' }] });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.reorderWorkflowSteps).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing steps array', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/employee-profiles/workflow/reorder')
+        .send({ type: 'onboarding' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.reorderWorkflowSteps).not.toHaveBeenCalled();
     });
   });
 

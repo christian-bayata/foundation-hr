@@ -25,6 +25,7 @@ import {
   DueDate,
   EmploymentType,
   ResponsibleParty,
+  WorkflowType,
 } from '../employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../request-management/enum/request-management.enum';
 import {
@@ -2018,6 +2019,93 @@ describe('SettingsDomainOrganisationService', () => {
 
       await expect(
         service.completeWorkflowStep(ORG_ID, 'missing', completionPayload),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reorderWorkflowSteps', () => {
+    it('reorders steps according to the supplied step id order', async () => {
+      const first = buildStoredStep({ stepName: 'First' });
+      const second = buildStoredStep({ stepName: 'Second' });
+      const third = buildStoredStep({ stepName: 'Third' });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: {
+          onboarding: [first, second, third],
+          leave: [],
+          offboarding: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.reorderWorkflowSteps(ORG_ID, 'onboarding', [
+        String(third._id),
+        String(first._id),
+        String(second._id),
+      ]);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].stepName).toBe('Third');
+      expect(result[1].stepName).toBe('First');
+      expect(result[2].stepName).toBe('Second');
+
+      const saved =
+        organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
+      expect(saved.onboarding.map((s) => s.stepName)).toEqual([
+        'Third',
+        'First',
+        'Second',
+      ]);
+    });
+
+    it('keeps steps not included in the order at the end', async () => {
+      const first = buildStoredStep({ stepName: 'First' });
+      const second = buildStoredStep({ stepName: 'Second' });
+      const third = buildStoredStep({ stepName: 'Third' });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: {
+          onboarding: [first, second, third],
+          leave: [],
+          offboarding: [],
+        },
+      });
+      organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
+
+      const result = await service.reorderWorkflowSteps(ORG_ID, 'onboarding', [
+        String(third._id),
+      ]);
+
+      expect(result.map((s) => s.stepName)).toEqual([
+        'Third',
+        'First',
+        'Second',
+      ]);
+    });
+
+    it('throws a 404 when a referenced step does not exist', async () => {
+      const first = buildStoredStep({ stepName: 'First' });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: {
+          onboarding: [first],
+          leave: [],
+          offboarding: [],
+        },
+      });
+
+      await expect(
+        service.reorderWorkflowSteps(ORG_ID, 'onboarding', ['missing-id']),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('throws a 404 when the organization does not exist', async () => {
+      organizationRepository.findOrg.mockResolvedValue(null);
+
+      await expect(
+        service.reorderWorkflowSteps(ORG_ID, 'onboarding', []),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });

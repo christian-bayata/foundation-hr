@@ -22,6 +22,7 @@ import { CompleteWorkflowStepDto } from './dto/complete-workflow-step.dto';
 import { UpdateEmployeeProfileSettingsDto } from './dto/update-employee-profile-settings.dto';
 import { AddWorkflowStepDto } from './dto/add-workflow-step.dto';
 import { UpdateWorkflowStepDto } from './dto/update-workflow-step.dto';
+import { UpdateWorkflowOrderDto } from './dto/update-workflow-order.dto';
 import { AddResponsiblePartyDto } from './dto/add-responsible-party.dto';
 import { AddPensionFundAdministratorDto } from './dto/add-pension-fund-administrator.dto';
 import { UpdatePensionFundAdministratorDto } from './dto/update-pension-fund-administrator.dto';
@@ -90,6 +91,26 @@ export class EmployeeProfilesController {
       dto,
     );
     return AppResponse.success('Workflow step added successfully', 201, data);
+  }
+
+  @Patch('workflow/reorder')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async reorderWorkflowSteps(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: UpdateWorkflowOrderDto,
+  ) {
+    const data = await this.organisationService.reorderWorkflowSteps(
+      user.organizationId!,
+      dto.type,
+      dto.steps.map((step) => step.stepId),
+    );
+
+    return AppResponse.success(
+      'Workflow steps reordered successfully',
+      200,
+      data,
+    );
   }
 
   @Patch('workflow/update')
