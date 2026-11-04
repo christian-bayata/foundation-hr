@@ -58,12 +58,12 @@ export class OnboardingService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      if (employee!.organizationId !== organizationId) {
-        AppResponse.error({
-          message: 'Employee does not belong to this organization',
-          status: HttpStatus.FORBIDDEN,
-        });
-      }
+      // if (employee!.organizationId !== organizationId) {
+      //   AppResponse.error({
+      //     message: 'Employee does not belong to this organization',
+      //     status: HttpStatus.FORBIDDEN,
+      //   });
+      // }
 
       const workflow =
         await this.settingsDomainOrganisationService.getEmployeeWorkflow(
