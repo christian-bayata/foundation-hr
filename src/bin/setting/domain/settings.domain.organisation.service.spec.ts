@@ -1696,6 +1696,49 @@ describe('SettingsDomainOrganisationService', () => {
     ...overrides,
   });
 
+  describe('buildDefaultEmployeeWorkflow', () => {
+    it('returns the default onboarding steps with unique fresh ids', () => {
+      const first = service.buildDefaultEmployeeWorkflow();
+      const second = service.buildDefaultEmployeeWorkflow();
+
+      expect(first.onboarding).toHaveLength(
+        DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.length,
+      );
+      expect(first.onboarding.map((step) => step.stepName)).toEqual(
+        DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.map(
+          (step) => step.stepName,
+        ),
+      );
+      first.onboarding.forEach((step, index) => {
+        expect(step._id).toBeInstanceOf(Types.ObjectId);
+        expect(String(step._id)).not.toBe(
+          String(DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding[index]._id),
+        );
+        expect(String(step._id)).not.toBe(String(second.onboarding[index]._id));
+      });
+      expect(first.leave).toEqual([]);
+      expect(first.offboarding).toEqual([]);
+    });
+
+    it('does not mutate the shared default constant', () => {
+      const originalIds = DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.map(
+        (step) => String(step._id),
+      );
+
+      const built = service.buildDefaultEmployeeWorkflow();
+      built.onboarding[0].stepName = 'Changed';
+
+      expect(
+        DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding.map((step) =>
+          String(step._id),
+        ),
+      ).toEqual(originalIds);
+      expect(DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding[0].stepName).toBe(
+        'Adding and inviting new employee',
+      );
+    });
+  });
+
   describe('getEmployeeWorkflow', () => {
     it('returns stored steps mapped with an id instead of _id', async () => {
       const step = buildStoredStep();
@@ -1732,6 +1775,30 @@ describe('SettingsDomainOrganisationService', () => {
         isCompleted: false,
       });
       expect((result.onboarding[2] as any)._id).toBeUndefined();
+    });
+
+    it('returns stored system step ids instead of the shared defaults', async () => {
+      const systemStep = buildStoredStep({
+        stepName: 'Adding and inviting new employee',
+        isSystem: true,
+      });
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        employeeWorkflow: {
+          onboarding: [systemStep],
+          leave: [],
+          offboarding: [],
+        },
+      });
+
+      const result = await service.getEmployeeWorkflow(ORG_ID);
+
+      expect(result.onboarding).toHaveLength(1);
+      expect(result.onboarding[0]).toMatchObject({
+        id: String(systemStep._id),
+        stepName: 'Adding and inviting new employee',
+        isSystem: true,
+      });
     });
 
     it('falls back to the default workflow steps when none are stored', async () => {

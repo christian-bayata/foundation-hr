@@ -265,6 +265,42 @@ export class EmployeeService {
             ),
           ]);
 
+          // When an admin invites an employee, step 1 ("Adding and inviting
+          // new employee") is marked as completed automatically.
+          const invitedEmployee = await this.employeeRepository.findByEmail(
+            email,
+          );
+          if (
+            invitedEmployee?.employeeOnboardingSteps?.length &&
+            !invitedEmployee.employeeOnboardingSteps[0]?.isCompleted
+          ) {
+            const now = new Date();
+            const steps = invitedEmployee.employeeOnboardingSteps.map(
+              (step, index) => {
+                if (index !== 0) {
+                  return step;
+                }
+                return {
+                  ...step,
+                  isCompleted: true,
+                  startedAt: step.startedAt ?? now,
+                  completedAt: now,
+                  completionRequirements: (
+                    step.completionRequirements ?? []
+                  ).map((req) => ({
+                    ...req,
+                    isCompleted: true,
+                    completedAt: now,
+                  })),
+                };
+              },
+            );
+            await this.employeeRepository.updateEmployee(
+              { email },
+              { employeeOnboardingSteps: steps },
+            );
+          }
+
           /* Send email to employee */
           await this.dispatchInvite(
             email,

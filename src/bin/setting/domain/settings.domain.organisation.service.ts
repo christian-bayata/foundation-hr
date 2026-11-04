@@ -1120,6 +1120,40 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
+   * @Responsibility: Build a fresh copy of the default employee workflow,
+   * assigning each step its own sub-document id so every organization owns
+   * distinct steps. The shared default constant is never mutated.
+   */
+  buildDefaultEmployeeWorkflow(): EmployeeWorkflowSettings {
+    const withFreshIds = (steps: WorkflowStep[]): WorkflowStep[] =>
+      (steps ?? []).map((step) => ({
+        _id: new Types.ObjectId(),
+        stepName: step.stepName,
+        responsibleParty: step.responsibleParty ?? null,
+        taskType: step.taskType ?? null,
+        dueDate: step.dueDate ?? null,
+        instructions: step.instructions ?? null,
+        attachmentUrls: [...(step.attachmentUrls ?? [])],
+        completionRequirements: (step.completionRequirements ?? []).map(
+          (requirement) => ({
+            step: requirement.step,
+            isCompleted: requirement.isCompleted,
+          }),
+        ),
+        isSystem: step.isSystem ?? false,
+        isCompleted: step.isCompleted ?? false,
+      }));
+
+    return {
+      onboarding: withFreshIds(DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding),
+      leave: withFreshIds(DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.leave),
+      offboarding: withFreshIds(
+        DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.offboarding,
+      ),
+    };
+  }
+
+  /**
    * @Responsibility: Retrieve an organization's employee workflow settings.
    * When the organization has never saved its workflows, the design defaults
    * are returned so the UI always receives a complete configuration.
@@ -1137,21 +1171,27 @@ export class SettingsDomainOrganisationService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      const settings =
-        organization!.employeeWorkflow ?? DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS;
+      const settings = organization!.employeeWorkflow;
 
-      const storedOnboarding = settings.onboarding ?? [];
-      const storedLeave = settings.leave ?? [];
-      const storedOffboarding = settings.offboarding ?? [];
+      const storedOnboarding = settings?.onboarding ?? [];
+      const storedLeave = settings?.leave ?? [];
+      const storedOffboarding = settings?.offboarding ?? [];
+
+      const storedSystemSteps = storedOnboarding.filter(
+        (step: WorkflowStep) => step.isSystem,
+      );
+      const customSteps = storedOnboarding.filter(
+        (step: WorkflowStep) => !step.isSystem,
+      );
+      const systemSteps =
+        storedSystemSteps.length > 0
+          ? storedSystemSteps
+          : (DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding ?? []);
 
       return {
         onboarding: [
-          ...(DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS.onboarding ?? []).map((step) =>
-            this.toWorkflowStepView(step),
-          ),
-          ...storedOnboarding
-            .filter((step: WorkflowStep) => !step.isSystem)
-            .map((step) => this.toWorkflowStepView(step)),
+          ...systemSteps.map((step) => this.toWorkflowStepView(step)),
+          ...customSteps.map((step) => this.toWorkflowStepView(step)),
         ],
         leave: storedLeave.map((step) => this.toWorkflowStepView(step)),
         offboarding: storedOffboarding.map((step) =>

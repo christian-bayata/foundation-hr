@@ -33,6 +33,7 @@ describe('EmployeeService', () => {
     findByOrganization: jest.Mock<AnyPromiseFn>;
     updateById: jest.Mock<AnyPromiseFn>;
     updateByEmployeeId: jest.Mock<AnyPromiseFn>;
+    updateEmployee: jest.Mock<AnyPromiseFn>;
     paginatedQuery: jest.Mock<AnyPromiseFn>;
   };
   let emailService: { brevoEmailDispatcher: jest.Mock<AnyPromiseFn> };
@@ -60,6 +61,7 @@ describe('EmployeeService', () => {
       findByOrganization: jest.fn<AnyPromiseFn>(),
       updateById: jest.fn<AnyPromiseFn>(),
       updateByEmployeeId: jest.fn<AnyPromiseFn>(),
+      updateEmployee: jest.fn<AnyPromiseFn>(),
       paginatedQuery: jest.fn<AnyPromiseFn>(),
     };
     emailService = {
@@ -375,6 +377,70 @@ describe('EmployeeService', () => {
       await expect(service.inviteEmployees(['john@example.com'])).rejects.toThrow(
         AppException,
       );
+    });
+
+    it('marks step 1 ("Adding and inviting new employee") as completed when inviting', async () => {
+      employeeRepository.findByEmail.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'john@example.com',
+        organizationId: ORG_ID,
+        employeeOnboardingSteps: [
+          {
+            stepId: 'step-1',
+            stepName: 'Adding and inviting new employee',
+            isCompleted: false,
+            startedAt: null,
+            completedAt: null,
+            completionRequirements: [
+              {
+                step: 'Admin adds employment details',
+                isCompleted: false,
+                completedAt: null,
+              },
+              {
+                step: 'Admin invites employees to Foundation HR',
+                isCompleted: false,
+                completedAt: null,
+              },
+            ],
+          },
+          {
+            stepId: 'step-2',
+            stepName: 'Self-enrolment',
+            isCompleted: false,
+            startedAt: null,
+            completedAt: null,
+            completionRequirements: [],
+          },
+        ],
+      });
+      employeeRepository.updateEmployee.mockResolvedValue(undefined);
+      organizationRepository.findOrg.mockResolvedValue({
+        _id: ORG_ID,
+        slug: 'acme',
+        name: 'Acme Inc',
+      });
+
+      await service.inviteEmployees(['john@example.com'], ORG_ID);
+
+      const updateWithSteps = employeeRepository.updateEmployee.mock.calls.find(
+        (args) => args[1] && args[1].employeeOnboardingSteps,
+      );
+      expect(updateWithSteps).toBeDefined();
+      const steps = (updateWithSteps as any)[1]
+        .employeeOnboardingSteps as any[];
+      expect(steps[0].stepName).toBe('Adding and inviting new employee');
+      expect(steps[0].isCompleted).toBe(true);
+      expect(steps[0].completedAt).toBeInstanceOf(Date);
+      expect(steps[0].startedAt).toBeInstanceOf(Date);
+      expect(
+        steps[0].completionRequirements.every((r) => r.isCompleted),
+      ).toBe(true);
+      expect(
+        steps[0].completionRequirements.every((r) => r.completedAt),
+      ).toBe(true);
+      // Step 2 remains untouched
+      expect(steps[1].isCompleted).toBe(false);
     });
   });
 

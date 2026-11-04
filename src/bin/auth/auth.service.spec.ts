@@ -52,13 +52,19 @@ describe('AuthService (unified principal flow)', () => {
     randomToken: jest.Mock<() => string>;
   };
   let emailService: { brevoEmailDispatcher: jest.Mock<AnyPromiseFn> };
-  let organizationRepository: { findOrg: jest.Mock<AnyPromiseFn> };
+  let organizationRepository: {
+    findOrg: jest.Mock<AnyPromiseFn>;
+    createOrganization: jest.Mock<AnyPromiseFn>;
+  };
   let organizationService: {
     generateAvailableDomainPrefix: jest.Mock<AnyPromiseFn>;
   };
   let settingService: {
     getUserSystemRoles: jest.Mock<AnyPromiseFn>;
     findOrganizationForUser: jest.Mock<AnyPromiseFn>;
+    initializeSystemRoles: jest.Mock<AnyPromiseFn>;
+    assignCompanyOwner: jest.Mock<AnyPromiseFn>;
+    buildDefaultEmployeeWorkflow: jest.Mock<() => any>;
   };
   let configService: { get: jest.Mock<(key: string) => string | undefined> };
 
@@ -153,6 +159,9 @@ describe('AuthService (unified principal flow)', () => {
     };
     organizationRepository = {
       findOrg: jest.fn<AnyPromiseFn>().mockResolvedValue(organization()),
+      createOrganization: jest
+        .fn<AnyPromiseFn>()
+        .mockResolvedValue(organization()),
     };
     organizationService = {
       generateAvailableDomainPrefix: jest
@@ -164,6 +173,13 @@ describe('AuthService (unified principal flow)', () => {
         .fn<AnyPromiseFn>()
         .mockResolvedValue([SystemRole.COMPANY_OWNER]),
       findOrganizationForUser: jest.fn<AnyPromiseFn>().mockResolvedValue(ORG_ID),
+      initializeSystemRoles: jest.fn<AnyPromiseFn>().mockResolvedValue(undefined),
+      assignCompanyOwner: jest.fn<AnyPromiseFn>().mockResolvedValue(undefined),
+      buildDefaultEmployeeWorkflow: jest.fn<() => any>().mockReturnValue({
+        onboarding: [],
+        leave: [],
+        offboarding: [],
+      }),
     };
     configService = {
       get: jest.fn<(key: string) => string | undefined>((key) => {
@@ -611,6 +627,56 @@ describe('AuthService (unified principal flow)', () => {
 
     it('throws 404 when no record matches', async () => {
       await expect(service.userProfile(EMAIL)).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('organizationDetails', () => {
+    it('creates the organization with a seeded default employee workflow', async () => {
+      userRepository.findUser.mockResolvedValue(adminUser());
+      const employeeWorkflow = {
+        onboarding: [
+          { _id: 'step-1', stepName: 'Adding and inviting new employee' },
+          { _id: 'step-2', stepName: 'Self-enrolment' },
+        ],
+        leave: [],
+        offboarding: [],
+      };
+      settingService.buildDefaultEmployeeWorkflow.mockReturnValue(
+        employeeWorkflow,
+      );
+
+      await service.organizationDetails(ADMIN_ID, {
+        organisationName: 'Acme',
+        organisationSize: '11-50',
+        country: 'NG',
+        acceptTerms: true,
+        marketingOptIn: false,
+      });
+
+      expect(organizationRepository.createOrganization).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Acme',
+          employeeWorkflow,
+        }),
+      );
+      expect(settingService.initializeSystemRoles).toHaveBeenCalledWith(ORG_ID);
+      expect(settingService.assignCompanyOwner).toHaveBeenCalledWith(
+        ADMIN_ID,
+        ORG_ID,
+      );
+    });
+
+    it('throws when the terms are not accepted', async () => {
+      await expect(
+        service.organizationDetails(ADMIN_ID, {
+          organisationName: 'Acme',
+          organisationSize: '11-50',
+          country: 'NG',
+          acceptTerms: false,
+          marketingOptIn: false,
+        }),
+      ).rejects.toThrow(AppException);
+      expect(organizationRepository.createOrganization).not.toHaveBeenCalled();
     });
   });
 

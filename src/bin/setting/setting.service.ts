@@ -31,6 +31,7 @@ import {
   Billing,
   Branding,
   BusinessDetails,
+  EmployeeWorkflowSettings,
   Location,
   OrganizationDocument,
 } from '../organization/entity/organization.schema';
@@ -74,6 +75,16 @@ export class SettingService {
       userId,
       organizationId,
     );
+  }
+
+  /**
+   * @Responsibility: Module-level facade to build a fresh default employee
+   * workflow (with new step ids) for a newly created organization
+   *
+   * @returns {EmployeeWorkflowSettings}
+   */
+  buildDefaultEmployeeWorkflow(): EmployeeWorkflowSettings {
+    return this.organisationDomainService.buildDefaultEmployeeWorkflow();
   }
 
   /**

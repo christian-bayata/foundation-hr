@@ -629,6 +629,7 @@ export class AuthService {
           products: [],
           marketingOptIn,
           termsAcceptedAt: new Date(),
+          employeeWorkflow: this.settingService.buildDefaultEmployeeWorkflow(),
         },
       );
 
