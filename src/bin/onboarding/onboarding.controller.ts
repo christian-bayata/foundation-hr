@@ -19,7 +19,9 @@ import { SystemRole } from '../auth/enum/role.enum';
 import { OnboardingService } from './onboarding.service';
 import {
   AddEmployeeOnboardingDto,
+  CancelEmployeeOnboardingDto,
   ListEmployeeOnboardingQueryDto,
+  NudgeEmployeeOnboardingDto,
   RetrieveEmployeeOnboardingDto,
   UpdateEmployeeOnboardingStepDto,
 } from './dto/employee-onboarding.dto';
@@ -82,6 +84,42 @@ export class OnboardingController {
     );
     return AppResponse.success(
       'Employee onboarding step updated successfully',
+      200,
+      data,
+    );
+  }
+
+  @Patch('employee/cancel')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async cancelEmployeeOnboarding(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: CancelEmployeeOnboardingDto,
+  ) {
+    const data = await this.onboardingService.cancelEmployeeOnboarding(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success(
+      'Employee onboarding cancelled successfully',
+      200,
+      data,
+    );
+  }
+
+  @Post('employee/nudge')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async nudgeEmployeeOnboarding(
+    @CurrentUser() user: ICurrentUser,
+    @Body() dto: NudgeEmployeeOnboardingDto,
+  ) {
+    const data = await this.onboardingService.nudgeEmployeeOnboarding(
+      user.organizationId!,
+      dto,
+    );
+    return AppResponse.success(
+      'Employee onboarding nudge sent successfully',
       200,
       data,
     );

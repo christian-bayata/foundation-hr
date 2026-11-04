@@ -20,6 +20,8 @@ describe('OnboardingController (integration)', () => {
     getEmployeeOnboarding: jest.Mock<AnyPromiseFn>;
     updateEmployeeOnboardingStep: jest.Mock<AnyPromiseFn>;
     listEmployeeOnboarding: jest.Mock<AnyPromiseFn>;
+    cancelEmployeeOnboarding: jest.Mock<AnyPromiseFn>;
+    nudgeEmployeeOnboarding: jest.Mock<AnyPromiseFn>;
   };
 
   beforeEach(async () => {
@@ -30,6 +32,8 @@ describe('OnboardingController (integration)', () => {
       getEmployeeOnboarding: jest.fn(),
       updateEmployeeOnboardingStep: jest.fn(),
       listEmployeeOnboarding: jest.fn(),
+      cancelEmployeeOnboarding: jest.fn(),
+      nudgeEmployeeOnboarding: jest.fn(),
     };
 
     const { Test } = await import('@nestjs/testing');
@@ -225,6 +229,72 @@ describe('OnboardingController (integration)', () => {
           endDate: '2026-01-31',
         }),
       );
+    });
+  });
+
+  describe('PATCH /onboarding/employee/cancel', () => {
+    it('cancels employee onboarding', async () => {
+      const cancelled = {
+        employeeId: EMPLOYEE_ID,
+        steps: [],
+        overallProgress: 0,
+        cancelledAt: '2026-01-15T10:00:00.000Z',
+      };
+      onboardingService.cancelEmployeeOnboarding.mockResolvedValue(cancelled);
+
+      const response = await request(app.getHttpServer())
+        .patch('/onboarding/employee/cancel')
+        .send({ employeeId: EMPLOYEE_ID, reason: 'Employee resigned' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(cancelled);
+      expect(onboardingService.cancelEmployeeOnboarding).toHaveBeenCalledWith(
+        ORG_ID,
+        { employeeId: EMPLOYEE_ID, reason: 'Employee resigned' },
+      );
+    });
+
+    it('rejects when employee ID is missing', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/onboarding/employee/cancel')
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(onboardingService.cancelEmployeeOnboarding).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /onboarding/employee/nudge', () => {
+    it('sends an onboarding nudge email', async () => {
+      const nudgedAt = '2026-01-15T10:00:00.000Z';
+      const nudged = {
+        employeeId: EMPLOYEE_ID,
+        email: 'john@example.com',
+        nudgedAt,
+      };
+      onboardingService.nudgeEmployeeOnboarding.mockResolvedValue(nudged);
+
+      const response = await request(app.getHttpServer())
+        .post('/onboarding/employee/nudge')
+        .send({ employeeId: EMPLOYEE_ID });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(nudged);
+      expect(onboardingService.nudgeEmployeeOnboarding).toHaveBeenCalledWith(
+        ORG_ID,
+        { employeeId: EMPLOYEE_ID },
+      );
+    });
+
+    it('rejects when employee ID is missing', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/onboarding/employee/nudge')
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(onboardingService.nudgeEmployeeOnboarding).not.toHaveBeenCalled();
     });
   });
 });

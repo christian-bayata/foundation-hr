@@ -39,6 +39,9 @@ describe('OnboardingService', () => {
   let settingsDomainOrganisationService: {
     getEmployeeWorkflow: jest.Mock<AnyPromiseFn>;
   };
+  let emailService: {
+    emailDispatcher: jest.Mock<AnyPromiseFn>;
+  };
   let service: OnboardingService;
 
   beforeEach(() => {
@@ -55,11 +58,15 @@ describe('OnboardingService', () => {
     settingsDomainOrganisationService = {
       getEmployeeWorkflow: jest.fn(),
     };
+    emailService = {
+      emailDispatcher: jest.fn(),
+    };
 
     service = new OnboardingService(
       employeeRepository as any,
       jobTitleRepository as any,
       settingsDomainOrganisationService as any,
+      emailService as any,
     );
   });
 
@@ -700,6 +707,147 @@ describe('OnboardingService', () => {
       const result = await service.listEmployeeOnboarding(ORG_ID);
 
       expect(result.data[0].status).toBe(OnboardingStatus.ONBOARDED);
+    });
+  });
+
+  describe('cancelEmployeeOnboarding', () => {
+    it('clears all onboarding steps for an employee', async () => {
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({
+          employeeOnboardingSteps: [
+            { stepId: STEP_ID, stepName: 'Step 1', isCompleted: false },
+          ],
+        }),
+      );
+      employeeRepository.updateById.mockResolvedValue(buildEmployee());
+
+      const result = await service.cancelEmployeeOnboarding(ORG_ID, {
+        employeeId: EMPLOYEE_ID,
+        reason: 'Resigned',
+      });
+
+      expect(result.steps).toEqual([]);
+      expect(result.overallProgress).toBe(0);
+      expect(result.cancelledAt).toBeInstanceOf(Date);
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(EMPLOYEE_ID, {
+        employeeOnboardingSteps: [],
+      });
+    });
+
+    it('throws 404 when employee is not found', async () => {
+      employeeRepository.findById.mockResolvedValue(null);
+
+      await expect(
+        service.cancelEmployeeOnboarding(ORG_ID, {
+          employeeId: EMPLOYEE_ID,
+        }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws 403 when employee belongs to a different organization', async () => {
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({ organizationId: 'other-org' }),
+      );
+
+      await expect(
+        service.cancelEmployeeOnboarding(ORG_ID, { employeeId: EMPLOYEE_ID }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws 400 when there are no onboarding steps to cancel', async () => {
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({ employeeOnboardingSteps: [] }),
+      );
+
+      await expect(
+        service.cancelEmployeeOnboarding(ORG_ID, { employeeId: EMPLOYEE_ID }),
+      ).rejects.toThrow(AppException);
+    });
+  });
+
+  describe('nudgeEmployeeOnboarding', () => {
+    const nudgableEmployee = buildEmployee({
+      email: 'john.doe@example.com',
+      employeeOnboardingSteps: [
+        { stepId: STEP_ID, stepName: 'Step 1', isCompleted: false },
+        {
+          stepId: 'step-2',
+          stepName: 'Step 2',
+          isCompleted: false,
+        },
+      ],
+    });
+
+    it('sends a nudge email for incomplete onboarding', async () => {
+      employeeRepository.findById.mockResolvedValue(nudgableEmployee);
+      emailService.emailDispatcher.mockResolvedValue(undefined);
+
+      const result = await service.nudgeEmployeeOnboarding(ORG_ID, {
+        employeeId: EMPLOYEE_ID,
+      });
+
+      expect(result.employeeId).toBe(EMPLOYEE_ID);
+      expect(result.email).toBe('john.doe@example.com');
+      expect(result.nudgedAt).toBeInstanceOf(Date);
+      expect(emailService.emailDispatcher).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'john.doe@example.com',
+          subject: 'Reminder: Complete your onboarding',
+        }),
+      );
+    });
+
+    it('throws 404 when employee is not found', async () => {
+      employeeRepository.findById.mockResolvedValue(null);
+
+      await expect(
+        service.nudgeEmployeeOnboarding(ORG_ID, { employeeId: EMPLOYEE_ID }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws 403 when employee belongs to a different organization', async () => {
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({ organizationId: 'other-org', email: 'x@y.com' }),
+      );
+
+      await expect(
+        service.nudgeEmployeeOnboarding(ORG_ID, { employeeId: EMPLOYEE_ID }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws 400 when employee has no email address', async () => {
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({ email: null, employeeOnboardingSteps: [] }),
+      );
+
+      await expect(
+        service.nudgeEmployeeOnboarding(ORG_ID, { employeeId: EMPLOYEE_ID }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws 400 when onboarding is not initialized', async () => {
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({ email: 'x@y.com', employeeOnboardingSteps: [] }),
+      );
+
+      await expect(
+        service.nudgeEmployeeOnboarding(ORG_ID, { employeeId: EMPLOYEE_ID }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('throws 400 when onboarding is already complete', async () => {
+      employeeRepository.findById.mockResolvedValue(
+        buildEmployee({
+          email: 'x@y.com',
+          employeeOnboardingSteps: [
+            { stepId: STEP_ID, stepName: 'Step 1', isCompleted: true },
+          ],
+        }),
+      );
+
+      await expect(
+        service.nudgeEmployeeOnboarding(ORG_ID, { employeeId: EMPLOYEE_ID }),
+      ).rejects.toThrow(AppException);
     });
   });
 });

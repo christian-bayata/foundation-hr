@@ -2,7 +2,9 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { AppResponse } from '../../common/response/app-response';
 import {
   AddEmployeeOnboardingDto,
+  CancelEmployeeOnboardingDto,
   ListEmployeeOnboardingQueryDto,
+  NudgeEmployeeOnboardingDto,
   RetrieveEmployeeOnboardingDto,
   UpdateEmployeeOnboardingStepDto,
 } from './dto/employee-onboarding.dto';
@@ -12,6 +14,8 @@ import { JobTitleRepository } from '../organization/repository/job-title.reposit
 import { DueDate } from '../setting/employee-profiles/enum/employee-profile.enum';
 import { SettingsDomainOrganisationService } from '../setting/domain/settings.domain.organisation.service';
 import { OnboardingStatus } from './enum/onboarding-status.enum';
+import { EmailService } from '../../email/email.service';
+import { onboardingNudgeTemplate } from '../../email/template/onboarding-nudge.template';
 
 const ONBOARDING_WORKFLOW_NAME = 'Onboarding';
 
@@ -26,6 +30,8 @@ export class OnboardingService {
     private readonly jobTitleRepository: JobTitleRepository,
     @Inject(SettingsDomainOrganisationService)
     private readonly settingsDomainOrganisationService: SettingsDomainOrganisationService,
+    @Inject(EmailService)
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -104,6 +110,163 @@ export class OnboardingService {
       };
     } catch (error: any) {
       error.location = `OnboardingService.${this.addEmployeeOnboarding.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Cancel an employee's onboarding. Clears all onboarding
+   * steps, effectively resetting the onboarding record so it can be
+   * re-initialized later. The optional cancellation reason is accepted but
+   * not persisted (no schema field exists for it).
+   *
+   * @param organizationId - The organization to scope the employee to
+   * @param dto - The employee ID and optional cancellation reason
+   *
+   * @throws {404} Employee not found
+   * @throws {403} Employee does not belong to this organization
+   * @throws {400} No onboarding steps to cancel
+   */
+  async cancelEmployeeOnboarding(
+    organizationId: string,
+    dto: CancelEmployeeOnboardingDto,
+  ) {
+    try {
+      const employee =
+        (await this.employeeRepository.findById(dto.employeeId)) ??
+        AppResponse.error({
+          message: 'Employee not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      if (employee!.organizationId !== organizationId) {
+        AppResponse.error({
+          message: 'Employee does not belong to this organization',
+          status: HttpStatus.FORBIDDEN,
+        });
+      }
+
+      const steps = employee!.employeeOnboardingSteps ?? [];
+
+      if (steps.length === 0) {
+        AppResponse.error({
+          message: 'No onboarding steps to cancel',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const cancelledAt = new Date();
+
+      await this.employeeRepository.updateById(dto.employeeId, {
+        employeeOnboardingSteps: [],
+      });
+
+      this.logger.log(
+        `Cancelled onboarding for employee ${dto.employeeId} in org ${organizationId}`,
+      );
+
+      return {
+        employeeId: dto.employeeId,
+        steps: [],
+        overallProgress: 0,
+        cancelledAt,
+      };
+    } catch (error: any) {
+      error.location = `OnboardingService.${this.cancelEmployeeOnboarding.name}`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Nudge an employee about their onboarding completion.
+   * Sends a reminder email listing outstanding steps. Skips employees whose
+   * onboarding is already complete (100% progress) or not yet initialized.
+   *
+   * @param organizationId - The organization to scope the employee to
+   * @param dto - The employee ID to nudge
+   *
+   * @throws {404} Employee not found
+   * @throws {403} Employee does not belong to this organization
+   * @throws {400} Employee has no email address
+   * @throws {400} Onboarding is not initialized or already complete
+   */
+  async nudgeEmployeeOnboarding(
+    organizationId: string,
+    dto: NudgeEmployeeOnboardingDto,
+  ) {
+    try {
+      const employee =
+        (await this.employeeRepository.findById(dto.employeeId)) ??
+        AppResponse.error({
+          message: 'Employee not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      if (employee!.organizationId !== organizationId) {
+        AppResponse.error({
+          message: 'Employee does not belong to this organization',
+          status: HttpStatus.FORBIDDEN,
+        });
+      }
+
+      if (!employee!.email) {
+        AppResponse.error({
+          message: 'Employee has no email address',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const steps = employee!.employeeOnboardingSteps ?? [];
+      const totalSteps = steps.length;
+      const completedSteps = steps.filter((s) => s.isCompleted).length;
+      const overallProgress =
+        totalSteps === 0 ? 0 : Math.round((completedSteps / totalSteps) * 100);
+
+      if (totalSteps === 0) {
+        AppResponse.error({
+          message: 'Onboarding is not initialized for this employee',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      if (overallProgress === 100) {
+        AppResponse.error({
+          message: 'Employee onboarding is already complete',
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      const outstandingSteps =
+        steps
+          .filter((s) => !s.isCompleted)
+          .map((s) => s.stepName)
+          .join(', ') || 'remaining steps';
+
+      const nudgedAt = new Date();
+
+      await this.emailService.emailDispatcher({
+        to: employee!.email,
+        from: 'Foundation HR <no-reply@foundationhr.com>',
+        subject: 'Reminder: Complete your onboarding',
+        html: onboardingNudgeTemplate(
+          employee!.firstName ?? 'there',
+          outstandingSteps,
+        ),
+      });
+
+      this.logger.log(
+        `Nudged employee ${dto.employeeId} (${employee!.email}) about onboarding in org ${organizationId}`,
+      );
+
+      return {
+        employeeId: dto.employeeId,
+        email: employee!.email,
+        nudgedAt,
+      };
+    } catch (error: any) {
+      error.location = `OnboardingService.${this.nudgeEmployeeOnboarding.name}`;
       AppResponse.error(error);
       throw error;
     }
@@ -403,6 +566,7 @@ export class OnboardingService {
           employeeUniqueId: employee.employeeId,
           jobTitle,
           item: {
+            _id: String(employee._id),
             employeeId: String(employee._id),
             employeeName:
               `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim() ||

@@ -9,6 +9,7 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -91,4 +92,23 @@ export class ListEmployeeOnboardingQueryDto {
     message: 'End date must be in YYYY-MM-DD format.',
   })
   endDate?: string;
+}
+
+export class CancelEmployeeOnboardingDto {
+  @IsString({ message: 'Employee ID must be a string.' })
+  @IsNotEmpty({ message: 'Employee ID is required.' })
+  employeeId: string;
+
+  @IsOptional()
+  @IsString({ message: 'Cancellation reason must be a string.' })
+  @MaxLength(2000, {
+    message: 'Cancellation reason must be at most 2000 characters.',
+  })
+  reason?: string;
+}
+
+export class NudgeEmployeeOnboardingDto {
+  @IsString({ message: 'Employee ID must be a string.' })
+  @IsNotEmpty({ message: 'Employee ID is required.' })
+  employeeId: string;
 }
