@@ -438,10 +438,9 @@ export class OnboardingService {
             };
 
       return {
-        employeeId: dto.employeeId,
-        employeeUniqueId: employee.employeeId,
         employee: {
-          employeeId: String(employee!._id),
+          _id: String(employee!._id),
+          employeeUniqueId: String(employee.employeeUniqueId),
           employeeName:
             `${employee!.firstName ?? ''} ${employee!.lastName ?? ''}`.trim() ||
             employee!.email,
@@ -680,11 +679,10 @@ export class OnboardingService {
 
         return {
           employee,
-          employeeUniqueId: employee.employeeId,
           jobTitle,
           item: {
             _id: String(employee._id),
-            employeeId: String(employee._id),
+            employeeUniqueId: String(employee.employeeUniqueId),
             employeeName:
               `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim() ||
               employee.email,
