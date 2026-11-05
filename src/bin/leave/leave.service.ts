@@ -28,6 +28,14 @@ import {
   LeaveBalanceRepository,
 } from './repository/leave-balance.repository';
 import { LeaveRequestRepository } from './repository/leave-request.repository';
+import { NotificationService } from '../notification/notification.service';
+import {
+  NotificationActionType,
+  NotificationCategory,
+  NotificationEntityType,
+  NotificationResolution,
+  NotificationType,
+} from '../notification/enum/notification.enum';
 
 type MongoFilter = QueryFilter<LeaveRequestDocument>;
 
@@ -87,6 +95,8 @@ export class LeaveService {
     private readonly organizationDepartmentRepository: OrganizationDepartmentRepository,
     @Inject(JobTitleRepository)
     private readonly jobTitleRepository: JobTitleRepository,
+    @Inject(NotificationService)
+    private readonly notificationService: NotificationService,
   ) {}
 
   async listRequests(
@@ -159,6 +169,13 @@ export class LeaveService {
         `Approved leave request ${String(request._id)} in org ${organizationId}`,
       );
 
+      await this.notifyLeaveOutcome(
+        organizationId,
+        request,
+        LeaveRequestStatus.APPROVED,
+        user,
+      );
+
       return this.toLeaveRequestView(updated ?? request);
     } catch (error: unknown) {
       this.handleError(error, this.approveRequest.name);
@@ -191,6 +208,13 @@ export class LeaveService {
 
       this.logger.log(
         `Rejected leave request ${String(request._id)} in org ${organizationId}`,
+      );
+
+      await this.notifyLeaveOutcome(
+        organizationId,
+        request,
+        LeaveRequestStatus.REJECTED,
+        user,
       );
 
       return this.toLeaveRequestView(updated ?? request);
@@ -703,6 +727,59 @@ export class LeaveService {
       createdAt: this.formatDateTime(request.createdAt),
       updatedAt: this.formatDateTime(request.updatedAt),
     };
+  }
+
+  /**
+   * @Responsibility: Notify the concerned employee and admins about a leave
+   * decision.
+   *
+   * @param organizationId - The organization id
+   * @param request - The leave request
+   * @param status - The resulting status
+   * @param user - The acting user
+   * @returns {Promise<void>}
+   */
+  private async notifyLeaveOutcome(
+    organizationId: string,
+    request: LeaveRequestDocument,
+    status: LeaveRequestStatus,
+    user: ICurrentUser,
+  ): Promise<void> {
+    const employeeName =
+      request.employee?.employeeName ?? request.employeeId;
+    const label = request.leaveCategory?.label ?? 'leave';
+    const isApproved = status === LeaveRequestStatus.APPROVED;
+
+    await this.notificationService.dispatch({
+      organizationId,
+      type: isApproved
+        ? NotificationType.LEAVE_REQUEST_APPROVED
+        : NotificationType.LEAVE_REQUEST_REJECTED,
+      category: NotificationCategory.LEAVE,
+      message: `${employeeName}'s ${label} leave request was ${isApproved ? 'approved' : 'rejected'}`,
+      createdByUserId: user.userId,
+      createdByEmail: user.email,
+      actor: {
+        id: request.employeeId,
+        name: request.employee?.employeeName ?? null,
+        avatarUrl: request.employee?.avatarUrl ?? null,
+      },
+      entity: {
+        type: NotificationEntityType.LEAVE_REQUEST,
+        id: String(request._id),
+      },
+      action: {
+        type: NotificationActionType.VIEW,
+        resolution: NotificationResolution.RESOLVED,
+      },
+      metadata: {
+        status,
+        comment: request.reviewComment ?? null,
+        rejectionReason: request.rejectionReason ?? null,
+      },
+      recipientEmails: request.employee?.email ? [request.employee.email] : [],
+      excludeUserIds: [user.userId],
+    });
   }
 
   private getEmployeeName(employee: {

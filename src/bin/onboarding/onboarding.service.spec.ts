@@ -42,6 +42,7 @@ describe('OnboardingService', () => {
   let emailService: {
     emailDispatcher: jest.Mock<AnyPromiseFn>;
   };
+  let notificationService: { dispatch: jest.Mock<AnyPromiseFn> };
   let service: OnboardingService;
 
   beforeEach(() => {
@@ -61,12 +62,14 @@ describe('OnboardingService', () => {
     emailService = {
       emailDispatcher: jest.fn(),
     };
+    notificationService = { dispatch: jest.fn() };
 
     service = new OnboardingService(
       employeeRepository as any,
       jobTitleRepository as any,
       settingsDomainOrganisationService as any,
       emailService as any,
+      notificationService as any,
     );
   });
 

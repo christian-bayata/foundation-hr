@@ -6,6 +6,7 @@ import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
 import { EmployeeModule } from '../employee/employee.module';
 import { SettingModule } from '../setting/setting.module';
 import { EmailModule } from '../../email/email.module';
+import { NotificationModule } from '../notification/notification.module';
 import { UserRoleRepository } from '../setting/access-control/repository/user-role.repository';
 import {
   UserRole,
@@ -33,6 +34,7 @@ import {
     EmployeeModule,
     SettingModule,
     EmailModule,
+    NotificationModule,
   ],
   controllers: [OnboardingController],
   providers: [

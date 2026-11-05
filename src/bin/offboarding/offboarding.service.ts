@@ -36,6 +36,14 @@ import {
 } from './enum/offboarding.enum';
 import { ExitTrackingDocument } from './entity/exit-tracking.schema';
 import { ExitTrackingRepository } from './repository/exit-tracking.repository';
+import { NotificationService } from '../notification/notification.service';
+import {
+  NotificationActionType,
+  NotificationCategory,
+  NotificationEntityType,
+  NotificationResolution,
+  NotificationType,
+} from '../notification/enum/notification.enum';
 
 type MongoFilter = QueryFilter<EmployeeRequestDocument>;
 
@@ -112,6 +120,8 @@ export class OffboardingService {
     private readonly employeeRepository: EmployeeRepository,
     @Inject(SettingsDomainOrganisationService)
     private readonly settingsDomainOrganisationService: SettingsDomainOrganisationService,
+    @Inject(NotificationService)
+    private readonly notificationService: NotificationService,
   ) {}
 
   async getFormOptions(organizationId: string) {
@@ -529,6 +539,7 @@ export class OffboardingService {
       }
 
       const now = new Date();
+      const itemLabel = checklist[index].label;
       checklist[index] = {
         ...checklist[index],
         completed: dto.completed,
@@ -542,6 +553,34 @@ export class OffboardingService {
         dto.requestId,
         { [key]: checklist },
       );
+
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.OFFBOARDING_CHECKLIST_UPDATED,
+        category: NotificationCategory.OFFBOARDING,
+        message: `${request.employee?.employeeName ?? request.employeeId}'s exit checklist item "${itemLabel}" was ${dto.completed ? 'completed' : 'reopened'}`,
+        createdByUserId: user.userId,
+        createdByEmail: user.email,
+        actor: {
+          id: request.employeeId,
+          name: request.employee?.employeeName ?? null,
+          avatarUrl: request.employee?.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.OFFBOARDING,
+          id: dto.requestId,
+        },
+        action: {
+          type: NotificationActionType.VIEW,
+          resolution: NotificationResolution.RESOLVED,
+        },
+        metadata: {
+          checklistKind: dto.kind,
+          itemId: dto.itemId,
+          completed: dto.completed,
+        },
+        excludeUserIds: [user.userId],
+      });
 
       return this.toExitDetailView(
         await this.requestService.getRequest(organizationId, dto.requestId),
@@ -610,6 +649,36 @@ export class OffboardingService {
         { employerDocuments: documents },
       );
 
+      if (completed !== document.completed) {
+        await this.notificationService.dispatch({
+          organizationId,
+          type: NotificationType.OFFBOARDING_DOCUMENT_UPDATED,
+          category: NotificationCategory.OFFBOARDING,
+          message: `${request.employee?.employeeName ?? request.employeeId}'s exit document "${document.name}" was ${completed ? 'completed' : 'reopened'}`,
+          createdByUserId: request.createdBy?.userId ?? request.employeeId,
+          createdByEmail:
+            request.createdBy?.email ?? request.employee?.email ?? '',
+          actor: {
+            id: document.id,
+            name: document.name,
+            isDocument: true,
+          },
+          entity: {
+            type: NotificationEntityType.OFFBOARDING,
+            id: dto.requestId,
+          },
+          action: {
+            type: NotificationActionType.VIEW,
+            resolution: NotificationResolution.RESOLVED,
+          },
+          metadata: {
+            documentId: dto.documentId,
+            completed,
+            signed: updatedDocument.signed,
+          },
+        });
+      }
+
       return this.toExitDetailView(
         await this.requestService.getRequest(organizationId, dto.requestId),
         updated,
@@ -654,6 +723,35 @@ export class OffboardingService {
       }
 
       await this.terminateEmployee(organizationId, request.employeeId);
+
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.OFFBOARDING_COMPLETED,
+        category: NotificationCategory.OFFBOARDING,
+        message: `${request.employee?.employeeName ?? request.employeeId}'s offboarding was completed`,
+        createdByUserId: user.userId,
+        createdByEmail: user.email,
+        actor: {
+          id: request.employeeId,
+          name: request.employee?.employeeName ?? null,
+          avatarUrl: request.employee?.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.OFFBOARDING,
+          id: dto.requestId,
+        },
+        action: {
+          type: NotificationActionType.VIEW,
+          resolution: NotificationResolution.RESOLVED,
+        },
+        metadata: {
+          status: EmployeeRequestStatus.APPROVED,
+        },
+        recipientEmails: request.employee?.email
+          ? [request.employee.email]
+          : [],
+        excludeUserIds: [user.userId],
+      });
 
       this.logger.log(
         `Completed exit request ${dto.requestId} in org ${organizationId}`,

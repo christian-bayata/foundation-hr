@@ -118,6 +118,7 @@ export class EmployeeController {
     const data = await this.employeeService.inviteEmployees(
       inviteEmployeesDto.invitees,
       req.user?.organizationId,
+      req.user,
     );
 
     return AppResponse.success('Employees invited successfully', 200, data);
@@ -175,6 +176,7 @@ export class EmployeeController {
     const data = await this.employeeService.saveOnboardingBasicInformation(
       user.email,
       onboardingBasicInformationDto,
+      user,
     );
 
     return AppResponse.success(
@@ -194,6 +196,7 @@ export class EmployeeController {
     const data = await this.employeeService.saveOnboardingAssociatedContacts(
       user.email,
       onboardingContactsDto,
+      user,
     );
 
     return AppResponse.success(
@@ -213,6 +216,7 @@ export class EmployeeController {
     const data = await this.employeeService.saveOnboardingFinanceInformation(
       user.email,
       onboardingFinanceInformationDto,
+      user,
     );
 
     return AppResponse.success(

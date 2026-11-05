@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { EmployeeModule } from '../employee/employee.module';
 import { OrganizationModule } from '../organization/organization.module';
+import { NotificationModule } from '../notification/notification.module';
 import {
   LeaveBalance,
   LeaveBalanceSchema,
@@ -29,6 +30,7 @@ import {
     ]),
     EmployeeModule,
     OrganizationModule,
+    NotificationModule,
   ],
   controllers: [LeaveController],
   providers: [

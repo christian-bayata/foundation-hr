@@ -94,6 +94,7 @@ describe('LeaveService', () => {
     findByOrganization: jest.Mock<AnyPromiseFn>;
   };
   let jobTitleRepository: { findByOrganization: jest.Mock<AnyPromiseFn> };
+  let notificationService: { dispatch: jest.Mock<AnyPromiseFn> };
   let service: LeaveService;
 
   beforeEach(() => {
@@ -118,6 +119,7 @@ describe('LeaveService', () => {
     organizationRepository = { findOrg: jest.fn() };
     organizationDepartmentRepository = { findByOrganization: jest.fn() };
     jobTitleRepository = { findByOrganization: jest.fn() };
+    notificationService = { dispatch: jest.fn() };
 
     service = new LeaveService(
       leaveRequestRepository as any,
@@ -126,6 +128,7 @@ describe('LeaveService', () => {
       organizationRepository as any,
       organizationDepartmentRepository as any,
       jobTitleRepository as any,
+      notificationService as any,
     );
   });
 

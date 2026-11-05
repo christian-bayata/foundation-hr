@@ -30,6 +30,15 @@ import { EmployeeSetPasswordDto } from './dto/set-password.dto';
 import { UserRepository } from '../auth/repository/user.repository';
 import { hash } from 'bcryptjs';
 import moment from 'moment';
+import type { CurrentUser as ICurrentUser } from '../../common';
+import { NotificationService } from '../notification/notification.service';
+import {
+  NotificationActionType,
+  NotificationCategory,
+  NotificationEntityType,
+  NotificationResolution,
+  NotificationType,
+} from '../notification/enum/notification.enum';
 
 interface MongooseDuplicateError {
   code?: number;
@@ -54,6 +63,8 @@ export class EmployeeService {
     private readonly configService: ConfigService,
     @Inject(UserRepository)
     private readonly userRepository: UserRepository,
+    @Inject(NotificationService)
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -223,6 +234,7 @@ export class EmployeeService {
   async inviteEmployees(
     invitees: string[],
     organizationId?: string,
+    user?: ICurrentUser,
   ): Promise<unknown> {
     try {
       if (!organizationId) {
@@ -325,6 +337,35 @@ export class EmployeeService {
       this.logger.log(
         `Invited ${result.invited.length}, skipped ${result.skipped.length}, failed ${result.failed.length}`,
       );
+
+      if (result.invited.length > 0) {
+        await this.notificationService.dispatch({
+          organizationId: organizationId!,
+          type: NotificationType.EMPLOYEE_INVITED,
+          category: NotificationCategory.EMPLOYEE,
+          message: `${result.invited.length} employee${result.invited.length === 1 ? '' : 's'} invited`,
+          createdByUserId: user?.userId ?? '',
+          createdByEmail: user?.email ?? '',
+          actor: {
+            id: null,
+            name: user?.email ?? 'FoundationHR',
+          },
+          entity: {
+            type: NotificationEntityType.EMPLOYEE,
+            id: null,
+          },
+          action: {
+            type: NotificationActionType.VIEW,
+            resolution: NotificationResolution.RESOLVED,
+          },
+          metadata: {
+            emails: result.invited.map((invitee) => invitee.email),
+            skipped: result.skipped.map((invitee) => invitee.email),
+            failed: result.failed.map((invitee) => invitee.email),
+          },
+          excludeUserIds: user?.userId ? [user.userId] : [],
+        });
+      }
 
       return result;
     } catch (error: any) {
@@ -569,6 +610,7 @@ export class EmployeeService {
   async saveOnboardingBasicInformation(
     email: string,
     onboardingBasicInformationDto: OnboardingBasicInformationDto,
+    user?: ICurrentUser,
   ): Promise<unknown> {
     try {
       const employee = await this.resolveOnboardingEmployee(email);
@@ -582,6 +624,12 @@ export class EmployeeService {
             OnboardingStep.BASIC_INFORMATION,
           ),
         },
+      );
+
+      await this.notifyOnboardingProfileUpdate(
+        employee,
+        'basic information',
+        user,
       );
 
       return 'Onboarding basic information saved';
@@ -606,6 +654,7 @@ export class EmployeeService {
   async saveOnboardingAssociatedContacts(
     email: string,
     onboardingContactsDto: OnboardingContactsDto,
+    user?: ICurrentUser,
   ): Promise<unknown> {
     try {
       const employee = await this.resolveOnboardingEmployee(email);
@@ -617,6 +666,12 @@ export class EmployeeService {
           OnboardingStep.ASSOCIATED_CONTACTS,
         ),
       });
+
+      await this.notifyOnboardingProfileUpdate(
+        employee,
+        'associated contacts',
+        user,
+      );
 
       return 'Onboarding contacts saved';
     } catch (error: any) {
@@ -640,6 +695,7 @@ export class EmployeeService {
   async saveOnboardingFinanceInformation(
     email: string,
     onboardingFinanceInformationDto: OnboardingFinanceInformationDto,
+    user?: ICurrentUser,
   ): Promise<unknown> {
     try {
       const employee = await this.resolveOnboardingEmployee(email);
@@ -655,12 +711,83 @@ export class EmployeeService {
         },
       );
 
+      await this.notifyOnboardingProfileUpdate(
+        employee,
+        'finance information',
+        user,
+      );
+
       return 'Onboarding finance information saved';
     } catch (error: any) {
       error.location = `EmployeeServices.${this.saveOnboardingFinanceInformation.name} method`;
       AppResponse.error(error);
       throw error;
     }
+  }
+
+  /**
+   * @Responsibility: Notify admins that an employee submitted an onboarding
+   * section for review.
+   *
+   * @param employee - The onboarding employee
+   * @param section - The submitted section label
+   * @param user - The authenticated employee user
+   * @returns {Promise<void>}
+   */
+  private async notifyOnboardingProfileUpdate(
+    employee: EmployeeDocument,
+    section: string,
+    user?: ICurrentUser,
+  ): Promise<void> {
+    const employeeName = this.getEmployeeDisplayName(employee);
+    const organizationId = employee.organizationId;
+
+    if (!organizationId) {
+      return;
+    }
+
+    await this.notificationService.dispatch({
+      organizationId,
+      type: NotificationType.ONBOARDING_PROFILE_UPDATED,
+      category: NotificationCategory.ONBOARDING,
+      message: `${employeeName} updated their onboarding ${section}`,
+      createdByUserId: user?.userId ?? String(employee._id),
+      createdByEmail: user?.email ?? employee.email ?? '',
+      actor: {
+        id: String(employee._id),
+        name: employeeName,
+        avatarUrl: employee.avatarUrl ?? null,
+      },
+      entity: {
+        type: NotificationEntityType.EMPLOYEE,
+        id: String(employee._id),
+      },
+      action: {
+        type: NotificationActionType.APPROVE,
+        resolution: NotificationResolution.PENDING,
+      },
+      metadata: { section },
+      excludeUserIds: user?.userId ? [user.userId] : [],
+    });
+  }
+
+  /**
+   * @Responsibility: Resolve a display name for an employee.
+   *
+   * @param employee - The employee record
+   * @returns {string}
+   */
+  private getEmployeeDisplayName(employee: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  }): string {
+    const name = [employee.firstName, employee.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    return name || employee.email || 'Employee';
   }
 
   /**

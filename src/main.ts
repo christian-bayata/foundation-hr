@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { HttpLogger } from './common/middleware/http-logger.middleware';
+import { ConfiguredIoAdapter } from './event/event.adapter';
 
 async function bootstrap() {
   const logger = new Logger('Foundation-HR');
@@ -23,6 +24,8 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT', 'OPTIONS'],
     // allowedHeaders: ['Content-Type', 'Authorization', 'workspace'],
   });
+
+  app.useWebSocketAdapter(new ConfiguredIoAdapter(app, allowedOrigins));
 
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
 

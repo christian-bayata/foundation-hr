@@ -133,6 +133,7 @@ describe('RequestService', () => {
     getRequestWorkflows: jest.Mock<AnyPromiseFn>;
   };
   let requestFormValidator: { validate: jest.Mock };
+  let notificationService: { dispatch: jest.Mock<AnyPromiseFn> };
   let service: RequestService;
 
   beforeEach(() => {
@@ -156,6 +157,7 @@ describe('RequestService', () => {
           details ?? {},
       ),
     };
+    notificationService = { dispatch: jest.fn() };
 
     service = new RequestService(
       requestRepository as any,
@@ -164,6 +166,7 @@ describe('RequestService', () => {
       organizationDepartmentRepository as any,
       settingsDomainOrganisationService as any,
       requestFormValidator as any,
+      notificationService as any,
     );
   });
 

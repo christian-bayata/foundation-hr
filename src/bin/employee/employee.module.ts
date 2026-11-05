@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { EmailModule } from '../../email/email.module';
+import { NotificationModule } from '../notification/notification.module';
 import { EmployeeController } from './employee.controller';
 import { EmployeeService } from './employee.service';
 import { EmployeeRepository } from './repository/employee.repository';
@@ -22,6 +23,7 @@ import { UserRepository } from '../auth/repository/user.repository';
       { name: User.name, schema: UserSchema },
     ]),
     EmailModule,
+    NotificationModule,
   ],
   controllers: [EmployeeController],
   providers: [

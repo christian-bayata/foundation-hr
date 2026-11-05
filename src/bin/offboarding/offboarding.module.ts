@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { EmployeeModule } from '../employee/employee.module';
 import { RequestModule } from '../request/request.module';
 import { SettingModule } from '../setting/setting.module';
+import { NotificationModule } from '../notification/notification.module';
 import {
   ExitTracking,
   ExitTrackingSchema,
@@ -31,6 +32,7 @@ import {
     RequestModule,
     EmployeeModule,
     SettingModule,
+    NotificationModule,
   ],
   controllers: [OffboardingController],
   providers: [

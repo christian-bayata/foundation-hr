@@ -12,11 +12,13 @@ import { CalendarModule } from './bin/calendar/calendar.module';
 import { DashboardModule } from './bin/dashboard/dashboard.module';
 import { EmployeeModule } from './bin/employee/employee.module';
 import { LeaveModule } from './bin/leave/leave.module';
+import { NotificationModule } from './bin/notification/notification.module';
 import { OffboardingModule } from './bin/offboarding/offboarding.module';
 import { OnboardingModule } from './bin/onboarding/onboarding.module';
 import { RequestModule } from './bin/request/request.module';
 import { SettingModule } from './bin/setting/setting.module';
 import { FileUploadModule } from './file-upload/file-upload.module';
+import { EventModule } from './event/event.module';
 import { HttpExceptionFilter } from './common';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RoleGuard } from './common/guards/role.guard';
@@ -32,7 +34,9 @@ import { RoleGuard } from './common/guards/role.guard';
     CalendarModule,
     DashboardModule,
     EmployeeModule,
+    EventModule,
     LeaveModule,
+    NotificationModule,
     OffboardingModule,
     OnboardingModule,
     RequestModule,

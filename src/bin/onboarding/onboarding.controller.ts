@@ -42,6 +42,7 @@ export class OnboardingController {
     const data = await this.onboardingService.addEmployeeOnboarding(
       user.organizationId!,
       dto,
+      user,
     );
     return AppResponse.success(
       'Employee onboarding initialized successfully',
@@ -81,6 +82,7 @@ export class OnboardingController {
       employeeId,
       stepId,
       dto,
+      user,
     );
     return AppResponse.success(
       'Employee onboarding step updated successfully',
@@ -99,6 +101,7 @@ export class OnboardingController {
     const data = await this.onboardingService.cancelEmployeeOnboarding(
       user.organizationId!,
       dto,
+      user,
     );
     return AppResponse.success(
       'Employee onboarding cancelled successfully',
@@ -117,6 +120,7 @@ export class OnboardingController {
     const data = await this.onboardingService.nudgeEmployeeOnboarding(
       user.organizationId!,
       dto,
+      user,
     );
     return AppResponse.success(
       'Employee onboarding nudge sent successfully',

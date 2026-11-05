@@ -16,6 +16,15 @@ import { SettingsDomainOrganisationService } from '../setting/domain/settings.do
 import { OnboardingStatus } from './enum/onboarding-status.enum';
 import { EmailService } from '../../email/email.service';
 import { onboardingNudgeTemplate } from '../../email/template/onboarding-nudge.template';
+import type { CurrentUser as ICurrentUser } from '../../common';
+import { NotificationService } from '../notification/notification.service';
+import {
+  NotificationActionType,
+  NotificationCategory,
+  NotificationEntityType,
+  NotificationResolution,
+  NotificationType,
+} from '../notification/enum/notification.enum';
 
 const ONBOARDING_WORKFLOW_NAME = 'Onboarding';
 
@@ -32,6 +41,8 @@ export class OnboardingService {
     private readonly settingsDomainOrganisationService: SettingsDomainOrganisationService,
     @Inject(EmailService)
     private readonly emailService: EmailService,
+    @Inject(NotificationService)
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -49,6 +60,7 @@ export class OnboardingService {
   async addEmployeeOnboarding(
     organizationId: string,
     dto: AddEmployeeOnboardingDto,
+    user?: ICurrentUser,
   ) {
     try {
       const employee =
@@ -103,6 +115,31 @@ export class OnboardingService {
         `Initialized onboarding for employee ${dto.employeeId} in org ${organizationId}`,
       );
 
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.ONBOARDING_CREATED,
+        category: NotificationCategory.ONBOARDING,
+        message: `${this.getEmployeeName(employee!)}'s onboarding was initialized`,
+        createdByUserId: user?.userId ?? String(employee!._id),
+        createdByEmail: user?.email ?? employee!.email ?? '',
+        actor: {
+          id: dto.employeeId,
+          name: this.getEmployeeName(employee!),
+          avatarUrl: employee!.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.ONBOARDING,
+          id: dto.employeeId,
+        },
+        action: {
+          type: NotificationActionType.VIEW,
+          resolution: NotificationResolution.RESOLVED,
+        },
+        metadata: { stepCount: onboardingSteps.length },
+        recipientEmails: employee!.email ? [employee!.email] : [],
+        excludeUserIds: user?.userId ? [user.userId] : [],
+      });
+
       return {
         employeeId: dto.employeeId,
         steps: onboardingSteps,
@@ -131,6 +168,7 @@ export class OnboardingService {
   async cancelEmployeeOnboarding(
     organizationId: string,
     dto: CancelEmployeeOnboardingDto,
+    user?: ICurrentUser,
   ) {
     try {
       const employee =
@@ -166,6 +204,31 @@ export class OnboardingService {
         `Cancelled onboarding for employee ${dto.employeeId} in org ${organizationId}`,
       );
 
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.ONBOARDING_CANCELLED,
+        category: NotificationCategory.ONBOARDING,
+        message: `${this.getEmployeeName(employee!)}'s onboarding was cancelled`,
+        createdByUserId: user?.userId ?? String(employee!._id),
+        createdByEmail: user?.email ?? employee!.email ?? '',
+        actor: {
+          id: dto.employeeId,
+          name: this.getEmployeeName(employee!),
+          avatarUrl: employee!.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.ONBOARDING,
+          id: dto.employeeId,
+        },
+        action: {
+          type: NotificationActionType.VIEW,
+          resolution: NotificationResolution.RESOLVED,
+        },
+        metadata: { cancellationReason: dto.reason ?? null },
+        recipientEmails: employee!.email ? [employee!.email] : [],
+        excludeUserIds: user?.userId ? [user.userId] : [],
+      });
+
       return {
         employeeId: dto.employeeId,
         steps: [],
@@ -195,6 +258,7 @@ export class OnboardingService {
   async nudgeEmployeeOnboarding(
     organizationId: string,
     dto: NudgeEmployeeOnboardingDto,
+    user?: ICurrentUser,
   ) {
     try {
       const employee =
@@ -259,6 +323,31 @@ export class OnboardingService {
       this.logger.log(
         `Nudged employee ${dto.employeeId} (${employee!.email}) about onboarding in org ${organizationId}`,
       );
+
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.ONBOARDING_NUDGED,
+        category: NotificationCategory.ONBOARDING,
+        message: `Reminder: complete your onboarding. Outstanding steps: ${outstandingSteps}`,
+        createdByUserId: user?.userId ?? String(employee!._id),
+        createdByEmail: user?.email ?? employee!.email ?? '',
+        actor: {
+          id: dto.employeeId,
+          name: this.getEmployeeName(employee!),
+          avatarUrl: employee!.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.ONBOARDING,
+          id: dto.employeeId,
+        },
+        action: {
+          type: NotificationActionType.VIEW,
+          resolution: NotificationResolution.PENDING,
+        },
+        metadata: { outstandingSteps },
+        recipientEmails: employee!.email ? [employee!.email] : [],
+        excludeUserIds: user?.userId ? [user.userId] : [],
+      });
 
       return {
         employeeId: dto.employeeId,
@@ -414,6 +503,7 @@ export class OnboardingService {
     employeeId: string,
     stepId: string,
     dto: UpdateEmployeeOnboardingStepDto,
+    user?: ICurrentUser,
   ) {
     try {
       const employee =
@@ -494,6 +584,39 @@ export class OnboardingService {
       this.logger.log(
         `Updated onboarding step ${stepId} for employee ${employeeId}`,
       );
+
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.ONBOARDING_STEP_UPDATED,
+        category: NotificationCategory.ONBOARDING,
+        message: `${this.getEmployeeName(employee!)}'s onboarding step "${steps[stepIndex].stepName}" was ${isCompleted ? 'completed' : 'updated'}`,
+        createdByUserId: user?.userId ?? String(employee!._id),
+        createdByEmail: user?.email ?? employee!.email ?? '',
+        actor: {
+          id: employeeId,
+          name: this.getEmployeeName(employee!),
+          avatarUrl: employee!.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.ONBOARDING,
+          id: employeeId,
+        },
+        action: {
+          type: isCompleted
+            ? NotificationActionType.VIEW
+            : NotificationActionType.APPROVE,
+          resolution: isCompleted
+            ? NotificationResolution.RESOLVED
+            : NotificationResolution.PENDING,
+        },
+        metadata: {
+          stepId,
+          stepName: steps[stepIndex].stepName,
+          isCompleted,
+        },
+        recipientEmails: employee!.email ? [employee!.email] : [],
+        excludeUserIds: user?.userId ? [user.userId] : [],
+      });
 
       return this.toEmployeeOnboardingStepView(
         steps[stepIndex],
@@ -744,6 +867,25 @@ export class OnboardingService {
   /**
    * @Responsibility: Convert a stored onboarding step into its API view.
    */
+  /**
+   * @Responsibility: Resolve a display name for an employee.
+   *
+   * @param employee - The employee record
+   * @returns {string}
+   */
+  private getEmployeeName(employee: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  }): string {
+    const name = [employee.firstName, employee.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    return name || employee.email || 'Employee';
+  }
+
   private toEmployeeOnboardingStepView(
     step: EmployeeOnboardingStep,
     employmentDate: Date | null | undefined = null,

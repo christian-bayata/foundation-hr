@@ -32,6 +32,14 @@ import {
   EmployeeRequestStepStatus,
 } from './enum/request.enum';
 import { RequestRepository } from './repository/request.repository';
+import { NotificationService } from '../notification/notification.service';
+import {
+  NotificationActionType,
+  NotificationCategory,
+  NotificationEntityType,
+  NotificationResolution,
+  NotificationType,
+} from '../notification/enum/notification.enum';
 
 type RequestScope = 'your' | 'employee';
 type MongoFilter = QueryFilter<EmployeeRequestDocument>;
@@ -73,6 +81,8 @@ export class RequestService {
     private readonly settingsDomainOrganisationService: SettingsDomainOrganisationService,
     @Inject(RequestFormValidatorService)
     private readonly requestFormValidator: RequestFormValidatorService,
+    @Inject(NotificationService)
+    private readonly notificationService: NotificationService,
   ) {}
 
   async addRequest(
@@ -189,6 +199,33 @@ export class RequestService {
       this.logger.log(
         `Created ${dto.requestType} request ${String(request._id)} for employee ${resolvedEmployeeId} in org ${organizationId}`,
       );
+
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.REQUEST_SUBMITTED,
+        category: NotificationCategory.REQUEST,
+        message: `${employeeName} submitted a ${REQUEST_TYPE_LABELS[dto.requestType]} request`,
+        createdByUserId: user.userId,
+        createdByEmail: user.email,
+        actor: {
+          id: resolvedEmployeeId,
+          name: employeeName,
+          avatarUrl: employee!.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.REQUEST,
+          id: String(request._id),
+        },
+        action: {
+          type: NotificationActionType.APPROVE,
+          resolution: NotificationResolution.PENDING,
+        },
+        metadata: {
+          requestType: request.requestType,
+          status: request.status,
+        },
+        excludeUserIds: [user.userId],
+      });
 
       return this.toRequestView(request);
     } catch (error: any) {
@@ -409,6 +446,33 @@ export class RequestService {
       this.logger.log(
         `Cancelled request ${requestId} in org ${organizationId}`,
       );
+
+      await this.notificationService.dispatch({
+        organizationId,
+        type: NotificationType.REQUEST_CANCELLED,
+        category: NotificationCategory.REQUEST,
+        message: `${request.employee?.employeeName ?? request.employeeId}'s ${REQUEST_TYPE_LABELS[request.requestType]} request was cancelled`,
+        createdByUserId: request.createdBy?.userId ?? request.employeeId,
+        createdByEmail: request.createdBy?.email ?? request.employee?.email ?? '',
+        actor: {
+          id: request.employeeId,
+          name: request.employee?.employeeName ?? null,
+          avatarUrl: request.employee?.avatarUrl ?? null,
+        },
+        entity: {
+          type: NotificationEntityType.REQUEST,
+          id: String(request._id),
+        },
+        action: {
+          type: NotificationActionType.VIEW,
+          resolution: NotificationResolution.RESOLVED,
+        },
+        metadata: {
+          requestType: request.requestType,
+          status: EmployeeRequestStatus.CANCELLED,
+        },
+      });
+
       return this.toRequestView(updated!);
     } catch (error: any) {
       error.location = `RequestService.${this.cancelRequest.name}`;
@@ -501,6 +565,9 @@ export class RequestService {
       this.logger.log(
         `Updated request ${requestId} step ${dto.stepId} with action ${dto.action}`,
       );
+
+      await this.notifyRequestStepOutcome(request, status, user);
+
       return this.toRequestView(updated!);
     } catch (error: any) {
       error.location = `RequestService.${this.updateRequestStep.name}`;
@@ -742,6 +809,74 @@ export class RequestService {
     return steps.findIndex(
       (step) => step.status === EmployeeRequestStepStatus.PENDING,
     );
+  }
+
+  /**
+   * @Responsibility: Notify admins about an in-flight request step and the
+   * concerned employee once the request reaches a terminal state.
+   *
+   * @param request - The request that changed
+   * @param status - The resulting request status
+   * @param user - The acting user
+   * @returns {Promise<void>}
+   */
+  private async notifyRequestStepOutcome(
+    request: EmployeeRequestDocument,
+    status: EmployeeRequestStatus,
+    user: ICurrentUser,
+  ): Promise<void> {
+    const isRejected = status === EmployeeRequestStatus.REJECTED;
+    const isApproved = status === EmployeeRequestStatus.APPROVED;
+    const terminal = isRejected || isApproved;
+    const label = REQUEST_TYPE_LABELS[request.requestType];
+    const employeeName = request.employee?.employeeName ?? request.employeeId;
+
+    const type = isRejected
+      ? NotificationType.REQUEST_REJECTED
+      : isApproved
+        ? NotificationType.REQUEST_APPROVED
+        : NotificationType.REQUEST_STEP_UPDATED;
+
+    const message = isRejected
+      ? `${employeeName}'s ${label} request was rejected`
+      : isApproved
+        ? `${employeeName}'s ${label} request was approved`
+        : `${employeeName}'s ${label} request moved to the next step`;
+
+    await this.notificationService.dispatch({
+      organizationId: request.organizationId,
+      type,
+      category: NotificationCategory.REQUEST,
+      message,
+      createdByUserId: user.userId,
+      createdByEmail: user.email,
+      actor: {
+        id: request.employeeId,
+        name: request.employee?.employeeName ?? null,
+        avatarUrl: request.employee?.avatarUrl ?? null,
+      },
+      entity: {
+        type: NotificationEntityType.REQUEST,
+        id: String(request._id),
+      },
+      action: terminal
+        ? {
+            type: NotificationActionType.VIEW,
+            resolution: NotificationResolution.RESOLVED,
+          }
+        : {
+            type: NotificationActionType.APPROVE,
+            resolution: NotificationResolution.PENDING,
+          },
+      metadata: {
+        requestType: request.requestType,
+        status,
+      },
+      recipientUserIds: terminal ? [request.createdBy?.userId] : [],
+      recipientEmails:
+        terminal && request.employee?.email ? [request.employee.email] : [],
+      excludeUserIds: [user.userId],
+    });
   }
 
   private toRequestListItem(request: EmployeeRequestDocument) {
