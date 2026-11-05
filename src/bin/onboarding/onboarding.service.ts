@@ -384,13 +384,6 @@ export class OnboardingService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      if (employee!.organizationId !== organizationId) {
-        AppResponse.error({
-          message: 'Employee does not belong to this organization',
-          status: HttpStatus.FORBIDDEN,
-        });
-      }
-
       const rawSteps = employee!.employeeOnboardingSteps ?? [];
       const totalSteps = rawSteps.length;
       const completedSteps = rawSteps.filter((s) => s.isCompleted).length;
@@ -455,6 +448,7 @@ export class OnboardingService {
           email: employee!.email,
           avatarUrl: employee!.avatarUrl ?? null,
           employmentId: employee!.employeeId ?? null,
+          employmentDate: employee!.employmentDate ?? null,
           role: jobTitle?.name ?? null,
           startDate: employee!.employmentDate
             ? this.formatDate(employee!.employmentDate)
@@ -694,6 +688,9 @@ export class OnboardingService {
             employeeName:
               `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim() ||
               employee.email,
+            avatarUrl: employee!.avatarUrl ?? null,
+            employmentDate: employee!.employmentDate ?? null,
+            employeeType: employee!.employeeType ?? null,
             email: employee.email,
             jobTitle: jobTitle?.name ?? null,
             dueDate,
