@@ -103,6 +103,9 @@ export class EmployeeContact {
 
   @Prop({ type: String, trim: true, default: null })
   address: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  dateOfBirth: string | null;
 }
 
 export const EmployeeContactSchema =

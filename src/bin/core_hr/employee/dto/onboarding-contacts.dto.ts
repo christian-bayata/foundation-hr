@@ -35,6 +35,10 @@ export class EmployeeContactDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @IsOptional()
+  @IsString()
+  dateOfBirth?: string;
 }
 
 export class OnboardingContactsDto {

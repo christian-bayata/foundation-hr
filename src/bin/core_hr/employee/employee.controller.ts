@@ -207,7 +207,7 @@ export class EmployeeController {
 
   @Post('/onboarding/documents')
   @HttpCode(HttpStatus.OK)
-  @UsePipes(new JoiValidationPipe(onboardingDocumentsSchema))
+  // @UsePipes(new JoiValidationPipe(onboardingDocumentsSchema))
   async saveOnboardingDocuments(
     @CurrentUser() user: ICurrentUser,
     @Body() onboardingDocumentsDto: OnboardingDocumentsDto,
