@@ -227,7 +227,7 @@ export class EmployeeController {
 
   @Post('/onboarding/associated-contacts')
   @HttpCode(HttpStatus.OK)
-  @UsePipes(new JoiValidationPipe(onboardingContactsSchema))
+  // @UsePipes(new JoiValidationPipe(onboardingContactsSchema))
   async saveOnboardingAssociatedContacts(
     @CurrentUser() user: ICurrentUser,
     @Body() onboardingContactsDto: OnboardingContactsDto,
@@ -247,7 +247,7 @@ export class EmployeeController {
 
   @Post('/onboarding/finance-information')
   @HttpCode(HttpStatus.OK)
-  @UsePipes(new JoiValidationPipe(onboardingFinanceInformationSchema))
+  // @UsePipes(new JoiValidationPipe(onboardingFinanceInformationSchema))
   async saveOnboardingFinanceInformation(
     @CurrentUser() user: ICurrentUser,
     @Body() onboardingFinanceInformationDto: OnboardingFinanceInformationDto,
