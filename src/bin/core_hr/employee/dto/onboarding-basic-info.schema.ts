@@ -51,9 +51,25 @@ const academicInfoSchema = Joi.object({
   qualification: Joi.string().trim().allow('', null),
 });
 
+const documentSchema = Joi.object({
+  name: Joi.string().trim().allow('', null),
+  uploadedBy: Joi.string().trim().required(),
+  type: Joi.string().trim().required(),
+  uploadDate: Joi.date().iso().required().messages({
+    'date.base': 'Upload date must be a valid date.',
+  }),
+  url: Joi.string().trim().required(),
+});
+
+export const onboardingDocumentsSchema = Joi.object({
+  documents: Joi.array().items(documentSchema).required(),
+  req: Joi.any(),
+});
+
 export const onboardingBasicInformationSchema = Joi.object({
   personalDetails: personalDetailsSchema.optional(),
   homeAddress: homeAddressSchema.optional(),
   academicInfo: academicInfoSchema.optional(),
+  documents: Joi.array().items(documentSchema).optional(),
   req: Joi.any(),
 });

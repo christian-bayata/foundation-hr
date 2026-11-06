@@ -12,6 +12,7 @@ import { EmployeeRepository } from './repository/employee.repository';
 import { EmployeeUtility } from './repository/employee.utility';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
 import { UserRepository } from '../../generic/auth/repository/user.repository';
+import { NotificationService } from '../../generic/notification/notification.service';
 import { EmployeeStatus } from './enum/employee.enum';
 
 const INVITE_ID = '64f1b2c3d4e5f678901234ab';
@@ -42,6 +43,7 @@ describe('EmployeeController (integration)', () => {
     findUser: jest.Mock<AnyPromiseFn>;
     updateUser: jest.Mock<AnyPromiseFn>;
   };
+  let notificationService: { dispatch: jest.Mock<AnyPromiseFn> };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -73,6 +75,9 @@ describe('EmployeeController (integration)', () => {
       findUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
       updateUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
     };
+    notificationService = {
+      dispatch: jest.fn<AnyPromiseFn>().mockResolvedValue(undefined),
+    };
 
     const { Test } = await import('@nestjs/testing');
     const module = await Test.createTestingModule({
@@ -88,6 +93,7 @@ describe('EmployeeController (integration)', () => {
           useValue: { get: () => 'http://localhost:3000' },
         },
         { provide: UserRepository, useValue: userRepository },
+        { provide: NotificationService, useValue: notificationService },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -616,6 +622,142 @@ describe('EmployeeController (integration)', () => {
       );
 
       expect(res.status).toBe(403);
+    });
+
+    it('GET /employees/onboarding/retrieve returns persisted documents', async () => {
+      const documents = [
+        {
+          name: 'National ID',
+          uploadedBy: 'admin@example.com',
+          type: 'nin',
+          uploadDate: new Date('2026-11-06T00:00:00.000Z'),
+          url: 'https://files.example.com/nin.pdf',
+        },
+      ];
+      employeeRepository.findByEmail.mockResolvedValue({
+        _id: INVITE_ID,
+        email: EMAIL,
+        hasJoinedOrg: true,
+        status: EmployeeStatus.DRAFT,
+        onboarding: null,
+        contacts: [],
+        documents,
+      });
+
+      const res = await request(app.getHttpServer()).get(
+        '/employees/onboarding/retrieve',
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.documents).toHaveLength(1);
+      expect(res.body.data.documents[0]).toMatchObject({
+        name: documents[0].name,
+        uploadedBy: documents[0].uploadedBy,
+        type: documents[0].type,
+        url: documents[0].url,
+      });
+      expect(new Date(res.body.data.documents[0].uploadDate)).toEqual(
+        documents[0].uploadDate,
+      );
+    });
+
+    it('POST /employees/onboarding/documents resolves names from organization settings', async () => {
+      employeeRepository.findByEmail.mockResolvedValue({
+        _id: INVITE_ID,
+        email: EMAIL,
+        organizationId: ORG_ID,
+        hasJoinedOrg: true,
+      });
+      organizationRepository.findOrg.mockResolvedValue({
+        onboarding: {
+          personalIdentificationDocuments: [
+            { id: 'nin', label: 'National ID', selected: true, optional: false },
+          ],
+        },
+      });
+      employeeRepository.updateById.mockResolvedValue({
+        _id: INVITE_ID,
+        documents: [],
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/onboarding/documents')
+        .send({
+          documents: [
+            {
+              name: 'Ignored client name',
+              uploadedBy: 'admin@example.com',
+              type: 'nin',
+              uploadDate: '2026-11-06T00:00:00.000Z',
+              url: 'https://files.example.com/nin.pdf',
+            },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(
+        INVITE_ID,
+        {
+          documents: [
+            {
+              name: 'National ID',
+              uploadedBy: 'admin@example.com',
+              type: 'nin',
+              uploadDate: new Date('2026-11-06T00:00:00.000Z'),
+              url: 'https://files.example.com/nin.pdf',
+            },
+          ],
+        },
+      );
+    });
+
+    it('POST /employees/onboarding/documents rejects an unconfigured document type', async () => {
+      employeeRepository.findByEmail.mockResolvedValue({
+        _id: INVITE_ID,
+        email: EMAIL,
+        organizationId: ORG_ID,
+        hasJoinedOrg: true,
+      });
+      organizationRepository.findOrg.mockResolvedValue({
+        onboarding: {
+          personalIdentificationDocuments: [
+            { id: 'nin', label: 'National ID', selected: true, optional: false },
+          ],
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/onboarding/documents')
+        .send({
+          documents: [
+            {
+              uploadedBy: 'admin@example.com',
+              type: 'unknown',
+              uploadDate: '2026-11-06T00:00:00.000Z',
+              url: 'https://files.example.com/unknown.pdf',
+            },
+          ],
+        });
+
+      expect(res.status).toBe(400);
+      expect(employeeRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('POST /employees/onboarding/documents rejects missing document fields', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/employees/onboarding/documents')
+        .send({ documents: [{ type: 'nin' }] });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('POST /employees/onboarding/documents requires a documents array', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/employees/onboarding/documents')
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(employeeRepository.updateById).not.toHaveBeenCalled();
     });
 
     it('POST /employees/onboarding/basic-information saves personal details', async () => {

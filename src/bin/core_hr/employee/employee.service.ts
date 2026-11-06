@@ -7,7 +7,11 @@ import { MailDispatcherDto } from '../../../email/dto/send-mail.dto';
 import { employeeInviteTemplate } from '../../../email/template/employee-invite.template';
 import { passwordResetTemplate } from '../../../email/template/password-reset.template';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
-import { OnboardingBasicInformationDto } from './dto/onboarding-basic-info.dto';
+import {
+  OnboardingBasicInformationDto,
+  OnboardingDocumentDto,
+  OnboardingDocumentsDto,
+} from './dto/onboarding-basic-info.dto';
 import { OnboardingContactsDto } from './dto/onboarding-contacts.dto';
 import { OnboardingFinanceInformationDto } from './dto/onboarding-finance.dto';
 import { EmployeeStatus, OnboardingStep } from './enum/employee.enum';
@@ -15,6 +19,7 @@ import { EmployeeRepository } from './repository/employee.repository';
 import {
   EmployeeContact,
   EmployeeDocument,
+  EmployeeUploadedDocument,
   FinanceInformation,
 } from './entity/employee.schema';
 import {
@@ -613,17 +618,23 @@ export class EmployeeService {
   ): Promise<unknown> {
     try {
       const employee = await this.resolveOnboardingEmployee(email);
-
-      const updated = await this.employeeRepository.updateById(
-        employee._id.toString(),
-        {
-          ...onboardingBasicInformationDto,
-          ...this.buildOnboardingUpdate(
-            employee,
-            OnboardingStep.BASIC_INFORMATION,
-          ),
-        },
+      const {
+        documents: submittedDocuments,
+        ...onboardingBasicInformation
+      } = onboardingBasicInformationDto;
+      const documents = await this.resolveOnboardingDocuments(
+        employee,
+        submittedDocuments,
       );
+
+      await this.employeeRepository.updateById(employee._id.toString(), {
+        ...onboardingBasicInformation,
+        ...(documents !== undefined ? { documents } : {}),
+        ...this.buildOnboardingUpdate(
+          employee,
+          OnboardingStep.BASIC_INFORMATION,
+        ),
+      });
 
       await this.notifyOnboardingProfileUpdate(
         employee,
@@ -634,6 +645,45 @@ export class EmployeeService {
       return 'Onboarding basic information saved';
     } catch (error: any) {
       error.location = `EmployeeServices.${this.saveOnboardingBasicInformation.name} method`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Save the employee's uploaded onboarding documents. Each
+   * document's type is matched against the organization's required personal
+   * identification documents so the persisted name always comes from the
+   * admin-configured label.
+   *
+   * @param email - Authenticated user's email
+   * @param dto - documents array to persist
+   * @returns The saved documents
+   *
+   * @throws {404} Employee or organization not found
+   * @throws {400} Document type is not configured for onboarding
+   */
+  async saveOnboardingDocuments(
+    email: string,
+    onboardingDocumentsDto: OnboardingDocumentsDto,
+    user?: ICurrentUser,
+  ): Promise<unknown> {
+    try {
+      const employee = await this.resolveOnboardingEmployee(email);
+      const documents = await this.resolveOnboardingDocuments(
+        employee,
+        onboardingDocumentsDto.documents ?? [],
+      );
+
+      await this.employeeRepository.updateById(employee._id.toString(), {
+        documents,
+      });
+
+      await this.notifyOnboardingProfileUpdate(employee, 'documents', user);
+
+      return 'Onboarding documents saved';
+    } catch (error: any) {
+      error.location = `EmployeeServices.${this.saveOnboardingDocuments.name} method`;
       AppResponse.error(error);
       throw error;
     }
@@ -816,6 +866,62 @@ export class EmployeeService {
   }
 
   /**
+   * @Responsibility: Resolve uploaded onboarding documents against the
+   * organization's admin-configured personal identification documents. The
+   * submitted type must match a configured document id, and the persisted name
+   * is always taken from that document's label.
+   *
+   * @param employee - The onboarding employee
+   * @param documents - Submitted documents, or undefined to leave them unchanged
+   * @returns Normalised documents, or undefined when none were submitted
+   *
+   * @throws {404} Organization not found
+   * @throws {400} Document type is not configured for onboarding
+   */
+  private async resolveOnboardingDocuments(
+    employee: EmployeeDocument,
+    documents?: OnboardingDocumentDto[],
+  ): Promise<EmployeeUploadedDocument[] | undefined> {
+    if (documents === undefined) {
+      return undefined;
+    }
+
+    const organization =
+      (await this.organizationRepository.findOrg({
+        _id: employee.organizationId,
+      })) ??
+      AppResponse.error({
+        message: 'Organization not found',
+        status: HttpStatus.NOT_FOUND,
+      });
+
+    const configuredDocuments =
+      organization.onboarding?.personalIdentificationDocuments ?? [];
+    const documentNames = new Map(
+      configuredDocuments.map((document) => [document.id, document.label]),
+    );
+
+    return documents.map((document) => {
+      const name = documentNames.get(document.type);
+
+      if (!name) {
+        AppResponse.error({
+          message: `Document type "${document.type}" is not configured for onboarding`,
+          status: HttpStatus.BAD_REQUEST,
+        });
+      }
+
+      return {
+        name: name as string,
+        uploadedBy: document.uploadedBy,
+        type: document.type,
+        uploadDate: new Date(document.uploadDate),
+        url: document.url,
+      };
+    });
+  }
+
+  /**
    * @Responsibility: Compute the onboarding progression update for a completed
    * step, and finalize (completedAt + ACTIVE) when the last step is done
    */
@@ -887,6 +993,7 @@ export class EmployeeService {
       homeAddress: employee.homeAddress ?? null,
       academicInfo: employee.academicInfo ?? null,
       contacts: employee.contacts ?? [],
+      documents: employee.documents ?? [],
       financeInformation: employee.financeInformation ?? null,
       completedSteps,
       progress: this.computeProgress(completedSteps),

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsDateString,
   IsEnum,
   IsOptional,
@@ -76,7 +77,33 @@ export class AcademicInfoDto {
   qualification?: string;
 }
 
-export class OnboardingBasicInformationDto {
+export class OnboardingDocumentDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsString()
+  uploadedBy: string;
+
+  @IsString()
+  type: string;
+
+  @IsDateString()
+  uploadDate: string;
+
+  @IsString()
+  url: string;
+}
+
+export class OnboardingDocumentsDto {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OnboardingDocumentDto)
+  documents?: OnboardingDocumentDto[];
+}
+
+export class OnboardingBasicInformationDto extends OnboardingDocumentsDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => PersonalDetailsDto)

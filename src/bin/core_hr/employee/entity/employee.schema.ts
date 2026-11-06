@@ -242,6 +242,28 @@ export const EmployeeOnboardingStepSchema = SchemaFactory.createForClass(
   EmployeeOnboardingStep,
 );
 
+@Schema({ _id: false })
+export class EmployeeUploadedDocument {
+  @Prop({ type: String, trim: true, required: true })
+  name: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  uploadedBy: string;
+
+  @Prop({ type: String, trim: true, required: true })
+  type: string;
+
+  @Prop({ type: Date, required: true })
+  uploadDate: Date;
+
+  @Prop({ type: String, trim: true, required: true })
+  url: string;
+}
+
+export const EmployeeUploadedDocumentSchema = SchemaFactory.createForClass(
+  EmployeeUploadedDocument,
+);
+
 @Schema({ timestamps: true })
 export class Employee {
   @Prop({
@@ -360,6 +382,9 @@ export class Employee {
 
   @Prop({ type: [EmployeeContactSchema], default: [] })
   contacts: EmployeeContact[];
+
+  @Prop({ type: [EmployeeUploadedDocumentSchema], default: [] })
+  documents: EmployeeUploadedDocument[];
 
   @Prop({ type: FinanceInformationSchema, default: null })
   financeInformation: FinanceInformation | null;

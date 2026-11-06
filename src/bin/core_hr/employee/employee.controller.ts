@@ -18,7 +18,10 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser, IRequest } from '../../../common';
 import { EmployeeService } from './employee.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
-import { OnboardingBasicInformationDto } from './dto/onboarding-basic-info.dto';
+import {
+  OnboardingBasicInformationDto,
+  OnboardingDocumentsDto,
+} from './dto/onboarding-basic-info.dto';
 import { OnboardingContactsDto } from './dto/onboarding-contacts.dto';
 import { OnboardingFinanceInformationDto } from './dto/onboarding-finance.dto';
 import {
@@ -31,7 +34,10 @@ import {
   createEmployeeSchema,
   updateEmployeeSchema,
 } from './dto/create-employee.schema';
-import { onboardingBasicInformationSchema } from './dto/onboarding-basic-info.schema';
+import {
+  onboardingBasicInformationSchema,
+  onboardingDocumentsSchema,
+} from './dto/onboarding-basic-info.schema';
 import { onboardingContactsSchema } from './dto/onboarding-contacts.schema';
 import { onboardingFinanceInformationSchema } from './dto/onboarding-finance.schema';
 import {
@@ -181,6 +187,26 @@ export class EmployeeController {
 
     return AppResponse.success(
       'Personal profile saved successfully',
+      200,
+      data,
+    );
+  }
+
+  @Post('/onboarding/documents')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new JoiValidationPipe(onboardingDocumentsSchema))
+  async saveOnboardingDocuments(
+    @CurrentUser() user: ICurrentUser,
+    @Body() onboardingDocumentsDto: OnboardingDocumentsDto,
+  ) {
+    const data = await this.employeeService.saveOnboardingDocuments(
+      user.email,
+      onboardingDocumentsDto,
+      user,
+    );
+
+    return AppResponse.success(
+      'Onboarding documents saved successfully',
       200,
       data,
     );
