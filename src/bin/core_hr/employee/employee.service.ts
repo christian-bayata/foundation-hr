@@ -618,10 +618,8 @@ export class EmployeeService {
   ): Promise<unknown> {
     try {
       const employee = await this.resolveOnboardingEmployee(email);
-      const {
-        documents: submittedDocuments,
-        ...onboardingBasicInformation
-      } = onboardingBasicInformationDto;
+      const { documents: submittedDocuments, ...onboardingBasicInformation } =
+        onboardingBasicInformationDto;
       const documents = await this.resolveOnboardingDocuments(
         employee,
         submittedDocuments,
@@ -656,7 +654,7 @@ export class EmployeeService {
    * identification documents so the persisted name always comes from the
    * admin-configured label.
    *
-   * @param email - Authenticated user's email
+   * @param email - Authenticated user email
    * @param dto - documents array to persist
    * @returns The saved documents
    *
