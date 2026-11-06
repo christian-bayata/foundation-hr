@@ -33,7 +33,7 @@ export class OnboardingController {
   ) {}
 
   @Get('retrieve')
-  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.EMPLOYEE)
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
   async retrieveOnboardingSettings(@CurrentUser() user: ICurrentUser) {
     const data = await this.organisationService.getOnboardingSettings(
       user.organizationId!,

@@ -44,6 +44,8 @@ import {
   NotificationResolution,
   NotificationType,
 } from '../../generic/notification/enum/notification.enum';
+import { DEFAULT_ONBOARDING_SETTINGS } from '../../generic/setting/domain/settings.domain.organisation.service';
+import { OnboardingDocument } from '../organization/entity/organization.schema';
 
 interface MongooseDuplicateError {
   code?: number;
@@ -595,6 +597,36 @@ export class EmployeeService {
       return this.buildOnboardingPayload(employee);
     } catch (error: any) {
       error.location = `EmployeeServices.${this.getOnboarding.name} method`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Retrieve an organization's onboarding settings. The three
+   * documentation categories and the employer-issued documents start empty and
+   * grow as the organization adds documents.
+   *
+   * @param organizationId - The organization to retrieve settings for
+   *
+   * @throws {404} Organization not found
+   */
+  async getOnboardingRequirements(organizationId: string) {
+    try {
+      const organization =
+        (await this.organizationRepository.findOrg({ _id: organizationId })) ??
+        AppResponse.error({
+          message: 'Organization not found',
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      return organization?.onboarding;
+
+      // const settings = organization!.onboarding ?? DEFAULT_ONBOARDING_SETTINGS;
+
+      // return settings;
+    } catch (error: any) {
+      error.location = `SettingsDomainOrganisationService.${this.getOnboardingRequirements.name}`;
       AppResponse.error(error);
       throw error;
     }

@@ -172,6 +172,19 @@ export class EmployeeController {
     );
   }
 
+  @Get('onboarding/requirements/retrieve')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  async retrieveOnboardingSettings(@CurrentUser() user: ICurrentUser) {
+    const data = await this.employeeService.getOnboardingRequirements(
+      user.organizationId!,
+    );
+    return AppResponse.success(
+      'Onboarding settings retrieved successfully',
+      200,
+      data,
+    );
+  }
+
   @Post('/onboarding/basic-information')
   @HttpCode(HttpStatus.OK)
   // @UsePipes(new JoiValidationPipe(onboardingBasicInformationSchema))
