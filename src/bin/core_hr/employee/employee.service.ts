@@ -916,33 +916,33 @@ export class EmployeeService {
       return undefined;
     }
 
-    const organization =
-      (await this.organizationRepository.findOrg({
-        _id: employee.organizationId,
-      })) ??
-      AppResponse.error({
-        message: 'Organization not found',
-        status: HttpStatus.NOT_FOUND,
-      });
+    // const organization =
+    //   (await this.organizationRepository.findOrg({
+    //     _id: employee.organizationId,
+    //   })) ??
+    //   AppResponse.error({
+    //     message: 'Organization not found',
+    //     status: HttpStatus.NOT_FOUND,
+    //   });
 
-    const configuredDocuments =
-      organization.onboarding?.personalIdentificationDocuments ?? [];
-    const documentNames = new Map(
-      configuredDocuments.map((document) => [document.id, document.label]),
-    );
+    // const configuredDocuments =
+    //   organization.onboarding?.personalIdentificationDocuments ?? [];
+    // const documentNames = new Map(
+    //   configuredDocuments.map((document) => [document.id, document.label]),
+    // );
 
     return documents.map((document) => {
-      const name = documentNames.get(document.type);
+      // const name = documentNames.get(document.type);
 
-      if (!name) {
-        AppResponse.error({
-          message: `Document type "${document.type}" is not configured for onboarding`,
-          status: HttpStatus.BAD_REQUEST,
-        });
-      }
+      // if (!name) {
+      //   AppResponse.error({
+      //     message: `Document type "${document.type}" is not configured for onboarding`,
+      //     status: HttpStatus.BAD_REQUEST,
+      //   });
+      // }
 
       return {
-        name: name as string,
+        name: document.name as string,
         uploadedBy: document.uploadedBy,
         type: document.type,
         uploadDate: new Date(document.uploadDate),
