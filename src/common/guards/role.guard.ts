@@ -8,11 +8,11 @@ import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { REQUIRES_SYSTEM_SETTINGS_KEY } from '../decorators/requires-system-settings.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { SystemRole } from '../../bin/auth/enum/role.enum';
+import { SystemRole } from '../../bin/generic/auth/enum/role.enum';
 import { CurrentUser, IRequest } from '../interfaces/request.interface';
-import { UserRoleRepository } from '../../bin/setting/access-control/repository/user-role.repository';
-import { OrganizationRepository } from '../../bin/organization/repository/organization.repository';
-import { RoleDocument } from '../../bin/setting/access-control/entity/role.schema';
+import { UserRoleRepository } from '../../bin/generic/setting/access-control/repository/user-role.repository';
+import { OrganizationRepository } from '../../bin/core_hr/organization/repository/organization.repository';
+import { RoleDocument } from '../../bin/generic/setting/access-control/entity/role.schema';
 
 @Injectable()
 export class RoleGuard implements CanActivate {

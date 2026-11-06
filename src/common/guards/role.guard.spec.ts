@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { SystemRole } from '../../bin/auth/enum/role.enum';
+import { SystemRole } from '../../bin/generic/auth/enum/role.enum';
 import { RoleGuard } from './role.guard';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { REQUIRES_SYSTEM_SETTINGS_KEY } from '../decorators/requires-system-settings.decorator';

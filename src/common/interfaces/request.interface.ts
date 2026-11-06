@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { PrincipalType } from '../../bin/auth/enum/principal-type.enum';
+import { PrincipalType } from '../../bin/generic/auth/enum/principal-type.enum';
 
 export interface CurrentUser {
   userId: string;

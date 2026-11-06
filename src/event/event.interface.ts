@@ -1,4 +1,4 @@
-import type { PrincipalType } from '../bin/auth/enum/principal-type.enum';
+import type { PrincipalType } from '../bin/generic/auth/enum/principal-type.enum';
 
 export interface SocketUser {
   userId: string;

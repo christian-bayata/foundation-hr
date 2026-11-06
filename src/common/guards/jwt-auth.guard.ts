@@ -8,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { PrincipalType } from '../../bin/auth/enum/principal-type.enum';
+import { PrincipalType } from '../../bin/generic/auth/enum/principal-type.enum';
 
 export interface JwtPayload {
   sub: string;

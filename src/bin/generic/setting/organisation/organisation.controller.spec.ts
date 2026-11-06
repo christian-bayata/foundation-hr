@@ -1,0 +1,951 @@
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import request from 'supertest';
+import { App } from 'supertest/types';
+import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { RoleGuard } from '../../../../common/guards/role.guard';
+import { IS_PUBLIC_KEY } from '../../../../common/decorators/public.decorator';
+import { OrganisationController } from './organisation.controller';
+import { SettingsDomainOrganisationService } from '../domain/settings.domain.organisation.service';
+import { OrganizationService } from '../../../core_hr/organization/organization.service';
+
+const ORG_ID = '64f1b2c3d4e5f678901234ab';
+
+type AnyPromiseFn = (...args: any[]) => Promise<any>;
+
+describe('OrganisationController (integration)', () => {
+  let app: INestApplication<App>;
+  let organisationService: {
+    getGeneralInfo: jest.Mock<AnyPromiseFn>;
+    updateGeneralInfo: jest.Mock<AnyPromiseFn>;
+    getBusinessDetails: jest.Mock<AnyPromiseFn>;
+    updateBusinessDetails: jest.Mock<AnyPromiseFn>;
+    getLocations: jest.Mock<AnyPromiseFn>;
+    updateLocations: jest.Mock<AnyPromiseFn>;
+    getOrganisationHierarchy: jest.Mock<AnyPromiseFn>;
+    updateOrganisationHierarchy: jest.Mock<AnyPromiseFn>;
+    getPolicyManagement: jest.Mock<AnyPromiseFn>;
+    addPolicy: jest.Mock<AnyPromiseFn>;
+    updatePolicy: jest.Mock<AnyPromiseFn>;
+    deletePolicy: jest.Mock<AnyPromiseFn>;
+    getBranding: jest.Mock<AnyPromiseFn>;
+    updateBranding: jest.Mock<AnyPromiseFn>;
+    getDepartments: jest.Mock<AnyPromiseFn>;
+    updateDepartments: jest.Mock<AnyPromiseFn>;
+    getBilling: jest.Mock<AnyPromiseFn>;
+    updateBilling: jest.Mock<AnyPromiseFn>;
+    getInvoices: jest.Mock<AnyPromiseFn>;
+  };
+  let organizationService: {
+    getPublicBrandingByDomainPrefix: jest.Mock<AnyPromiseFn>;
+    updateDomainPrefix: jest.Mock<AnyPromiseFn>;
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    organisationService = {
+      getGeneralInfo: jest.fn(),
+      updateGeneralInfo: jest.fn(),
+      getBusinessDetails: jest.fn(),
+      updateBusinessDetails: jest.fn(),
+      getLocations: jest.fn(),
+      updateLocations: jest.fn(),
+      getOrganisationHierarchy: jest.fn(),
+      updateOrganisationHierarchy: jest.fn(),
+      getPolicyManagement: jest.fn(),
+      addPolicy: jest.fn(),
+      updatePolicy: jest.fn(),
+      deletePolicy: jest.fn(),
+      getBranding: jest.fn(),
+      updateBranding: jest.fn(),
+      getDepartments: jest.fn(),
+      updateDepartments: jest.fn(),
+      getBilling: jest.fn(),
+      updateBilling: jest.fn(),
+      getInvoices: jest.fn(),
+    };
+
+    organizationService = {
+      getPublicBrandingByDomainPrefix: jest.fn(),
+      updateDomainPrefix: jest.fn(),
+    };
+
+    const { Test } = await import('@nestjs/testing');
+    const module = await Test.createTestingModule({
+      controllers: [OrganisationController],
+      providers: [
+        {
+          provide: SettingsDomainOrganisationService,
+          useValue: organisationService,
+        },
+        {
+          provide: OrganizationService,
+          useValue: organizationService,
+        },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (context: any) => {
+          context.switchToHttp().getRequest().user = {
+            userId: 'usr123',
+            email: 'admin@example.com',
+            organizationId: ORG_ID,
+          };
+          return true;
+        },
+      })
+      .overrideGuard(RoleGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .compile();
+
+    app = module.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  describe('GET /setting/organization/general-info/retrieve', () => {
+    it('retrieves the organization general information', async () => {
+      const org = { _id: ORG_ID, name: 'FoundationHR' };
+      organisationService.getGeneralInfo.mockResolvedValue(org);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/general-info/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(org);
+      expect(organisationService.getGeneralInfo).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('PATCH /setting/organization/general-info/update', () => {
+    it('updates the organization general information with a valid payload', async () => {
+      const updated = {
+        _id: ORG_ID,
+        name: 'FoundationHR',
+        website: 'https://foundationhr.com',
+        primaryContactEmail: 'contact@foundationhr.com',
+      };
+      organisationService.updateGeneralInfo.mockResolvedValue(updated);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/general-info/update')
+        .send({
+          name: 'FoundationHR',
+          website: 'https://foundationhr.com',
+          primaryContactEmail: 'contact@foundationhr.com',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(organisationService.updateGeneralInfo).toHaveBeenCalledWith(
+        ORG_ID,
+        {
+          name: 'FoundationHR',
+          website: 'https://foundationhr.com',
+          primaryContactEmail: 'contact@foundationhr.com',
+        },
+      );
+    });
+
+    it('rejects an invalid primary contact email', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/general-info/update')
+        .send({ primaryContactEmail: 'not-an-email' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateGeneralInfo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/business-details/retrieve', () => {
+    it('retrieves the organization business details', async () => {
+      const businessDetails = {
+        businessType: 'private_limited',
+        industry: 'Software',
+      };
+      organisationService.getBusinessDetails.mockResolvedValue(businessDetails);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/business-details/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(businessDetails);
+      expect(organisationService.getBusinessDetails).toHaveBeenCalledWith(
+        ORG_ID,
+      );
+    });
+  });
+
+  describe('PATCH /setting/organization/business-details/update', () => {
+    it('updates the organization business details with a valid payload', async () => {
+      const updated = {
+        businessType: 'private_limited',
+        industry: 'Software',
+      };
+      organisationService.updateBusinessDetails.mockResolvedValue(updated);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/business-details/update')
+        .send({
+          businessType: 'private_limited',
+          industry: 'Software',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(organisationService.updateBusinessDetails).toHaveBeenCalledWith(
+        ORG_ID,
+        {
+          businessType: 'private_limited',
+          industry: 'Software',
+        },
+      );
+    });
+
+    it('rejects an invalid business type', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/business-details/update')
+        .send({ businessType: 'not-a-business-type' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBusinessDetails).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/locations/retrieve', () => {
+    it('retrieves locations without a search query', async () => {
+      const locations = [
+        {
+          name: 'Headquarters',
+          address: '123 Main Street, Lagos, Nigeria',
+          phoneNumber: '+234 123 456 7890',
+          email: 'info@company.com',
+        },
+      ];
+      organisationService.getLocations.mockResolvedValue(locations);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/locations/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(locations);
+      expect(organisationService.getLocations).toHaveBeenCalledWith(
+        ORG_ID,
+        undefined,
+      );
+    });
+
+    it('passes the search query parameter to the service', async () => {
+      organisationService.getLocations.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/locations/retrieve?search=warehouse',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getLocations).toHaveBeenCalledWith(
+        ORG_ID,
+        'warehouse',
+      );
+    });
+  });
+
+  describe('PATCH /setting/organization/locations/update', () => {
+    it('updates locations with a valid payload', async () => {
+      const incoming = [
+        {
+          name: 'Headquarters',
+          address: '123 Main Street, Lagos, Nigeria',
+          phoneNumber: '+234 123 456 7890',
+          email: 'info@company.com',
+        },
+      ];
+      organisationService.updateLocations.mockResolvedValue(incoming);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({ locations: incoming });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(incoming);
+      expect(organisationService.updateLocations).toHaveBeenCalledWith(ORG_ID, {
+        locations: incoming,
+      });
+    });
+
+    it('accepts an empty locations array to clear all locations', async () => {
+      organisationService.updateLocations.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({ locations: [] });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual([]);
+      expect(organisationService.updateLocations).toHaveBeenCalledWith(ORG_ID, {
+        locations: [],
+      });
+    });
+
+    it('rejects locations when the type is not an array', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({ locations: 'not-an-array' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateLocations).not.toHaveBeenCalled();
+    });
+
+    it('rejects a location item missing the required name field', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/locations/update')
+        .send({
+          locations: [
+            {
+              address: '123 Main Street, Lagos, Nigeria',
+              email: 'info@company.com',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateLocations).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/organization-hierarchy/retrieve', () => {
+    it('retrieves the hierarchy using only the organization id', async () => {
+      const hierarchy = [
+        {
+          _id: 'emp1',
+          firstName: 'Priscilla',
+          lastName: 'Jobi',
+          jobTitle: 'Art director',
+          supervisor: null,
+          children: [],
+        },
+      ];
+      organisationService.getOrganisationHierarchy.mockResolvedValue(hierarchy);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/organization-hierarchy/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(hierarchy);
+      expect(organisationService.getOrganisationHierarchy).toHaveBeenCalledWith(
+        ORG_ID,
+      );
+    });
+
+    it('ignores pagination and filter query params', async () => {
+      organisationService.getOrganisationHierarchy.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/organization-hierarchy/retrieve?search=job&department=Design&role=Art%20director&supervisorId=emp2&batch=2&limit=25',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getOrganisationHierarchy).toHaveBeenCalledWith(
+        ORG_ID,
+      );
+    });
+  });
+
+  describe('PATCH /setting/organization/organization-hierarchy/update', () => {
+    it('reassigns an employee supervisor with a valid payload', async () => {
+      const updated = {
+        _id: 'emp1',
+        firstName: 'Priscilla',
+        lastName: 'Jobi',
+        supervisor: 'emp2',
+      };
+      organisationService.updateOrganisationHierarchy.mockResolvedValue(
+        updated,
+      );
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/organization-hierarchy/update')
+        .send({ employeeId: 'emp1', supervisorId: 'emp2' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(
+        organisationService.updateOrganisationHierarchy,
+      ).toHaveBeenCalledWith(ORG_ID, {
+        employeeId: 'emp1',
+        supervisorId: 'emp2',
+      });
+    });
+
+    it('rejects a payload missing the employee id', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/organization-hierarchy/update')
+        .send({ supervisorId: 'emp2' });
+
+      expect(response.status).toBe(400);
+      expect(
+        organisationService.updateOrganisationHierarchy,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/branding/retrieve', () => {
+    it('retrieves the organization branding', async () => {
+      const branding = {
+        logoUrl: 'https://cdn.example.com/logo.png',
+        navigationBackgroundColor: '#FAFDFF',
+        buttonColor: '#1E88E5',
+        customDomains: ['@foundationhr.com'],
+        loginPageImages: ['https://cdn.example.com/login-hero.png'],
+      };
+      organisationService.getBranding.mockResolvedValue(branding);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/branding/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(branding);
+      expect(organisationService.getBranding).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('PATCH /setting/organization/branding/update', () => {
+    it('updates the organization branding with a valid payload', async () => {
+      const payload = {
+        navigationBackgroundColor: '#FAFDFF',
+        buttonColor: '#1E88E5',
+        customDomains: ['@foundationhr.com', '@foundationhr.co.uk'],
+        loginPageImages: ['https://cdn.example.com/login-1.png'],
+      };
+      const updated = { logoUrl: null, ...payload };
+      organisationService.updateBranding.mockResolvedValue(updated);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(organisationService.updateBranding).toHaveBeenCalledWith(
+        ORG_ID,
+        payload,
+      );
+    });
+
+    it('clears the logo with an explicit null logoUrl', async () => {
+      organisationService.updateBranding.mockResolvedValue({ logoUrl: null });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ logoUrl: null });
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateBranding).toHaveBeenCalledWith(ORG_ID, {
+        logoUrl: null,
+      });
+    });
+
+    it('rejects an invalid hex color', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ buttonColor: 'not-a-color' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBranding).not.toHaveBeenCalled();
+    });
+
+    it('rejects custom domains when the type is not an array', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ customDomains: 'not-an-array' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBranding).not.toHaveBeenCalled();
+    });
+
+    it('rejects login page images with non-string entries', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/branding/update')
+        .send({ loginPageImages: [123] });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBranding).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/branding/public', () => {
+    it('is reachable without an access token', () => {
+      const metadata = Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        OrganisationController.prototype.retrievePublicBranding,
+      );
+
+      expect(metadata).toBe(true);
+    });
+
+    it('returns the branding of the organization that owns the prefix', async () => {
+      const branding = {
+        logoUrl: 'https://cdn.example.com/logo.png',
+        navigationBackgroundColor: '#FAFDFF',
+        buttonColor: '#1E88E5',
+        loginPageImages: ['https://cdn.example.com/login-hero.png'],
+        selectedLoginImg: 'https://cdn.example.com/login-hero.png',
+      };
+      organizationService.getPublicBrandingByDomainPrefix.mockResolvedValue(
+        branding,
+      );
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/branding/public?domainPrefix=mavins',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(branding);
+      expect(
+        organizationService.getPublicBrandingByDomainPrefix,
+      ).toHaveBeenCalledWith('mavins');
+    });
+
+    it('rejects a request without the domain prefix', async () => {
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/branding/public',
+      );
+
+      expect(response.status).toBe(400);
+      expect(
+        organizationService.getPublicBrandingByDomainPrefix,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /setting/organization/domain-prefix/update', () => {
+    it('updates the domain prefix of the authenticated organization', async () => {
+      organizationService.updateDomainPrefix.mockResolvedValue({
+        domainPrefix: 'mavins',
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({ domainPrefix: 'mavins' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual({ domainPrefix: 'mavins' });
+      expect(organizationService.updateDomainPrefix).toHaveBeenCalledWith(
+        ORG_ID,
+        { domainPrefix: 'mavins' },
+      );
+    });
+
+    it('lowercases the submitted domain prefix', async () => {
+      organizationService.updateDomainPrefix.mockResolvedValue({
+        domainPrefix: 'mavins',
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({ domainPrefix: 'Mavins' });
+
+      expect(response.status).toBe(200);
+      expect(organizationService.updateDomainPrefix).toHaveBeenCalledWith(
+        ORG_ID,
+        { domainPrefix: 'mavins' },
+      );
+    });
+
+    it('rejects an invalid domain prefix', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({ domainPrefix: '-mavins-' });
+
+      expect(response.status).toBe(400);
+      expect(organizationService.updateDomainPrefix).not.toHaveBeenCalled();
+    });
+
+    it('rejects a payload missing the domain prefix', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/domain-prefix/update')
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(organizationService.updateDomainPrefix).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/departments/retrieve', () => {
+    it('retrieves departments without a search query', async () => {
+      const departments = [
+        {
+          _id: '64f1b2c3d4e5f678901234c1',
+          code: 'hr',
+          name: 'Human Resources',
+          headOfDepartmentId: null,
+          headOfDepartmentName: null,
+          parentDepartmentId: null,
+          parentDepartmentName: null,
+        },
+      ];
+      organisationService.getDepartments.mockResolvedValue(departments);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/departments/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(departments);
+      expect(organisationService.getDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        undefined,
+      );
+    });
+
+    it('passes the search query parameter to the service', async () => {
+      organisationService.getDepartments.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/departments/retrieve?search=logistics',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        'logistics',
+      );
+    });
+  });
+
+  describe('PATCH /setting/organization/departments/update', () => {
+    it('updates a single department matched by code with a valid payload', async () => {
+      const code = 'IQGLWvbEIi';
+      const payload = {
+        name: 'Operations',
+        headOfDepartmentId: null,
+        parentCode: null,
+      };
+      const updated = { code, ...payload };
+      organisationService.updateDepartments.mockResolvedValue(updated);
+
+      const response = await request(app.getHttpServer())
+        .patch(`/setting/organization/departments/update?code=${code}`)
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updated);
+      expect(organisationService.updateDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        code,
+        payload,
+      );
+    });
+
+    it('accepts a partial payload', async () => {
+      const code = 'IQGLWvbEIi';
+      organisationService.updateDepartments.mockResolvedValue({ code });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/setting/organization/departments/update?code=${code}`)
+        .send({ name: 'Finance' });
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        code,
+        { name: 'Finance' },
+      );
+    });
+
+    it('rejects a request without the code query param', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update')
+        .send({ name: 'Finance' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateDepartments).not.toHaveBeenCalled();
+    });
+
+    it('rejects an array payload instead of a single object', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update?code=IQGLWvbEIi')
+        .send([{ name: 'Operations' }]);
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateDepartments).not.toHaveBeenCalled();
+    });
+
+    it('rejects a payload missing the required name field when name is present but empty', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/departments/update?code=IQGLWvbEIi')
+        .send({ name: '' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateDepartments).not.toHaveBeenCalled();
+    });
+
+    it('accepts a department with a non-object-id head of department string', async () => {
+      const code = 'IQGLWvbEIi';
+      const payload = {
+        name: 'Design',
+        headOfDepartmentId: 'some-custom-string',
+      };
+      organisationService.updateDepartments.mockResolvedValue({
+        code,
+        ...payload,
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/setting/organization/departments/update?code=${code}`)
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateDepartments).toHaveBeenCalledWith(
+        ORG_ID,
+        code,
+        payload,
+      );
+    });
+  });
+
+  describe('policy-management endpoints', () => {
+    it('retrieves the policy documents with the search filter', async () => {
+      const documents = [{ code: 'pol-1', name: 'HR Handbook' }];
+      organisationService.getPolicyManagement.mockResolvedValue(documents);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/policy-management/retrieve?search=handbook',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(documents);
+      expect(organisationService.getPolicyManagement).toHaveBeenCalledWith(
+        ORG_ID,
+        'handbook',
+      );
+    });
+
+    it('registers an uploaded policy document', async () => {
+      const created = {
+        code: 'pol-1',
+        name: 'HR Handbook',
+      };
+      organisationService.addPolicy.mockResolvedValue(created);
+
+      const payload = {
+        name: 'HR Handbook',
+        url: 'https://res.cloudinary.com/demo/raw/upload/v1700000000/foundationhr/documents/hr-handbook.pdf',
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/setting/organization/policy-management/add')
+        .send(payload);
+
+      expect(response.status).toBe(201);
+      expect(response.body.data).toEqual(created);
+      expect(organisationService.addPolicy).toHaveBeenCalledWith(
+        ORG_ID,
+        payload,
+        { userId: 'usr123', email: 'admin@example.com' },
+      );
+    });
+
+    it('rejects an add payload with an invalid url', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/setting/organization/policy-management/add')
+        .send({
+          name: 'HR Handbook',
+          url: 'not-a-url',
+        });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.addPolicy).not.toHaveBeenCalled();
+    });
+
+    it('updates a policy document by code', async () => {
+      const code = 'IQGLWvbEIi';
+      const payload = { name: 'Employee Handbook' };
+      organisationService.updatePolicy.mockResolvedValue({ code, ...payload });
+
+      const response = await request(app.getHttpServer())
+        .patch(`/setting/organization/policy-management/update?code=${code}`)
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updatePolicy).toHaveBeenCalledWith(
+        ORG_ID,
+        code,
+        payload,
+      );
+    });
+
+    it('deletes a policy document by code', async () => {
+      const code = 'IQGLWvbEIi';
+      organisationService.deletePolicy.mockResolvedValue(
+        'Policy document deleted',
+      );
+
+      const response = await request(app.getHttpServer()).delete(
+        `/setting/organization/policy-management/delete?code=${code}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.deletePolicy).toHaveBeenCalledWith(
+        ORG_ID,
+        code,
+      );
+    });
+  });
+
+  describe('GET /setting/organization/billing/retrieve', () => {
+    it('retrieves the organization billing settings', async () => {
+      const billing = {
+        plan: {
+          name: 'Basic plan',
+          interval: 'monthly',
+          description: 'Our most popular plan for small teams.',
+          priceAmount: 10,
+          priceCurrency: 'USD',
+          seatsUsed: 14,
+          seatsLimit: 20,
+        },
+        paymentMethod: {
+          brand: 'visa',
+          last4: '1234',
+          expiry: '06/2024',
+        },
+        billingEmail: 'billing@foundation.com',
+      };
+      organisationService.getBilling.mockResolvedValue(billing);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/billing/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(billing);
+      expect(organisationService.getBilling).toHaveBeenCalledWith(ORG_ID);
+    });
+  });
+
+  describe('PATCH /setting/organization/billing/update', () => {
+    it('updates the billing settings with a valid payload', async () => {
+      const payload = {
+        billingEmail: 'finance@foundation.com',
+        paymentMethod: { brand: 'visa', last4: '4242', expiry: '12/2026' },
+      };
+      organisationService.updateBilling.mockResolvedValue(payload);
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(payload);
+      expect(organisationService.updateBilling).toHaveBeenCalledWith(
+        ORG_ID,
+        payload,
+      );
+    });
+
+    it('clears the billing email with an explicit null', async () => {
+      organisationService.updateBilling.mockResolvedValue({
+        billingEmail: null,
+      });
+
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ billingEmail: null });
+
+      expect(response.status).toBe(200);
+      expect(organisationService.updateBilling).toHaveBeenCalledWith(ORG_ID, {
+        billingEmail: null,
+      });
+    });
+
+    it('rejects an invalid billing email', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ billingEmail: 'not-an-email' });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBilling).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid payment method last4', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ paymentMethod: { last4: '12' } });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBilling).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid payment method expiry format', async () => {
+      const response = await request(app.getHttpServer())
+        .patch('/setting/organization/billing/update')
+        .send({ paymentMethod: { brand: 'visa', expiry: '06-2024' } });
+
+      expect(response.status).toBe(400);
+      expect(organisationService.updateBilling).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /setting/organization/billing/invoices/retrieve', () => {
+    it('retrieves invoices without a search query', async () => {
+      const invoices = [
+        {
+          _id: '64f1b2c3d4e5f678901234e1',
+          organizationId: ORG_ID,
+          invoiceNumber: '007',
+          billingDate: 'Dec 1, 2023',
+          status: 'paid',
+          amount: 10,
+          currency: 'USD',
+          planName: 'Basic plan',
+        },
+      ];
+      organisationService.getInvoices.mockResolvedValue(invoices);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/billing/invoices/retrieve',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(true);
+      expect(response.body.data).toEqual(invoices);
+      expect(organisationService.getInvoices).toHaveBeenCalledWith(
+        ORG_ID,
+        undefined,
+      );
+    });
+
+    it('passes the search query parameter to the service', async () => {
+      organisationService.getInvoices.mockResolvedValue([]);
+
+      const response = await request(app.getHttpServer()).get(
+        '/setting/organization/billing/invoices/retrieve?search=007',
+      );
+
+      expect(response.status).toBe(200);
+      expect(organisationService.getInvoices).toHaveBeenCalledWith(
+        ORG_ID,
+        '007',
+      );
+    });
+  });
+});

@@ -1,0 +1,48 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { OnboardingController } from './onboarding.controller';
+import { OnboardingService } from './onboarding.service';
+import { Employee, EmployeeSchema } from '../employee/entity/employee.schema';
+import { EmployeeModule } from '../employee/employee.module';
+import { SettingModule } from '../../generic/setting/setting.module';
+import { EmailModule } from '../../../email/email.module';
+import { NotificationModule } from '../../generic/notification/notification.module';
+import { UserRoleRepository } from '../../generic/setting/access-control/repository/user-role.repository';
+import {
+  UserRole,
+  UserRoleSchema,
+} from '../../generic/setting/access-control/entity/user-role.schema';
+import { OrganizationRepository } from '../organization/repository/organization.repository';
+import {
+  Organization,
+  OrganizationSchema,
+} from '../organization/entity/organization.schema';
+import { JobTitleRepository } from '../organization/repository/job-title.repository';
+import {
+  JobTitle,
+  JobTitleSchema,
+} from '../organization/entity/job-title.schema';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: Employee.name, schema: EmployeeSchema },
+      { name: UserRole.name, schema: UserRoleSchema },
+      { name: Organization.name, schema: OrganizationSchema },
+      { name: JobTitle.name, schema: JobTitleSchema },
+    ]),
+    EmployeeModule,
+    SettingModule,
+    EmailModule,
+    NotificationModule,
+  ],
+  controllers: [OnboardingController],
+  providers: [
+    OnboardingService,
+    UserRoleRepository,
+    OrganizationRepository,
+    JobTitleRepository,
+  ],
+  exports: [OnboardingService],
+})
+export class OnboardingModule {}
