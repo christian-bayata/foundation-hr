@@ -259,7 +259,7 @@ export class OrganisationController {
   }
 
   @Get('branding/retrieve')
-  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.EMPLOYEE)
   async retrieveBranding(@CurrentUser() user: ICurrentUser) {
     const data = await this.organisationService.getBranding(
       user.organizationId!,
@@ -306,7 +306,7 @@ export class OrganisationController {
   }
 
   @Get('departments/retrieve')
-  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.EMPLOYEE)
   async retrieveDepartments(
     @CurrentUser() user: ICurrentUser,
     @Query('search') search?: string,
@@ -384,7 +384,7 @@ export class OrganisationController {
   }
 
   @Get('job-titles/retrieve')
-  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN)
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.EMPLOYEE)
   async retrieveJobTitles(
     @CurrentUser() user: ICurrentUser,
     @Query('search') search?: string,
