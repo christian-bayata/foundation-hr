@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -111,6 +112,35 @@ export class EmployeeController {
     );
 
     return AppResponse.success('Employee draft saved successfully', 200, data);
+  }
+
+  @Patch('/update')
+  @Roles(
+    SystemRole.COMPANY_OWNER,
+    SystemRole.HR_ADMIN,
+    SystemRole.HR_OPS,
+    SystemRole.DEPT_MANAGER,
+    SystemRole.EMPLOYEE,
+  )
+  @HttpCode(HttpStatus.OK)
+  async editEmployeeDetails(
+    @CurrentUser() user: ICurrentUser,
+    @Query('employeeId')
+    employeeId: string,
+    // @Body(new JoiValidationPipe(updateEmployeeSchema))
+    updateEmployeeDto: CreateEmployeeDto,
+  ) {
+    const data = await this.employeeService.updateEmployeeDetails(
+      employeeId,
+      updateEmployeeDto,
+      user,
+    );
+
+    return AppResponse.success(
+      'Employee details updated successfully',
+      200,
+      data,
+    );
   }
 
   @Post('/invite')

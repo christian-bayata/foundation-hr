@@ -22,6 +22,7 @@ import { EventModule } from './event/event.module';
 import { HttpExceptionFilter } from './common';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RoleGuard } from './common/guards/role.guard';
+import { PerformanceMgtModule } from './bin/performance_mgt/performance-mgt.module';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -39,6 +40,7 @@ import { RoleGuard } from './common/guards/role.guard';
     NotificationModule,
     OffboardingModule,
     OnboardingModule,
+    PerformanceMgtModule,
     RequestModule,
     SettingModule,
     FileUploadModule,

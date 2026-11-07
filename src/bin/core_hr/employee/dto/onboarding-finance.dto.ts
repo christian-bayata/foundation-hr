@@ -25,6 +25,10 @@ export class BankDetailsDto {
   @IsOptional()
   @IsString()
   bvn?: string;
+
+  @IsOptional()
+  @IsString()
+  swiftCode?: string;
 }
 
 export class PensionDetailsDto {

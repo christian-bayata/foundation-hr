@@ -30,6 +30,7 @@ import {
 } from './interface/employee.interface';
 import { EmployeeUtility } from './repository/employee.utility';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
+import { SystemRole } from '../../generic/auth/enum/role.enum';
 import { EmployeeAcceptInviteDto } from './dto/invite-employees.dto';
 import { EmployeeSetPasswordDto } from './dto/set-password.dto';
 import { UserRepository } from '../../generic/auth/repository/user.repository';
@@ -221,6 +222,64 @@ export class EmployeeService {
       return updated;
     } catch (error: any) {
       error.location = `EmployeeServices.${this.saveDraft.name} method`;
+      AppResponse.error(error);
+      throw error;
+    }
+  }
+
+  /**
+   * @Responsibility: Update an existing employee with any combination of basic
+   * info / contract details (all optional). Admin roles may edit any employee;
+   * an EMPLOYEE may only edit their own record (matched via user.employeeId).
+   *
+   * @param employeeId - Mongo ID of the employee
+   * @param dto - Optional fields to update
+   * @param user - Requesting user (used for self-service authorization)
+   * @returns The updated employee
+   *
+   * @throws {404} Employee not found
+   * @throws {403} Employee attempted to edit another user's record
+   */
+  async updateEmployeeDetails(
+    employeeId: string,
+    dto: CreateEmployeeDto,
+    user: ICurrentUser,
+  ): Promise<unknown> {
+    try {
+      const employee =
+        (await this.employeeRepository.findById(employeeId)) ??
+        AppResponse.error({
+          message: `Employee not found`,
+          status: HttpStatus.NOT_FOUND,
+        });
+
+      if (
+        user.employeeId &&
+        user.employeeId !== employeeId &&
+        !([SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.HR_OPS, SystemRole.DEPT_MANAGER] as string[]).includes(
+          user.userType ?? '',
+        )
+      ) {
+        AppResponse.error({
+          message: `You can only edit your own employee details.`,
+          status: HttpStatus.FORBIDDEN,
+        });
+      }
+
+      const update: Record<string, any> = dto
+        ? this.buildEmployeePayload(dto)
+        : {};
+
+      const updated = await this.employeeRepository.updateById(
+        employeeId,
+        update,
+      );
+
+      this.logger.log(`Employee details updated: ${employeeId}`);
+
+      return updated;
+    } catch (error: any) {
+      error.location = `EmployeeServices.${this.updateEmployeeDetails.name} method`;
       AppResponse.error(error);
       throw error;
     }
@@ -779,8 +838,8 @@ export class EmployeeService {
     try {
       const employee = await this.resolveOnboardingEmployee(email);
 
-      const updated = await this.employeeRepository.updateById(
-        employee._id.toString(),
+      await this.employeeRepository.updateEmployee(
+        { _id: employee._id.toString() },
         {
           ...onboardingFinanceInformationDto,
           ...this.buildOnboardingUpdate(
