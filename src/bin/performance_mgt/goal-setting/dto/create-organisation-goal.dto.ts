@@ -10,10 +10,6 @@ import {
 import { GoalFrequency, GoalPerspective, KpiType } from '../enums/goal.enums';
 
 export class CreateOrganisationGoalDto {
-  @IsNotEmpty({ message: 'Cycle id is required.' })
-  @IsString({ message: 'Cycle id must be a string.' })
-  cycleId: string;
-
   @IsNotEmpty({ message: 'Perspective is required.' })
   @IsEnum(GoalPerspective, { message: 'Perspective is not valid.' })
   perspective: GoalPerspective;

@@ -441,6 +441,7 @@ export class OnboardingService {
         employee: {
           _id: String(employee!._id),
           employeeUniqueId: String(employee.employeeUniqueId),
+          employeeId: String(employee.employeeId),
           employeeName:
             `${employee!.firstName ?? ''} ${employee!.lastName ?? ''}`.trim() ||
             employee!.email,

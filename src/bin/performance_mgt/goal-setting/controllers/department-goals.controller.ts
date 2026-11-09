@@ -23,13 +23,13 @@ import { CreateDepartmentGoalDto } from '../dto/create-department-goal.dto';
 import { UpdateDepartmentGoalDto } from '../dto/update-department-goal.dto';
 import { ListGoalsQueryDto } from '../dto/list-goals-query.dto';
 
-@Controller('performance-management/goal-settings/departments')
+@Controller('performance-management/goal-settings/department-goals')
 @UseGuards(JwtAuthGuard, RoleGuard)
 @RequiresSystemSettings()
 export class DepartmentGoalsController {
   constructor(private readonly goalSettingsService: GoalSettingsService) {}
 
-  @Get('all')
+  @Get('departments/all')
   @Roles(
     SystemRole.COMPANY_OWNER,
     SystemRole.HR_ADMIN,
@@ -46,7 +46,7 @@ export class DepartmentGoalsController {
     );
   }
 
-  @Get('/goals/all')
+  @Get('all')
   @Roles(
     SystemRole.COMPANY_OWNER,
     SystemRole.HR_ADMIN,
@@ -65,7 +65,7 @@ export class DepartmentGoalsController {
     );
   }
 
-  @Post('/goals/add')
+  @Post('add')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.DEPT_MANAGER)
   @HttpCode(HttpStatus.CREATED)
   async createDepartmentGoal(
@@ -81,7 +81,7 @@ export class DepartmentGoalsController {
     );
   }
 
-  @Get('/goals/retrieve')
+  @Get('retrieve')
   @Roles(
     SystemRole.COMPANY_OWNER,
     SystemRole.HR_ADMIN,
@@ -100,7 +100,7 @@ export class DepartmentGoalsController {
     );
   }
 
-  @Patch('/goals/update')
+  @Patch('update')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.DEPT_MANAGER)
   @HttpCode(HttpStatus.OK)
   async updateDepartmentGoal(
@@ -118,7 +118,7 @@ export class DepartmentGoalsController {
     );
   }
 
-  @Delete('/goals/remove')
+  @Delete('remove')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.DEPT_MANAGER)
   @HttpCode(HttpStatus.OK)
   async removeDepartmentGoal(

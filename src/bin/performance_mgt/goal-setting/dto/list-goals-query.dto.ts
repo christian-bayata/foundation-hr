@@ -12,10 +12,6 @@ import {
 import { GoalFrequency, GoalPerspective, GoalStatus, KpiType } from '../enums/goal.enums';
 
 export class ListGoalsQueryDto {
-  @IsNotEmpty({ message: 'Cycle id is required.' })
-  @IsString({ message: 'Cycle id must be a string.' })
-  cycleId: string;
-
   @IsOptional()
   @IsString({ message: 'Search must be a string.' })
   @MaxLength(120, { message: 'Search must be at most 120 characters.' })

@@ -23,13 +23,13 @@ import { CreateEmployeeGoalDto } from '../dto/create-employee-goal.dto';
 import { UpdateEmployeeGoalDto } from '../dto/update-employee-goal.dto';
 import { ListGoalsQueryDto } from '../dto/list-goals-query.dto';
 
-@Controller('performance-management/goal-settings/employees')
+@Controller('performance-management/goal-settings/employee-goals')
 @UseGuards(JwtAuthGuard, RoleGuard)
 @RequiresSystemSettings()
 export class EmployeeGoalsController {
   constructor(private readonly goalSettingsService: GoalSettingsService) {}
 
-  @Get()
+  @Get('employees/all')
   @Roles(
     SystemRole.COMPANY_OWNER,
     SystemRole.HR_ADMIN,
@@ -49,7 +49,7 @@ export class EmployeeGoalsController {
     );
   }
 
-  @Get(':employeeId/goals')
+  @Get('all')
   @Roles(
     SystemRole.COMPANY_OWNER,
     SystemRole.HR_ADMIN,
@@ -59,7 +59,7 @@ export class EmployeeGoalsController {
   )
   async listEmployeeGoals(
     @CurrentUser() user: ICurrentUser,
-    @Param('employeeId') employeeId: string,
+    @Query('employeeId') employeeId: string,
     @Query() query: ListGoalsQueryDto,
   ) {
     return this.goalSettingsService.listEmployeeGoals(
@@ -69,12 +69,12 @@ export class EmployeeGoalsController {
     );
   }
 
-  @Post(':employeeId/goals')
+  @Post('add')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.DEPT_MANAGER)
   @HttpCode(HttpStatus.CREATED)
   async createEmployeeGoal(
     @CurrentUser() user: ICurrentUser,
-    @Param('employeeId') employeeId: string,
+    @Query('employeeId') employeeId: string,
     @Body() dto: CreateEmployeeGoalDto,
   ) {
     return this.goalSettingsService.createEmployeeGoal(
@@ -85,7 +85,7 @@ export class EmployeeGoalsController {
     );
   }
 
-  @Get(':employeeId/goals/:goalId')
+  @Get('retrieve')
   @Roles(
     SystemRole.COMPANY_OWNER,
     SystemRole.HR_ADMIN,
@@ -95,8 +95,8 @@ export class EmployeeGoalsController {
   )
   async getEmployeeGoal(
     @CurrentUser() user: ICurrentUser,
-    @Param('employeeId') employeeId: string,
-    @Param('goalId') goalId: string,
+    @Query('employeeId') employeeId: string,
+    @Query('goalId') goalId: string,
   ) {
     return this.goalSettingsService.getEmployeeGoal(
       user.organizationId!,
@@ -105,7 +105,7 @@ export class EmployeeGoalsController {
     );
   }
 
-  @Patch(':employeeId/goals/:goalId')
+  @Patch('update')
   @Roles(
     SystemRole.COMPANY_OWNER,
     SystemRole.HR_ADMIN,
@@ -115,8 +115,8 @@ export class EmployeeGoalsController {
   @HttpCode(HttpStatus.OK)
   async updateEmployeeGoal(
     @CurrentUser() user: ICurrentUser,
-    @Param('employeeId') employeeId: string,
-    @Param('goalId') goalId: string,
+    @Query('employeeId') employeeId: string,
+    @Query('goalId') goalId: string,
     @Body() dto: UpdateEmployeeGoalDto,
   ) {
     return this.goalSettingsService.updateEmployeeGoal(
@@ -128,13 +128,13 @@ export class EmployeeGoalsController {
     );
   }
 
-  @Delete(':employeeId/goals/:goalId')
+  @Delete('delete')
   @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.DEPT_MANAGER)
   @HttpCode(HttpStatus.OK)
   async removeEmployeeGoal(
     @CurrentUser() user: ICurrentUser,
-    @Param('employeeId') employeeId: string,
-    @Param('goalId') goalId: string,
+    @Query('employeeId') employeeId: string,
+    @Query('goalId') goalId: string,
   ) {
     return this.goalSettingsService.removeEmployeeGoal(
       user.organizationId!,

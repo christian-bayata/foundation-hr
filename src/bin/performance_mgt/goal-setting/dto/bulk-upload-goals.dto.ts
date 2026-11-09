@@ -7,10 +7,6 @@ import {
 import { GoalLevel } from '../enums/goal.enums';
 
 export class BulkUploadGoalsDto {
-  @IsNotEmpty({ message: 'Cycle id is required.' })
-  @IsString({ message: 'Cycle id must be a string.' })
-  cycleId: string;
-
   @IsNotEmpty({ message: 'Level is required.' })
   @IsEnum(GoalLevel, { message: 'Level is not valid.' })
   level: GoalLevel;

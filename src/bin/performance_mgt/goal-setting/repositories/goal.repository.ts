@@ -26,16 +26,6 @@ export class GoalRepository {
     }
   }
 
-  async findDistinctCycles(organizationId: string): Promise<string[]> {
-    try {
-      return await this.goalModel
-        .distinct('cycleId', { organizationId })
-        .exec();
-    } catch (error) {
-      throw error;
-    }
-  }
-
   async findOne(where: Record<string, unknown>): Promise<GoalDocument | null> {
     try {
       return await this.goalModel.findOne(where).exec();
@@ -108,7 +98,6 @@ export class GoalRepository {
 
       const filter: Record<string, unknown> = {
         organizationId,
-        cycleId: dto.cycleId,
         ...(level && { level }),
         ...(departmentId && { departmentId }),
         ...(employeeId && { employeeId }),

@@ -17,9 +17,6 @@ export class Goal {
   @Prop({ type: String, required: true, index: true })
   organizationId: string;
 
-  @Prop({ type: String, required: true, index: true })
-  cycleId: string;
-
   @Prop({ type: String, default: null, index: true })
   level: GoalLevel | null;
 
@@ -102,8 +99,8 @@ export class Goal {
 
 export const GoalSchema = SchemaFactory.createForClass(Goal);
 GoalSchema.index(
-  { organizationId: 1, cycleId: 1, level: 1 },
-  { name: 'goal_org_cycle_level_idx' },
+  { organizationId: 1, level: 1 },
+  { name: 'goal_org_level_idx' },
 );
 GoalSchema.index(
   { organizationId: 1, level: 1, departmentId: 1 },

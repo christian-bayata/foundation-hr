@@ -87,19 +87,4 @@ export class GoalSettingsController {
       goalId,
     );
   }
-
-  @Get('cycles')
-  @Roles(
-    SystemRole.COMPANY_OWNER,
-    SystemRole.HR_ADMIN,
-    SystemRole.HR_OPS,
-    SystemRole.DEPT_MANAGER,
-    SystemRole.EMPLOYEE,
-  )
-  async getCycles(@CurrentUser() user: ICurrentUser) {
-    const cycles = await this.goalSettingsService.listCycles(
-      user.organizationId!,
-    );
-    return AppResponse.success('Cycles retrieved', 200, cycles);
-  }
 }

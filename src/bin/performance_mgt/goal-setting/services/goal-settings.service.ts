@@ -63,15 +63,6 @@ export class GoalSettingsService {
 
   /* ============ Organisation Goals ============ */
 
-  async listCycles(organizationId: string) {
-    try {
-      return await this.goalRepository.findDistinctCycles(organizationId);
-    } catch (error) {
-      this.logger.error('GoalSettingsService:listCycles failed', error);
-      throw error;
-    }
-  }
-
   async listOrganisationGoals(organizationId: string, dto: ListGoalsQueryDto) {
     try {
       const result = await this.goalRepository.paginatedList(
@@ -81,12 +72,7 @@ export class GoalSettingsService {
       );
       return AppResponse.success('Organisation goals retrieved', 200, {
         items: result.items,
-        meta: {
-          total: result.total,
-          batch: dto.batch ?? 1,
-          limit: dto.limit ?? 10,
-          totalPages: Math.ceil(result.total / (dto.limit ?? 10)),
-        },
+        count: result.total,
       });
     } catch (error) {
       this.logger.error(
@@ -105,7 +91,6 @@ export class GoalSettingsService {
     try {
       const goal = await this.goalRepository.create({
         organizationId,
-        cycleId: dto.cycleId,
         level: GoalLevel.ORGANISATION,
         departmentId: null,
         employeeId: null,
@@ -247,7 +232,7 @@ export class GoalSettingsService {
       const summaries: DepartmentSummary[] = [];
       for (const dept of departments) {
         const goals = await this.goalRepository.paginatedList(
-          { cycleId: '', limit: 1, batch: 1 } as ListGoalsQueryDto,
+          { limit: 1, batch: 1 } as ListGoalsQueryDto,
           organizationId,
           GoalLevel.DEPARTMENT,
           dept._id?.toString(),
@@ -286,12 +271,7 @@ export class GoalSettingsService {
       );
       return AppResponse.success('Department goals retrieved', 200, {
         items: result.items,
-        meta: {
-          total: result.total,
-          batch: dto.batch ?? 1,
-          limit: dto.limit ?? 10,
-          totalPages: Math.ceil(result.total / (dto.limit ?? 10)),
-        },
+        count: result.total,
       });
     } catch (error) {
       this.logger.error(
@@ -311,7 +291,6 @@ export class GoalSettingsService {
     try {
       const goal = await this.goalRepository.create({
         organizationId,
-        cycleId: dto.cycleId,
         level: GoalLevel.DEPARTMENT,
         departmentId,
         employeeId: null,
@@ -480,7 +459,7 @@ export class GoalSettingsService {
         }
 
         const goals = await this.goalRepository.paginatedList(
-          { cycleId: '', limit: 1, batch: 1 } as ListGoalsQueryDto,
+          { limit: 1, batch: 1 } as ListGoalsQueryDto,
           organizationId,
           GoalLevel.EMPLOYEE,
           emp.departmentCode ?? undefined,
@@ -522,12 +501,7 @@ export class GoalSettingsService {
       );
       return AppResponse.success('Employee goals retrieved', 200, {
         items: result.items,
-        meta: {
-          total: result.total,
-          batch: dto.batch ?? 1,
-          limit: dto.limit ?? 10,
-          totalPages: Math.ceil(result.total / (dto.limit ?? 10)),
-        },
+        count: result.total,
       });
     } catch (error) {
       this.logger.error('GoalSettingsService:listEmployeeGoals failed', error);
@@ -544,7 +518,6 @@ export class GoalSettingsService {
     try {
       const goal = await this.goalRepository.create({
         organizationId,
-        cycleId: dto.cycleId,
         level: GoalLevel.EMPLOYEE,
         departmentId: dto.departmentId,
         employeeId,
@@ -690,7 +663,6 @@ export class GoalSettingsService {
             Object.values(GoalLevel).includes(row.level as GoalLevel)
               ? (row.level as GoalLevel)
               : dto.level;
-          const cycleId = row.cycle_id ?? dto.cycleId;
 
           let resolvedDepartmentId: string | null | undefined =
             dto.departmentId;
@@ -712,7 +684,6 @@ export class GoalSettingsService {
 
           const goalData: Record<string, unknown> = {
             organizationId,
-            cycleId,
             level,
             departmentId: resolvedDepartmentId ?? null,
             employeeId: resolvedEmployeeId ?? null,
