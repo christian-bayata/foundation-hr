@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { GoalProgress, GoalProgressDocument } from '../entity/goal-progress.schema';
+import { GoalProgress, GoalProgressDocument } from '../schemas/goal-progress.schema';
 
 @Injectable()
 export class GoalProgressRepository {

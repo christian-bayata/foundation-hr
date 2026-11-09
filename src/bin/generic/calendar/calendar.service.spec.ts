@@ -77,6 +77,10 @@ describe('CalendarService', () => {
   let userRepository: {
     findUser: jest.Mock<AnyPromiseFn>;
   };
+  let employeeRepository: {
+    findById: jest.Mock<AnyPromiseFn>;
+    findByOrganization: jest.Mock<AnyPromiseFn>;
+  };
   let service: CalendarService;
 
   beforeEach(async () => {
@@ -91,7 +95,7 @@ describe('CalendarService', () => {
       findAll: jest.fn(),
     };
     employeeRepository = {
-      findById: jest.fn().mockResolvedValue(buildEmployee()),
+      findById: jest.fn<AnyPromiseFn>().mockResolvedValue(buildEmployee()),
       findByOrganization: jest.fn(),
     };
     userRepository = {

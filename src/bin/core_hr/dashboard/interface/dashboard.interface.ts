@@ -98,6 +98,8 @@ export interface DashboardActivityEmployee {
   employeeUniqueId: string | null;
   employeeName: string;
   avatarUrl: string | null;
+  department: string | null;
+  jobTitle: string | null;
 }
 
 export interface DashboardActivity {

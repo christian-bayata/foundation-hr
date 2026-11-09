@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { AppException } from '../../../common/response/app-exception';
 import { OffboardingService } from './offboarding.service';
-import { ExitRequestStatus } from './enum/offboarding.enum';
+import { ExitChecklistKind, ExitRequestStatus } from './enum/offboarding.enum';
 import { EmployeeRequestStatus } from '../request/enum/request.enum';
 import { EmployeeRequestStepStatus } from '../request/enum/request.enum';
 import { RequestType } from '../../generic/setting/request-management/enum/request-management.enum';
@@ -116,31 +116,31 @@ describe('OffboardingService', () => {
   let settingsService: Record<string, jest.Mock<AnyPromiseFn>>;
 
   const mockRepository = () => ({
-    findById: jest.fn(),
-    create: jest.fn(),
-    findByRequestId: jest.fn(),
-    findByRequestIds: jest.fn(),
-    findCompletedRequestIds: jest.fn(),
-    upsertByRequestId: jest.fn(),
-    paginatedQuery: jest.fn(),
-    findAll: jest.fn(),
-    updateById: jest.fn(),
-    deleteByRequestId: jest.fn(),
+    findById: jest.fn<AnyPromiseFn>(),
+    create: jest.fn<AnyPromiseFn>(),
+    findByRequestId: jest.fn<AnyPromiseFn>(),
+    findByRequestIds: jest.fn<AnyPromiseFn>(),
+    findCompletedRequestIds: jest.fn<AnyPromiseFn>(),
+    upsertByRequestId: jest.fn<AnyPromiseFn>(),
+    paginatedQuery: jest.fn<AnyPromiseFn>(),
+    findAll: jest.fn<AnyPromiseFn>(),
+    updateById: jest.fn<AnyPromiseFn>(),
+    deleteByRequestId: jest.fn<AnyPromiseFn>(),
   });
 
   const mockService = () => ({
-    getRequest: jest.fn(),
-    addRequest: jest.fn(),
-    updateRequest: jest.fn(),
-    updateRequestStep: jest.fn(),
-    cancelRequest: jest.fn(),
-    getRequestForm: jest.fn(),
+    getRequest: jest.fn<AnyPromiseFn>(),
+    addRequest: jest.fn<AnyPromiseFn>(),
+    updateRequest: jest.fn<AnyPromiseFn>(),
+    updateRequestStep: jest.fn<AnyPromiseFn>(),
+    cancelRequest: jest.fn<AnyPromiseFn>(),
+    getRequestForm: jest.fn<AnyPromiseFn>(),
   });
 
   const mockSettingsService = () => ({
-    getOffboardingSettings: jest.fn(),
-    getOffboardingDocumentsSettings: jest.fn(),
-    getRequestWorkflows: jest.fn(),
+    getOffboardingSettings: jest.fn<AnyPromiseFn>(),
+    getOffboardingDocumentsSettings: jest.fn<AnyPromiseFn>(),
+    getRequestWorkflows: jest.fn<AnyPromiseFn>(),
   });
 
   beforeEach(() => {
@@ -169,7 +169,7 @@ describe('OffboardingService', () => {
       settingsService.getOffboardingSettings.mockResolvedValue(settings);
       settingsService.getOffboardingDocumentsSettings.mockResolvedValue(documents);
       settingsService.getRequestWorkflows.mockResolvedValue(workflowResponse);
-      requestService.getRequestForm.mockReturnValue({ fields: [] });
+      requestService.getRequestForm.mockReturnValue({ fields: [] } as any);
 
       const result = await service.getFormOptions(ORG_ID);
 
@@ -283,7 +283,7 @@ describe('OffboardingService', () => {
         }),
       );
       expect(exitTrackingRepository.create).toHaveBeenCalledWith(expect.objectContaining({
-        requestId: String(createdRequest.id),
+        requestId: String(createdRequest._id),
         exitType: { id: 'resignation', label: 'Resignation' },
         exitReason: { id: 'better_offer', label: 'Better offer' },
       }));
@@ -347,7 +347,7 @@ describe('OffboardingService', () => {
       exitTrackingRepository.upsertByRequestId.mockResolvedValue(updatedTracking);
       requestService.getRequest.mockResolvedValue(request);
 
-      const result = await service.updateChecklist(ORG_ID, user, { requestId: REQUEST_ID, kind: 'exit', itemId: 'exit_interview', completed: true });
+      const result = await service.updateChecklist(ORG_ID, user, { requestId: REQUEST_ID, kind: ExitChecklistKind.EXIT, itemId: 'exit_interview', completed: true });
 
       expect(exitTrackingRepository.upsertByRequestId).toHaveBeenCalledWith(ORG_ID, REQUEST_ID, {
         exitChecklist: expect.arrayContaining([expect.objectContaining({ id: 'exit_interview', completed: true })]),
@@ -361,7 +361,7 @@ describe('OffboardingService', () => {
       requestRepository.findById.mockResolvedValue(request);
       exitTrackingRepository.findByRequestId.mockResolvedValue(tracking);
 
-      await expect(service.updateChecklist(ORG_ID, user, { requestId: REQUEST_ID, kind: 'exit', itemId: 'unknown', completed: true })).rejects.toBeInstanceOf(AppException);
+      await expect(service.updateChecklist(ORG_ID, user, { requestId: REQUEST_ID, kind: ExitChecklistKind.EXIT, itemId: 'unknown', completed: true })).rejects.toBeInstanceOf(AppException);
     });
   });
 

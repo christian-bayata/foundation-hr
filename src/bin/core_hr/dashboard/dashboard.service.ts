@@ -442,6 +442,17 @@ export class DashboardService {
         { key: string; label: string; count: number }
       >();
 
+      // Seed every department so zero-count departments are still returned
+      if (dimension === DashboardDistributionDimension.DEPARTMENT) {
+        for (const department of departments) {
+          counts.set(department.code, {
+            key: department.code,
+            label: department.name,
+            count: 0,
+          });
+        }
+      }
+
       for (const employee of workforce) {
         const item = this.getDistributionValue(
           employee,
@@ -488,27 +499,33 @@ export class DashboardService {
       const now = new Date();
       const windowStart = addDays(startOfDay(now), -(days - 1));
 
-      const [employees, leaveRequests, exitRequests] = await Promise.all([
-        this.employeeRepository.findByOrganization(
-          organizationId,
-          'firstName lastName email employeeId avatarUrl employmentDate status departmentCode jobTitleCode employeeOnboardingSteps createdAt updatedAt',
-        ),
-        this.leaveRequestRepository.findAll(
-          {
+      const [employees, leaveRequests, exitRequests, departments, jobTitles] =
+        await Promise.all([
+          this.employeeRepository.findByOrganization(
             organizationId,
-            updatedAt: { $gte: windowStart },
-          } as QueryFilter<LeaveRequestDocument>,
-          { updatedAt: -1 },
-        ),
-        this.requestRepository.findAll(
-          {
+            'firstName lastName email employeeId avatarUrl employmentDate status departmentCode jobTitleCode employeeOnboardingSteps createdAt updatedAt',
+          ),
+          this.leaveRequestRepository.findAll(
+            {
+              organizationId,
+              updatedAt: { $gte: windowStart },
+            } as QueryFilter<LeaveRequestDocument>,
+            { updatedAt: -1 },
+          ),
+          this.requestRepository.findAll(
+            {
+              organizationId,
+              requestType: RequestType.EMPLOYEE_TERMINATION,
+              updatedAt: { $gte: windowStart },
+            } as QueryFilter<EmployeeRequestDocument>,
+            { updatedAt: -1 },
+          ),
+          this.organizationDepartmentRepository.findByOrganization(
             organizationId,
-            requestType: RequestType.EMPLOYEE_TERMINATION,
-            updatedAt: { $gte: windowStart },
-          } as QueryFilter<EmployeeRequestDocument>,
-          { updatedAt: -1 },
-        ),
-      ]);
+            'code name',
+          ),
+          this.jobTitleRepository.findByOrganization(organizationId, 'code name'),
+        ]);
 
       const requestIds = exitRequests.map((request) => String(request._id));
       const trackings = await this.exitTrackingRepository.findByRequestIds(
@@ -518,11 +535,21 @@ export class DashboardService {
       const trackingMap = new Map(
         trackings.map((tracking) => [tracking.requestId, tracking]),
       );
+      const departmentMap = new Map(
+        departments.map((department) => [department.code, department.name]),
+      );
+      const jobTitleByCode = new Map(
+        jobTitles.map((jobTitle) => [jobTitle.code, jobTitle.name]),
+      );
       const events: DashboardActivity[] = [];
 
       for (const employee of employees as EmployeeWithTimestamps[]) {
         const createdAt = toDate(employee.createdAt);
-        const employeeView = this.toActivityEmployee(employee);
+        const employeeView = this.toActivityEmployee(
+          employee,
+          departmentMap,
+          jobTitleByCode,
+        );
 
         if (createdAt && this.isWithin(createdAt, windowStart, now)) {
           events.push({
@@ -558,7 +585,10 @@ export class DashboardService {
       }
 
       for (const request of leaveRequests) {
-        const employee = this.toActivityEmployeeFromSnapshot(request.employee);
+        const employee = this.toActivityEmployeeFromSnapshot(
+          request.employee,
+          departmentMap,
+        );
         const requestedAt = toDate(request.requestedAt ?? request.createdAt);
 
         if (requestedAt && this.isWithin(requestedAt, windowStart, now)) {
@@ -604,7 +634,10 @@ export class DashboardService {
       }
 
       for (const request of exitRequests) {
-        const employee = this.toActivityEmployeeFromSnapshot(request.employee);
+        const employee = this.toActivityEmployeeFromSnapshot(
+          request.employee,
+          departmentMap,
+        );
         const requestedAt = toDate(request.submittedAt ?? request.createdAt);
 
         if (requestedAt && this.isWithin(requestedAt, windowStart, now)) {
@@ -1017,22 +1050,39 @@ export class DashboardService {
 
   private toActivityEmployee(
     employee: EmployeeDocument,
+    departmentMap: Map<string, string>,
+    jobTitleByCode: Map<string, string>,
   ): DashboardActivityEmployee {
     return {
       employeeId: String(employee._id),
       employeeUniqueId: employee.employeeId ?? null,
       employeeName: getEmployeeName(employee),
       avatarUrl: employee.avatarUrl ?? null,
+      department: employee.departmentCode
+        ? (departmentMap.get(employee.departmentCode) ??
+          employee.departmentCode)
+        : null,
+      jobTitle: employee.jobTitleCode
+        ? (jobTitleByCode.get(employee.jobTitleCode) ?? employee.jobTitleCode)
+        : null,
     };
   }
 
   private toActivityEmployeeFromSnapshot(
     employee:
       EmployeeRequestDocument['employee'] | LeaveRequestDocument['employee'],
+    departmentMap: Map<string, string>,
   ): DashboardActivityEmployee | null {
     if (!employee) {
       return null;
     }
+
+    const departmentCode = employee.departmentCode ?? null;
+    const department =
+      employee.department ??
+      (departmentCode
+        ? (departmentMap.get(departmentCode) ?? departmentCode)
+        : null);
 
     return {
       employeeId: employee.employeeId,
@@ -1042,6 +1092,8 @@ export class DashboardService {
         ('email' in employee ? employee.email : null) ||
         'Unknown employee',
       avatarUrl: employee.avatarUrl ?? null,
+      department,
+      jobTitle: employee.jobTitle ?? null,
     };
   }
 

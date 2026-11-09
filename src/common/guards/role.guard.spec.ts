@@ -9,6 +9,7 @@ import { REQUIRES_SYSTEM_SETTINGS_KEY } from '../decorators/requires-system-sett
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const USER_ID = 'usr-1';
 
+type AnyFn = (...args: any[]) => any;
 type AnyPromiseFn = (...args: any[]) => Promise<any>;
 
 /** A populated role document as returned by UserRoleRepository.populate('roleId'). */
@@ -32,7 +33,7 @@ const assignment = (over: Record<string, any> = {}) => ({
 
 describe('RoleGuard', () => {
   let guard: RoleGuard;
-  let reflector: Record<string, jest.Mock<AnyPromiseFn>>;
+  let reflector: Record<string, jest.Mock<AnyFn>>;
   let userRoleRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let organizationRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let context: ExecutionContext;
@@ -67,14 +68,16 @@ describe('RoleGuard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    reflector = { getAllAndOverride: jest.fn() };
+    reflector = { getAllAndOverride: jest.fn<AnyFn>() };
     userRoleRepository = {
-      findByUserAndOrganization: jest.fn().mockResolvedValue([assignment()]),
-      findByUser: jest.fn().mockResolvedValue([assignment()]),
+      findByUserAndOrganization: jest
+        .fn<AnyPromiseFn>()
+        .mockResolvedValue([assignment()]),
+      findByUser: jest.fn<AnyPromiseFn>().mockResolvedValue([assignment()]),
     };
     organizationRepository = {
-      isOwner: jest.fn().mockResolvedValue(false),
-      findOrganizationByOwner: jest.fn().mockResolvedValue(null),
+      isOwner: jest.fn<AnyPromiseFn>().mockResolvedValue(false),
+      findOrganizationByOwner: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
     };
 
     guard = new RoleGuard(

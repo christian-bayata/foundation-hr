@@ -51,7 +51,6 @@ function splitLines(csv: string): string[] {
       inQuotes = true;
       current += ch;
     } else if (ch === '\r') {
-      // skip carriage return; handle \r\n and lone \r
       if (i + 1 < csv.length && csv[i + 1] === '\n') {
         i++;
       }
@@ -104,7 +103,6 @@ function parseLine(line: string): string[] {
 
   values.push(current);
 
-  // Strip surrounding quotes from each value and unescape doubled quotes
   return values.map((value) => {
     if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
       return value.slice(1, -1).replace(/""/g, '"');

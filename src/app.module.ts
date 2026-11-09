@@ -22,7 +22,7 @@ import { EventModule } from './event/event.module';
 import { HttpExceptionFilter } from './common';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RoleGuard } from './common/guards/role.guard';
-import { PerformanceMgtModule } from './bin/performance_mgt/performance-mgt.module';
+import { GoalSettingModule } from './bin/performance_mgt/goal-setting/goal-settings.module';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -40,7 +40,7 @@ import { PerformanceMgtModule } from './bin/performance_mgt/performance-mgt.modu
     NotificationModule,
     OffboardingModule,
     OnboardingModule,
-    PerformanceMgtModule,
+    GoalSettingModule,
     RequestModule,
     SettingModule,
     FileUploadModule,

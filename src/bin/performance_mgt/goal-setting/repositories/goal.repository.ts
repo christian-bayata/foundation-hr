@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Goal, GoalDocument } from '../entity/goal.schema';
+import { Goal, GoalDocument } from '../schemas/goal.schema';
 import { ListGoalsQueryDto } from '../dto/list-goals-query.dto';
 import { GoalLevel } from '../enums/goal.enums';
-import { PropDataInput } from '../../../common/util/util.interface';
+import { PropDataInput } from '../../../../common/util/util.interface';
 
 interface GoalListResult {
   items: GoalDocument[];
@@ -26,9 +26,17 @@ export class GoalRepository {
     }
   }
 
-  async findOne(
-    where: Record<string, unknown>,
-  ): Promise<GoalDocument | null> {
+  async findDistinctCycles(organizationId: string): Promise<string[]> {
+    try {
+      return await this.goalModel
+        .distinct('cycleId', { organizationId })
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findOne(where: Record<string, unknown>): Promise<GoalDocument | null> {
     try {
       return await this.goalModel.findOne(where).exec();
     } catch (error) {
@@ -90,6 +98,9 @@ export class GoalRepository {
   async paginatedList(
     dto: ListGoalsQueryDto,
     organizationId: string,
+    level?: GoalLevel,
+    departmentId?: string,
+    employeeId?: string,
   ): Promise<GoalListResult> {
     try {
       const { batch = 1, limit = 10 } = dto;
@@ -97,10 +108,10 @@ export class GoalRepository {
 
       const filter: Record<string, unknown> = {
         organizationId,
-        ...(dto.cycleId && { cycleId: dto.cycleId }),
-        ...(dto.level && { level: dto.level }),
-        ...(dto.departmentId && { departmentId: dto.departmentId }),
-        ...(dto.employeeId && { employeeId: dto.employeeId }),
+        cycleId: dto.cycleId,
+        ...(level && { level }),
+        ...(departmentId && { departmentId }),
+        ...(employeeId && { employeeId }),
         ...(dto.perspective && { perspective: dto.perspective }),
         ...(dto.kpiType && { kpiType: dto.kpiType }),
         ...(dto.kpiMetric && { kpiMetric: dto.kpiMetric }),
@@ -119,22 +130,15 @@ export class GoalRepository {
         ];
       }
 
-      const sortDirection =
-        dto.sortOrder === 'asc' ? 1 : dto.sortOrder === 'desc' ? -1 : -1;
       const sort: Record<string, 1 | -1> = {};
       if (dto.sortBy) {
-        sort[dto.sortBy] = sortDirection;
+        sort[dto.sortBy] = dto.sortOrder === 'asc' ? 1 : -1;
       } else {
         sort.createdAt = -1;
       }
 
       const [items, total] = await Promise.all([
-        this.goalModel
-          .find(filter)
-          .sort(sort)
-          .skip(skip)
-          .limit(limit)
-          .exec(),
+        this.goalModel.find(filter).sort(sort).skip(skip).limit(limit).exec(),
         this.goalModel.countDocuments(filter).exec(),
       ]);
 
@@ -147,89 +151,12 @@ export class GoalRepository {
   async findByIds(ids: string[]): Promise<GoalDocument[]> {
     try {
       const objectIds = ids
-        .map((id) => (Types.ObjectId.isValid(id) ? new Types.ObjectId(id) : null))
+        .map((id) =>
+          Types.ObjectId.isValid(id) ? new Types.ObjectId(id) : null,
+        )
         .filter((id) => id !== null) as Types.ObjectId[];
       if (objectIds.length === 0) return [];
       return await this.goalModel.find({ _id: { $in: objectIds } }).exec();
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async findDistinctCycles(organizationId: string): Promise<string[]> {
-    try {
-      return await this.goalModel
-        .distinct('cycleId', { organizationId })
-        .exec();
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async countByLevel(
-    organizationId: string,
-    cycleId: string,
-    level: GoalLevel,
-  ): Promise<number> {
-    try {
-      return await this.goalModel
-        .countDocuments({ organizationId, cycleId, level })
-        .exec();
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async findObjectives(
-    filter: Record<string, unknown>,
-  ): Promise<GoalDocument[]> {
-    try {
-      return await this.goalModel
-        .find(filter)
-        .select('_id title level departmentId employeeId perspective')
-        .sort({ title: 1 })
-        .exec();
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async findMany(
-    filter: Record<string, unknown>,
-  ): Promise<GoalDocument[]> {
-    try {
-      return await this.goalModel.find(filter).exec();
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async sumWeightageByLevel(
-    organizationId: string,
-    cycleId: string,
-    level?: GoalLevel,
-    departmentId?: string,
-    employeeId?: string,
-  ): Promise<{ level?: string; totalWeightage: number; goalCount: number }> {
-    try {
-      const filter: Record<string, unknown> = {
-        organizationId,
-        cycleId,
-      };
-      if (level) filter.level = level;
-      if (departmentId) filter.departmentId = departmentId;
-      if (employeeId) filter.employeeId = employeeId;
-
-      const goals = await this.goalModel.find(filter).exec();
-      const totalWeightage = goals.reduce(
-        (sum, g) => sum + (g.weightage ?? 0),
-        0,
-      );
-      return {
-        level,
-        totalWeightage,
-        goalCount: goals.length,
-      };
     } catch (error) {
       throw error;
     }

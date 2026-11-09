@@ -108,7 +108,7 @@ describe('OnboardingService', () => {
 
       const dto: AddEmployeeOnboardingDto = { employeeId: EMPLOYEE_ID };
 
-      const result = await service.addEmployeeOnboarding(ORG_ID, dto);
+      const result: any = await service.addEmployeeOnboarding(ORG_ID, dto);
 
       expect(result.employeeId).toBe(EMPLOYEE_ID);
       expect(result.steps).toHaveLength(3);
@@ -220,7 +220,7 @@ describe('OnboardingService', () => {
 
       const dto: RetrieveEmployeeOnboardingDto = { employeeId: EMPLOYEE_ID };
 
-      const result = await service.getEmployeeOnboarding(ORG_ID, dto);
+      const result: any = await service.getEmployeeOnboarding(ORG_ID, dto);
 
       expect(result.employeeId).toBe(EMPLOYEE_ID);
       expect(result.employee).toEqual({
@@ -295,7 +295,7 @@ describe('OnboardingService', () => {
       );
       jobTitleRepository.findByOrganization.mockResolvedValue([]);
 
-      const result = await service.getEmployeeOnboarding(ORG_ID, {
+      const result: any = await service.getEmployeeOnboarding(ORG_ID, {
         employeeId: EMPLOYEE_ID,
       });
 
@@ -368,7 +368,7 @@ describe('OnboardingService', () => {
         ],
       };
 
-      const result = await service.updateEmployeeOnboardingStep(
+      const result: any = await service.updateEmployeeOnboardingStep(
         ORG_ID,
         EMPLOYEE_ID,
         STEP_ID,
@@ -420,7 +420,7 @@ describe('OnboardingService', () => {
       );
       employeeRepository.updateById.mockResolvedValue(buildEmployee());
 
-      const result = await service.updateEmployeeOnboardingStep(
+      const result: any = await service.updateEmployeeOnboardingStep(
         ORG_ID,
         EMPLOYEE_ID,
         STEP_ID,
@@ -463,7 +463,7 @@ describe('OnboardingService', () => {
       );
       employeeRepository.updateById.mockResolvedValue(buildEmployee());
 
-      const result = await service.updateEmployeeOnboardingStep(
+      const result: any = await service.updateEmployeeOnboardingStep(
         ORG_ID,
         EMPLOYEE_ID,
         STEP_ID,
@@ -543,7 +543,7 @@ describe('OnboardingService', () => {
         { code: 'mgr', name: 'Manager' },
       ]);
 
-      const result = await service.listEmployeeOnboarding(ORG_ID);
+      const result: any = await service.listEmployeeOnboarding(ORG_ID);
 
       expect(result.total).toBe(2);
       expect(result.page).toBe(1);
@@ -591,7 +591,7 @@ describe('OnboardingService', () => {
       ]);
       jobTitleRepository.findByOrganization.mockResolvedValue([]);
 
-      const result = await service.listEmployeeOnboarding(ORG_ID);
+      const result: any = await service.listEmployeeOnboarding(ORG_ID);
 
       expect(result.data[0].dueDate).toBe('2026-01-02');
     });
@@ -632,7 +632,7 @@ describe('OnboardingService', () => {
         { code: 'mgr', name: 'Manager' },
       ]);
 
-      const result = await service.listEmployeeOnboarding(ORG_ID, {
+      const result: any = await service.listEmployeeOnboarding(ORG_ID, {
         role: 'Manager',
         status: OnboardingStatus.OVERDUE,
         startDate: '2026-01-03',
@@ -655,7 +655,7 @@ describe('OnboardingService', () => {
       );
       jobTitleRepository.findByOrganization.mockResolvedValue([]);
 
-      const result = await service.listEmployeeOnboarding(ORG_ID, {
+      const result: any = await service.listEmployeeOnboarding(ORG_ID, {
         batch: 2,
         limit: 2,
       });
@@ -685,7 +685,7 @@ describe('OnboardingService', () => {
       ]);
       jobTitleRepository.findByOrganization.mockResolvedValue([]);
 
-      const result = await service.listEmployeeOnboarding(ORG_ID);
+      const result: any = await service.listEmployeeOnboarding(ORG_ID);
 
       expect(result.data[0].status).toBe(OnboardingStatus.OVERDUE);
     });
@@ -707,7 +707,7 @@ describe('OnboardingService', () => {
       ]);
       jobTitleRepository.findByOrganization.mockResolvedValue([]);
 
-      const result = await service.listEmployeeOnboarding(ORG_ID);
+      const result: any = await service.listEmployeeOnboarding(ORG_ID);
 
       expect(result.data[0].status).toBe(OnboardingStatus.ONBOARDED);
     });
@@ -724,7 +724,7 @@ describe('OnboardingService', () => {
       );
       employeeRepository.updateById.mockResolvedValue(buildEmployee());
 
-      const result = await service.cancelEmployeeOnboarding(ORG_ID, {
+      const result: any = await service.cancelEmployeeOnboarding(ORG_ID, {
         employeeId: EMPLOYEE_ID,
         reason: 'Resigned',
       });
@@ -785,7 +785,7 @@ describe('OnboardingService', () => {
       employeeRepository.findById.mockResolvedValue(nudgableEmployee);
       emailService.emailDispatcher.mockResolvedValue(undefined);
 
-      const result = await service.nudgeEmployeeOnboarding(ORG_ID, {
+      const result: any = await service.nudgeEmployeeOnboarding(ORG_ID, {
         employeeId: EMPLOYEE_ID,
       });
 

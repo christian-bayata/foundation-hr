@@ -502,6 +502,10 @@ export class EmployeeService {
       await this.employeeRepository.updateById(employee._id.toString(), {
         hasJoinedOrg: true,
         organizationId: employee.organizationId ?? organizationId,
+        ...this.completeOnboardingRequirement(
+          employee,
+          'Employee creates an account',
+        ),
       });
 
       return { hasJoinedOrg: true };
@@ -723,6 +727,10 @@ export class EmployeeService {
           employee,
           OnboardingStep.BASIC_INFORMATION,
         ),
+        ...this.completeOnboardingRequirement(
+          employee,
+          'Employee completes personal details',
+        ),
       });
 
       await this.notifyOnboardingProfileUpdate(
@@ -766,6 +774,10 @@ export class EmployeeService {
 
       await this.employeeRepository.updateById(employee._id.toString(), {
         documents,
+        ...this.completeOnboardingRequirement(
+          employee,
+          'Employee uploads required documents',
+        ),
       });
 
       await this.notifyOnboardingProfileUpdate(employee, 'documents', user);
@@ -802,6 +814,10 @@ export class EmployeeService {
         ...this.buildOnboardingUpdate(
           employee,
           OnboardingStep.ASSOCIATED_CONTACTS,
+        ),
+        ...this.completeOnboardingRequirement(
+          employee,
+          'Employee provides emergency contact',
         ),
       });
 
@@ -845,6 +861,10 @@ export class EmployeeService {
           ...this.buildOnboardingUpdate(
             employee,
             OnboardingStep.FINANCE_INFORMATION,
+          ),
+          ...this.completeOnboardingRequirement(
+            employee,
+            'Employee provides finance information',
           ),
         },
       );
@@ -952,6 +972,67 @@ export class EmployeeService {
     }
 
     return employee;
+  }
+
+  /**
+   * @Responsibility: Mark a single completion requirement on the system
+   * "Self-enrolment" onboarding step as completed. When the last incomplete
+   * requirement is marked, the step itself is marked completed.
+   *
+   * @param employee - The employee whose onboarding step to update
+   * @param requirementStep - The requirement step name to mark complete
+   * @returns The partial update to apply, or null when the step/requirement
+   * does not exist
+   */
+  private completeOnboardingRequirement(
+    employee: EmployeeDocument,
+    requirementStep: string,
+  ): Record<string, any> | null {
+    const steps = employee.employeeOnboardingSteps ?? [];
+    const stepIndex = steps.findIndex(
+      (step) => step.stepName === 'Self-enrolment',
+    );
+
+    if (stepIndex === -1) {
+      return null;
+    }
+
+    const step = steps[stepIndex];
+    const requirements = step.completionRequirements ?? [];
+    const reqIndex = requirements.findIndex((r) => r.step === requirementStep);
+
+    if (reqIndex === -1) {
+      return null;
+    }
+
+    const now = new Date();
+    const updatedRequirements = requirements.map((r, i) => {
+      if (i !== reqIndex) {
+        return r;
+      }
+      return {
+        ...r,
+        isCompleted: true,
+        completedAt: r.completedAt ?? now,
+      };
+    });
+
+    const allCompleted = updatedRequirements.every((r) => r.isCompleted);
+
+    const updatedSteps = steps.map((s, i) => {
+      if (i !== stepIndex) {
+        return s;
+      }
+      return {
+        ...s,
+        completionRequirements: updatedRequirements,
+        ...(allCompleted && !s.isCompleted
+          ? { isCompleted: true, completedAt: s.completedAt ?? now }
+          : {}),
+      };
+    });
+
+    return { employeeOnboardingSteps: updatedSteps };
   }
 
   /**

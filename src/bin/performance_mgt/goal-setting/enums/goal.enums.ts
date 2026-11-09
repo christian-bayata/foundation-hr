@@ -34,18 +34,6 @@ export enum KpiType {
   MINIMALIST = 'minimalist',
 }
 
-export enum GoalPlanType {
-  CASCADING_GOALS = 'cascading_goals',
-  INDIVIDUAL_GOALS = 'individual_goals',
-  DEPARTMENT_GOALS = 'department_goals',
-}
-
-export enum TargetPopulation {
-  DEPARTMENT = 'department',
-  ALL_EMPLOYEES = 'all_employees',
-  BUSINESS_UNIT = 'business_unit',
-}
-
 export enum GoalPlanStatus {
   DRAFT = 'draft',
   ACTIVE = 'active',

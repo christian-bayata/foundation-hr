@@ -14,22 +14,14 @@ export type GoalDocument = Goal & Document;
 export class Goal {
   _id: Types.ObjectId;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, required: true, index: true })
   organizationId: string;
 
   @Prop({ type: String, required: true, index: true })
   cycleId: string;
 
   @Prop({ type: String, default: null, index: true })
-  goalPlanId: string | null;
-
-  @Prop({
-    type: String,
-    enum: Object.values(GoalLevel),
-    required: true,
-    index: true,
-  })
-  level: GoalLevel;
+  level: GoalLevel | null;
 
   @Prop({ type: String, default: null, index: true })
   departmentId: string | null;
@@ -40,9 +32,9 @@ export class Goal {
   @Prop({
     type: String,
     enum: Object.values(GoalPerspective),
-    required: true,
+    default: null,
   })
-  perspective: GoalPerspective;
+  perspective: GoalPerspective | null;
 
   @Prop({ type: String, trim: true, required: true, maxlength: 160 })
   title: string;

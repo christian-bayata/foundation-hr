@@ -32,7 +32,7 @@ describe('EmployeeService', () => {
   };
   let emailService: { brevoEmailDispatcher: jest.Mock<AnyPromiseFn> };
   let employeeUtility: { generateUniqueId: jest.Mock };
-  let configService: { get: jest.Mock };
+  let configService: { get: jest.Mock<(key: string) => string> };
   let organizationRepository: {
     findOrg: jest.Mock<AnyPromiseFn>;
     findBySlug: jest.Mock<AnyPromiseFn>;
@@ -122,7 +122,7 @@ describe('EmployeeService', () => {
         status: EmployeeStatus.DRAFT,
       });
 
-      const result = await service.createEmployee(dto as any);
+      const result: any = await service.createEmployee(dto as any);
 
       expect(employeeRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -156,7 +156,7 @@ describe('EmployeeService', () => {
         employmentDate: new Date(dto.employmentDate),
       });
 
-      const result = await service.createEmployee({
+      const result: any = await service.createEmployee({
         ...dto,
         inviteId: INVITE_ID,
       } as any);
@@ -221,7 +221,7 @@ describe('EmployeeService', () => {
         _id: INVITE_ID,
       });
 
-      const result = await service.getEmployee(INVITE_ID);
+      const result: any = await service.getEmployee(INVITE_ID);
 
       expect(result).toEqual({ _id: INVITE_ID });
     });
@@ -247,7 +247,7 @@ describe('EmployeeService', () => {
         status: EmployeeStatus.DRAFT,
       });
 
-      const result = await service.saveDraft(INVITE_ID, {
+      const result: any = await service.saveDraft(INVITE_ID, {
         firstName: 'Jane',
       } as any);
 
@@ -269,7 +269,7 @@ describe('EmployeeService', () => {
         status: EmployeeStatus.ACTIVE,
       });
 
-      const result = await service.saveDraft(INVITE_ID, {
+      const result: any = await service.saveDraft(INVITE_ID, {
         firstName: 'Jane',
       } as any);
 
@@ -304,7 +304,7 @@ describe('EmployeeService', () => {
         name: 'Acme Inc',
       });
 
-      const result = await service.inviteEmployees(
+      const result: any = await service.inviteEmployees(
         ['John@Example.com'],
         'org123',
       );
@@ -339,7 +339,7 @@ describe('EmployeeService', () => {
         organizationId: 'org123',
       });
 
-      const result = await service.inviteEmployees(
+      const result: any = await service.inviteEmployees(
         ['john@example.com', 'john@example.com', 'jane@example.com'],
         'org123',
       );
@@ -360,7 +360,7 @@ describe('EmployeeService', () => {
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('SMTP down'));
 
-      const result = await service.inviteEmployees(
+      const result: any = await service.inviteEmployees(
         ['john@example.com', 'jane@example.com'],
         'org123',
       );
@@ -429,10 +429,10 @@ describe('EmployeeService', () => {
       expect(steps[0].isCompleted).toBe(true);
       expect(steps[0].completedAt).toBeInstanceOf(Date);
       expect(steps[0].startedAt).toBeInstanceOf(Date);
-      expect(steps[0].completionRequirements.every((r) => r.isCompleted)).toBe(
+      expect(steps[0].completionRequirements.every((r: any) => r.isCompleted)).toBe(
         true,
       );
-      expect(steps[0].completionRequirements.every((r) => r.completedAt)).toBe(
+      expect(steps[0].completionRequirements.every((r: any) => r.completedAt)).toBe(
         true,
       );
       // Step 2 remains untouched
@@ -553,7 +553,7 @@ describe('EmployeeService', () => {
         slug: 'acme',
       });
 
-      const result = await service.employeeAcceptInvite(dto as any);
+      const result: any = await service.employeeAcceptInvite(dto as any);
 
       expect(result).toEqual({ hasJoinedOrg: true });
       expect(employeeRepository.updateById).not.toHaveBeenCalled();
@@ -624,7 +624,7 @@ describe('EmployeeService', () => {
         hasJoinedOrg: true,
       });
 
-      const result = await service.employeeSetPassword(dto as any);
+      const result: any = await service.employeeSetPassword(dto as any);
 
       const [, update] = employeeRepository.updateById.mock.calls[0] as [
         string,
@@ -780,7 +780,7 @@ describe('EmployeeService', () => {
       it('returns the onboarding payload for an employee who has accepted', async () => {
         employeeRepository.findByEmail.mockResolvedValue(employee());
 
-        const result = await service.getOnboarding(EMAIL);
+        const result: any = await service.getOnboarding(EMAIL);
 
         expect(employeeRepository.findByEmail).toHaveBeenCalledWith(EMAIL);
         expect(result).toEqual(
@@ -1003,7 +1003,7 @@ describe('EmployeeService', () => {
         }),
       ]);
 
-      const result = await service.getOrganisationHierarchy(ORG_ID);
+      const result: any = await service.getOrganisationHierarchy(ORG_ID);
 
       expect(employeeRepository.findByOrganization).toHaveBeenCalledWith(
         ORG_ID,
@@ -1044,7 +1044,7 @@ describe('EmployeeService', () => {
         toDoc({ _id: 'emp2', supervisor: 'missing-employee' }),
       ]);
 
-      const result = await service.getOrganisationHierarchy(ORG_ID);
+      const result: any = await service.getOrganisationHierarchy(ORG_ID);
 
       expect(result.map((node: any) => node._id)).toEqual(['emp1', 'emp2']);
     });
@@ -1052,7 +1052,7 @@ describe('EmployeeService', () => {
     it('returns an empty array when the org has no employees', async () => {
       employeeRepository.findByOrganization.mockResolvedValue([]);
 
-      const result = await service.getOrganisationHierarchy(ORG_ID);
+      const result: any = await service.getOrganisationHierarchy(ORG_ID);
 
       expect(result).toEqual([]);
     });

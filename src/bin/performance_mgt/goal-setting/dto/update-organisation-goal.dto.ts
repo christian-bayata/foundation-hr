@@ -8,7 +8,7 @@ import {
 } from 'class-validator';
 import { GoalFrequency, GoalPerspective, KpiType } from '../enums/goal.enums';
 
-export class UpdateGoalDto {
+export class UpdateOrganisationGoalDto {
   @IsOptional()
   @IsString({ message: 'Goal title must be a string.' })
   @MaxLength(160, { message: 'Goal title must be at most 160 characters.' })

@@ -7,6 +7,7 @@ import {
   EmployeeRequestStepStatus,
 } from './enum/request.enum';
 import { RequestService } from './request.service';
+import { TerminationType } from './dto/forms/form-option.enums';
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const EMPLOYEE_ID = '64f1b2c3d4e5f678901234ba';
@@ -132,7 +133,14 @@ describe('RequestService', () => {
   let settingsDomainOrganisationService: {
     getRequestWorkflows: jest.Mock<AnyPromiseFn>;
   };
-  let requestFormValidator: { validate: jest.Mock };
+  let requestFormValidator: {
+    validate: jest.Mock<
+      (_type: RequestType, details?: Record<string, unknown>) => Record<
+        string,
+        unknown
+      >
+    >;
+  };
   let notificationService: { dispatch: jest.Mock<AnyPromiseFn> };
   let service: RequestService;
 
@@ -191,7 +199,7 @@ describe('RequestService', () => {
         requestType: RequestType.EMPLOYEE_TERMINATION,
         employeeId: EMPLOYEE_ID,
         terminationDate: '2026-02-01',
-        terminationType: 'resignation',
+        terminationType: TerminationType.RESIGNATION,
         reasonForTermination: 'Resignation',
         reason: 'Resignation',
         effectiveDate: '2026-02-01',
@@ -268,7 +276,7 @@ describe('RequestService', () => {
         employeeId: EMPLOYEE_ID,
         workflowId: '64f1b2c3d4e5f678901234c9',
         terminationDate: '2026-02-01',
-        terminationType: 'resignation',
+        terminationType: TerminationType.RESIGNATION,
         reasonForTermination: 'Resignation',
       });
 
@@ -282,7 +290,7 @@ describe('RequestService', () => {
       await expect(
         service.addRequest(ORG_ID, user, {
           requestType: RequestType.EMPLOYEE_TERMINATION,
-        }),
+        } as any),
       ).rejects.toThrow(AppException);
 
       expect(requestRepository.create).not.toHaveBeenCalled();
@@ -297,7 +305,7 @@ describe('RequestService', () => {
         service.addRequest(ORG_ID, user, {
           requestType: RequestType.EMPLOYEE_TERMINATION,
           employeeId: EMPLOYEE_ID,
-        }),
+        } as any),
       ).rejects.toThrow(AppException);
     });
 
@@ -331,7 +339,7 @@ describe('RequestService', () => {
       }));
       const details = {
         terminationDate: '2026-02-01',
-        terminationType: 'resignation',
+        terminationType: TerminationType.RESIGNATION,
         reasonForTermination: 'Resignation',
       };
 
@@ -379,14 +387,14 @@ describe('RequestService', () => {
         jobTitle: 'Spoofed Title',
         lineManagerId: 'spoofed-manager',
         terminationDate: '2026-02-01',
-        terminationType: 'resignation',
+        terminationType: TerminationType.RESIGNATION,
         reasonForTermination: '  Resignation  ',
-      });
+      } as any);
 
       const created = requestRepository.create.mock.calls[0][0] as any;
       expect(created.details).toEqual({
         terminationDate: '2026-02-01',
-        terminationType: 'resignation',
+        terminationType: TerminationType.RESIGNATION,
         reasonForTermination: 'Resignation',
       });
       expect(created.employee.employeeName).toBe('Server Employee');
@@ -628,7 +636,7 @@ describe('RequestService', () => {
       const request = buildRequest();
       const details = {
         terminationDate: '2026-02-01',
-        terminationType: 'resignation',
+        terminationType: TerminationType.RESIGNATION,
         reasonForTermination: 'Resignation',
       };
       requestRepository.findById.mockResolvedValue(request);
@@ -650,7 +658,7 @@ describe('RequestService', () => {
     it('merges partial details with the stored details before validating', async () => {
       const storedDetails = {
         terminationDate: '2026-02-01',
-        terminationType: 'resignation',
+        terminationType: TerminationType.RESIGNATION,
         reasonForTermination: 'Resignation',
       };
       const request = buildRequest({ details: storedDetails });

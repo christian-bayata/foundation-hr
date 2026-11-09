@@ -15,15 +15,9 @@ export class GoalProgressDto {
   progress: number;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'Note must be a string.' })
   note?: string;
 
   @IsOptional()
   attachments?: string[];
-}
-
-export class EndGoalPlanCycleDto {
-  @IsOptional()
-  @IsString({ message: 'Reason must be a string.' })
-  reason?: string;
 }

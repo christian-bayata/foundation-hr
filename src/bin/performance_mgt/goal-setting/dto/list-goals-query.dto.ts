@@ -9,30 +9,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import {
-  GoalFrequency,
-  GoalLevel,
-  GoalPerspective,
-  GoalStatus,
-  KpiType,
-} from '../enums/goal.enums';
+import { GoalFrequency, GoalPerspective, GoalStatus, KpiType } from '../enums/goal.enums';
 
 export class ListGoalsQueryDto {
   @IsNotEmpty({ message: 'Cycle id is required.' })
   @IsString({ message: 'Cycle id must be a string.' })
   cycleId: string;
-
-  @IsOptional()
-  @IsEnum(GoalLevel, { message: 'Level is not valid.' })
-  level?: GoalLevel;
-
-  @IsOptional()
-  @IsString({ message: 'Department id must be a string.' })
-  departmentId?: string;
-
-  @IsOptional()
-  @IsString({ message: 'Employee id must be a string.' })
-  employeeId?: string;
 
   @IsOptional()
   @IsString({ message: 'Search must be a string.' })

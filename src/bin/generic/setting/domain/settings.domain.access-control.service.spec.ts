@@ -21,6 +21,7 @@ const FRONTEND_URL = 'https://app.foundationhr.com';
 const OWNER_ROLE_ID = '64f1b2c3d4e5f6789010aaaa';
 const HR_ROLE_ID = '64f1b2c3d4e5f6789010bbbb';
 
+type AnyFn = (...args: any[]) => any;
 type AnyPromiseFn = (...args: any[]) => Promise<any>;
 
 const oid = (value: string) => new Types.ObjectId(value.padEnd(24, '0'));
@@ -71,14 +72,14 @@ const givenUsers = (inviteeUserRepository: any, users: any[]) => {
 };
 
 describe('SettingsDomainAccessControlService company admin', () => {
-  let service: SettingsDomainAccessControlService;
+  let service: any;
   let roleRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let userRoleRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let organizationRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let inviteeUserRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let jobTitleRepository: Record<string, jest.Mock<AnyPromiseFn>>;
   let employeeRepository: Record<string, jest.Mock<AnyPromiseFn>>;
-  let authUtility: Record<string, jest.Mock<AnyPromiseFn>>;
+  let authUtility: Record<string, jest.Mock<AnyFn>>;
   let emailService: Record<string, jest.Mock<AnyPromiseFn>>;
   let configService: { get: jest.Mock<(key: string) => string> };
 
@@ -122,9 +123,11 @@ describe('SettingsDomainAccessControlService company admin', () => {
       findByOrganizationEmails: jest.fn(),
       findOne: jest.fn(),
     };
-    authUtility = { randomToken: jest.fn() };
+    authUtility = { randomToken: jest.fn<AnyFn>() };
     emailService = { brevoEmailDispatcher: jest.fn() };
-    configService = { get: jest.fn().mockReturnValue(FRONTEND_URL) };
+    configService = {
+      get: jest.fn<(key: string) => string>().mockReturnValue(FRONTEND_URL),
+    };
 
     organizationRepository.findOrg.mockResolvedValue({ name: 'Foundation' });
     organizationRepository.isOwner.mockResolvedValue(false);
@@ -450,7 +453,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
       const result = await service.listCompanyAdmins(ORG_ID, {});
 
       expect(result.count).toBe(2);
-      expect(result.data.map((row) => row.name).sort()).toEqual([
+      expect(result.data.map((row: any) => row.name).sort()).toEqual([
         'Ada Nkem',
         'Jobi Olusayo',
       ]);
@@ -601,11 +604,11 @@ describe('SettingsDomainAccessControlService company admin', () => {
         sort_dir: 'desc',
       });
 
-      expect(asc.data.map((row) => row.name)).toEqual([
+      expect(asc.data.map((row: any) => row.name)).toEqual([
         'Ada Nkem',
         'Jobi Olusayo',
       ]);
-      expect(desc.data.map((row) => row.name)).toEqual([
+      expect(desc.data.map((row: any) => row.name)).toEqual([
         'Jobi Olusayo',
         'Ada Nkem',
       ]);
@@ -626,7 +629,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
         sort_dir: 'asc',
       });
 
-      expect(result.data.map((row) => row.status)).toEqual([
+      expect(result.data.map((row: any) => row.status)).toEqual([
         AdminStatus.ACTIVE,
         AdminStatus.CREATED,
       ]);
@@ -730,7 +733,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
 
       const result = await service.listCompanyAdmins(ORG_ID, {});
 
-      expect(result.data.map((row) => row.systemSettings)).toEqual([
+      expect(result.data.map((row: any) => row.systemSettings)).toEqual([
         false,
         true,
       ]);

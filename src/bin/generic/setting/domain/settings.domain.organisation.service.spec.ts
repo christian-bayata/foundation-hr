@@ -24,7 +24,6 @@ import {
 import {
   DueDate,
   EmploymentType,
-  ResponsibleParty,
   WorkflowType,
 } from '../employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../request-management/enum/request-management.enum';
@@ -33,6 +32,15 @@ import {
   LeaveAllocationMethod,
 } from '../leave-management/enum/leave-management.enum';
 import { DataRetentionPeriod } from '../offboarding/enum/offboarding.enum';
+
+const DEFAULT_RESPONSIBLE_PARTIES = [
+  'admin',
+  'onboarding_manager',
+  'head_of_department',
+  'line_manager',
+  'new_hire',
+  'employee',
+];
 
 const ORG_ID = '64f1b2c3d4e5f678901234ab';
 const DIRECTOR_ID = '64f1b2c3d4e5f678901234ba';
@@ -1369,6 +1377,7 @@ describe('SettingsDomainOrganisationService', () => {
     const dto = {
       name: '  HR Handbook  ',
       url: 'https://res.cloudinary.com/demo/raw/upload/v1700000000/foundationhr/documents/hr-handbook.pdf',
+      fileType: 'pdf',
     };
 
     it('creates a policy document with a generated code, derived public id and uploader', async () => {
@@ -2114,7 +2123,7 @@ describe('SettingsDomainOrganisationService', () => {
       });
       organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
 
-      const result = await service.reorderWorkflowSteps(ORG_ID, 'onboarding', [
+      const result = await service.reorderWorkflowSteps(ORG_ID, WorkflowType.ONBOARDING, [
         String(third._id),
         String(first._id),
         String(second._id),
@@ -2127,7 +2136,7 @@ describe('SettingsDomainOrganisationService', () => {
 
       const saved =
         organizationRepository.updateById.mock.calls[0][1].employeeWorkflow;
-      expect(saved.onboarding.map((s) => s.stepName)).toEqual([
+      expect(saved.onboarding.map((s: any) => s.stepName)).toEqual([
         'Third',
         'First',
         'Second',
@@ -2148,7 +2157,7 @@ describe('SettingsDomainOrganisationService', () => {
       });
       organizationRepository.updateById.mockResolvedValue({ _id: ORG_ID });
 
-      const result = await service.reorderWorkflowSteps(ORG_ID, 'onboarding', [
+      const result = await service.reorderWorkflowSteps(ORG_ID, WorkflowType.ONBOARDING, [
         String(third._id),
       ]);
 
@@ -2171,7 +2180,7 @@ describe('SettingsDomainOrganisationService', () => {
       });
 
       await expect(
-        service.reorderWorkflowSteps(ORG_ID, 'onboarding', ['missing-id']),
+        service.reorderWorkflowSteps(ORG_ID, WorkflowType.ONBOARDING, ['missing-id']),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
@@ -2180,7 +2189,7 @@ describe('SettingsDomainOrganisationService', () => {
       organizationRepository.findOrg.mockResolvedValue(null);
 
       await expect(
-        service.reorderWorkflowSteps(ORG_ID, 'onboarding', []),
+        service.reorderWorkflowSteps(ORG_ID, WorkflowType.ONBOARDING, []),
       ).rejects.toThrow(AppException);
       expect(organizationRepository.updateById).not.toHaveBeenCalled();
     });
@@ -2195,8 +2204,10 @@ describe('SettingsDomainOrganisationService', () => {
 
       const result = await service.getResponsibleParties(ORG_ID);
 
-      expect(result.defaultParties).toEqual(Object.values(ResponsibleParty));
-      expect(result.customParties).toEqual(['Payroll']);
+      expect((result as any).defaultParties).toEqual(
+        DEFAULT_RESPONSIBLE_PARTIES,
+      );
+      expect((result as any).customParties).toEqual(['Payroll']);
     });
 
     it('defaults custom parties to an empty list when none are stored', async () => {
@@ -2204,7 +2215,7 @@ describe('SettingsDomainOrganisationService', () => {
 
       const result = await service.getResponsibleParties(ORG_ID);
 
-      expect(result.customParties).toEqual([]);
+      expect((result as any).customParties).toEqual([]);
     });
 
     it('throws a 404 when the organization does not exist', async () => {
@@ -2232,8 +2243,10 @@ describe('SettingsDomainOrganisationService', () => {
         organizationRepository.updateById.mock.calls[0][1]
           .customResponsibleParties;
       expect(saved).toEqual(['Payroll', 'Recruiter']);
-      expect(result.customParties).toEqual(['Payroll', 'Recruiter']);
-      expect(result.defaultParties).toEqual(Object.values(ResponsibleParty));
+      expect((result as any).customParties).toEqual(['Payroll', 'Recruiter']);
+      expect((result as any).defaultParties).toEqual(
+        DEFAULT_RESPONSIBLE_PARTIES,
+      );
     });
 
     it('trims the party name before saving', async () => {
@@ -2247,7 +2260,7 @@ describe('SettingsDomainOrganisationService', () => {
         name: '  Recruiter  ',
       } as any);
 
-      expect(result.customParties).toEqual(['Recruiter']);
+      expect((result as any).customParties).toEqual(['Recruiter']);
     });
 
     it('rejects a party that duplicates a default option', async () => {
@@ -2465,7 +2478,7 @@ describe('SettingsDomainOrganisationService', () => {
       expect(saved.welcomeMessageEnabled).toBe(true);
       expect(saved.welcomeMessage).toBe('Hello there');
       expect(saved.defaultDurationEnabled).toBe(false);
-      expect(result.welcomeMessage).toEqual({
+      expect((result as any).welcomeMessage).toEqual({
         enabled: true,
         message: 'Hello there',
       });
@@ -4238,7 +4251,7 @@ describe('SettingsDomainOrganisationService', () => {
         { requiresSignature: true, fileType: 'PPT' },
       );
 
-      expect(result.employerExitDocuments).toEqual([
+      expect((result as any).employerExitDocuments).toEqual([
         {
           id: 'relieving_letter',
           name: 'Experience/Relieving Letter',

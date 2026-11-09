@@ -188,6 +188,8 @@ export const DEFAULT_EMPLOYEE_WORKFLOW_SETTINGS: EmployeeWorkflowSettings = {
         { step: 'Employee creates an account', isCompleted: false },
         { step: 'Employee completes personal details', isCompleted: false },
         { step: 'Employee uploads required documents', isCompleted: false },
+        { step: 'Employee provides emergency contact', isCompleted: false },
+        { step: 'Employee provides finance information', isCompleted: false },
       ],
       isSystem: true,
       isCompleted: false,
