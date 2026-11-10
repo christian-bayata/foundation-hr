@@ -8,6 +8,7 @@ import { EmployeeService } from './employee.service';
 import { EmployeeStatus } from './enum/employee.enum';
 import { OrganizationRepository } from '../organization/repository/organization.repository';
 import { UserRepository } from '../../generic/auth/repository/user.repository';
+import { NotificationService } from '../../generic/notification/notification.service';
 
 const INVITE_ID = '64f1b2c3d4e5f678901234ab';
 const ORG_ID = '64f1b2c3d4e5f678901234ac';
@@ -41,6 +42,7 @@ describe('EmployeeService', () => {
     findUser: jest.Mock<AnyPromiseFn>;
     updateUser: jest.Mock<AnyPromiseFn>;
   };
+  let notificationService: { dispatch: jest.Mock<AnyPromiseFn> };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -83,6 +85,9 @@ describe('EmployeeService', () => {
       findUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
       updateUser: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
     };
+    notificationService = {
+      dispatch: jest.fn<AnyPromiseFn>().mockResolvedValue(null),
+    };
 
     const { Test } = await import('@nestjs/testing');
     const module = await Test.createTestingModule({
@@ -94,6 +99,7 @@ describe('EmployeeService', () => {
         { provide: EmailService, useValue: emailService },
         { provide: ConfigService, useValue: configService },
         { provide: UserRepository, useValue: userRepository },
+        { provide: NotificationService, useValue: notificationService },
       ],
     }).compile();
 
@@ -232,6 +238,114 @@ describe('EmployeeService', () => {
       await expect(service.getEmployee(INVITE_ID)).rejects.toThrow(
         AppException,
       );
+    });
+  });
+
+  describe('updateEmployeeDetails', () => {
+    const user = {
+      userId: ADMIN_ID,
+      email: 'admin@example.com',
+      employeeId: INVITE_ID,
+    };
+
+    it('merges nested profile sections and replaces contacts', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        status: EmployeeStatus.ACTIVE,
+        personalDetails: {
+          phone: '08012345678',
+          dateOfBirth: null,
+          nationality: 'Nigerian',
+        },
+        homeAddress: {
+          address: '1 Marina Road',
+          country: 'Ghana',
+          state: 'Accra',
+        },
+        academicInfo: null,
+        financeInformation: {
+          bankDetails: { bank: 'GTBank', accountNumber: '123' },
+          pensionDetails: null,
+          taxDetails: { tin: 'TIN-1' },
+        },
+        contacts: [{ type: 'guarantor', fullName: 'Old Contact' }],
+      });
+      employeeRepository.updateById.mockResolvedValue({ _id: INVITE_ID });
+
+      await service.updateEmployeeDetails(
+        INVITE_ID,
+        {
+          firstName: 'Jane',
+          personalDetails: {
+            phone: '',
+            dateOfBirth: '1990-01-02',
+            maritalStatus: 'single',
+          },
+          homeAddress: { country: 'Nigeria' },
+          academicInfo: { institution: 'University of Lagos' },
+          financeInformation: {
+            bankDetails: { accountNumber: '456' },
+            taxDetails: { stateOfResidence: 'Lagos' },
+          },
+          contacts: [
+            {
+              type: 'emergency_contact',
+              fullName: 'New Contact',
+              phone: '08087654321',
+            },
+          ],
+        } as any,
+        user,
+      );
+
+      const update = employeeRepository.updateById.mock.calls[0][1] as any;
+
+      expect(update.firstName).toBe('Jane');
+      expect(update.personalDetails).toEqual({
+        phone: null,
+        dateOfBirth: new Date('1990-01-02'),
+        nationality: 'Nigerian',
+        maritalStatus: 'single',
+      });
+      expect(update.homeAddress).toEqual({
+        address: '1 Marina Road',
+        country: 'Nigeria',
+        state: 'Accra',
+      });
+      expect(update.academicInfo).toEqual({
+        institution: 'University of Lagos',
+      });
+      expect(update.financeInformation).toEqual({
+        bankDetails: { bank: 'GTBank', accountNumber: '456' },
+        pensionDetails: null,
+        taxDetails: { tin: 'TIN-1', stateOfResidence: 'Lagos' },
+      });
+      expect(update.contacts).toEqual([
+        {
+          type: 'emergency_contact',
+          fullName: 'New Contact',
+          phone: '08087654321',
+        },
+      ]);
+    });
+
+    it('only updates scalar fields when no profile section is supplied', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        status: EmployeeStatus.ACTIVE,
+        personalDetails: { phone: '08012345678' },
+      });
+      employeeRepository.updateById.mockResolvedValue({ _id: INVITE_ID });
+
+      await service.updateEmployeeDetails(
+        INVITE_ID,
+        { firstName: 'Jane' } as any,
+        user,
+      );
+
+      expect(employeeRepository.updateById).toHaveBeenCalledWith(INVITE_ID, {
+        firstName: 'Jane',
+      });
     });
   });
 

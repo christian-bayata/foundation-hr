@@ -18,7 +18,10 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { CurrentUser as ICurrentUser, IRequest } from '../../../common';
 import { EmployeeService } from './employee.service';
-import { CreateEmployeeDto } from './dto/create-employee.dto';
+import {
+  CreateEmployeeDto,
+  UpdateEmployeeDto,
+} from './dto/create-employee.dto';
 import {
   OnboardingBasicInformationDto,
   OnboardingDocumentsDto,
@@ -127,8 +130,7 @@ export class EmployeeController {
     @CurrentUser() user: ICurrentUser,
     @Query('employeeId')
     employeeId: string,
-    // @Body(new JoiValidationPipe(updateEmployeeSchema))
-    updateEmployeeDto: CreateEmployeeDto,
+    @Body() updateEmployeeDto: UpdateEmployeeDto,
   ) {
     const data = await this.employeeService.updateEmployeeDetails(
       employeeId,

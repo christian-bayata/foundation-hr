@@ -151,6 +151,37 @@ export class GoalRepository {
     }
   }
 
+  async findEmployeeGoals(
+    organizationId: string,
+    employeeId: string,
+  ): Promise<GoalDocument[]> {
+    try {
+      return await this.goalModel
+        .find({ organizationId, level: GoalLevel.EMPLOYEE, employeeId })
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findEmployeeGoalsByEmployeeIds(
+    organizationId: string,
+    employeeIds: string[],
+  ): Promise<GoalDocument[]> {
+    try {
+      if (employeeIds.length === 0) return [];
+      return await this.goalModel
+        .find({
+          organizationId,
+          level: GoalLevel.EMPLOYEE,
+          employeeId: { $in: employeeIds },
+        })
+        .exec();
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async deleteOrgDepartment(where: PropDataInput): Promise<void> {
     try {
       await this.goalModel.deleteMany(where).exec();

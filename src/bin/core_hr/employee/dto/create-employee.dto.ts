@@ -8,12 +8,20 @@ import {
 } from 'class-validator';
 import { IRequest } from '../../../../common';
 import {
+  ContactType,
   ContractDuration,
   EmployeeType,
   JobType,
   ProbationPeriod,
   WorkMode,
 } from '../enum/employee.enum';
+import {
+  AcademicInfo,
+  FinanceInformation,
+  HomeAddress,
+  PersonalDetails,
+} from '../entity/employee.schema';
+import { EmployeeContactDto } from './onboarding-contacts.dto';
 
 export class CreateEmployeeDto {
   @IsOptional()
@@ -84,4 +92,21 @@ export class CreateEmployeeDto {
   salaryCurrency?: string;
 
   req?: IRequest;
+}
+
+export class UpdateEmployeeDto extends CreateEmployeeDto {
+  @IsOptional()
+  personalDetails?: PersonalDetails;
+
+  @IsOptional()
+  homeAddress?: HomeAddress;
+
+  @IsOptional()
+  academicInfo?: AcademicInfo;
+
+  @IsOptional()
+  financeInformation?: FinanceInformation;
+
+  @IsOptional()
+  contacts?: EmployeeContactDto[];
 }

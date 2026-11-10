@@ -6,7 +6,10 @@ import { EmailService } from '../../../email/email.service';
 import { MailDispatcherDto } from '../../../email/dto/send-mail.dto';
 import { employeeInviteTemplate } from '../../../email/template/employee-invite.template';
 import { passwordResetTemplate } from '../../../email/template/password-reset.template';
-import { CreateEmployeeDto } from './dto/create-employee.dto';
+import {
+  CreateEmployeeDto,
+  UpdateEmployeeDto,
+} from './dto/create-employee.dto';
 import {
   OnboardingBasicInformationDto,
   OnboardingDocumentDto,
@@ -242,7 +245,7 @@ export class EmployeeService {
    */
   async updateEmployeeDetails(
     employeeId: string,
-    dto: CreateEmployeeDto,
+    dto: UpdateEmployeeDto,
     user: ICurrentUser,
   ): Promise<unknown> {
     try {
@@ -256,9 +259,14 @@ export class EmployeeService {
       if (
         user.employeeId &&
         user.employeeId !== employeeId &&
-        !([SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.HR_OPS, SystemRole.DEPT_MANAGER] as string[]).includes(
-          user.userType ?? '',
-        )
+        !(
+          [
+            SystemRole.COMPANY_OWNER,
+            SystemRole.HR_ADMIN,
+            SystemRole.HR_OPS,
+            SystemRole.DEPT_MANAGER,
+          ] as string[]
+        ).includes(user.userType ?? '')
       ) {
         AppResponse.error({
           message: `You can only edit your own employee details.`,
@@ -267,7 +275,7 @@ export class EmployeeService {
       }
 
       const update: Record<string, any> = dto
-        ? this.buildEmployeePayload(dto)
+        ? this.buildEmployeeUpdatePayload(dto, employee)
         : {};
 
       const updated = await this.employeeRepository.updateById(
@@ -1226,6 +1234,154 @@ export class EmployeeService {
     }
 
     return payload;
+  }
+
+  /**
+   * @Responsibility: Build an update payload that combines the scalar employee
+   * fields with the profile sections (personal details, home address, academic
+   * info, finance information and contacts). Nested objects are merged into the
+   * persisted values so partial section updates never wipe existing fields,
+   * while contacts are treated as a replacement list.
+   */
+  private buildEmployeeUpdatePayload(
+    dto: UpdateEmployeeDto,
+    employee: EmployeeDocument,
+  ): Record<string, any> {
+    const payload = this.buildEmployeePayload(dto);
+
+    const personalDetails = this.buildSectionUpdate(
+      employee.personalDetails,
+      dto.personalDetails,
+      ['dateOfBirth'],
+    );
+    if (personalDetails !== undefined) {
+      payload.personalDetails = personalDetails;
+    }
+
+    const homeAddress = this.buildSectionUpdate(
+      employee.homeAddress,
+      dto.homeAddress,
+    );
+    if (homeAddress !== undefined) {
+      payload.homeAddress = homeAddress;
+    }
+
+    const academicInfo = this.buildSectionUpdate(
+      employee.academicInfo,
+      dto.academicInfo,
+    );
+    if (academicInfo !== undefined) {
+      payload.academicInfo = academicInfo;
+    }
+
+    const financeInformation = this.buildFinanceInformationUpdate(
+      employee.financeInformation,
+      dto.financeInformation,
+    );
+    if (financeInformation !== undefined) {
+      payload.financeInformation = financeInformation;
+    }
+
+    if (dto.contacts !== undefined) {
+      payload.contacts = dto.contacts
+        ? dto.contacts.map((contact) => this.buildContactUpdate(contact))
+        : [];
+    }
+
+    return payload;
+  }
+
+  /**
+   * @Responsibility: Merge an incoming profile section into its persisted
+   * counterpart, normalizing blank strings and coercing configured date fields.
+   */
+  private buildSectionUpdate<T extends Record<string, any>>(
+    existing: T | null | undefined,
+    incoming: Partial<T> | null | undefined,
+    dateFields: string[] = [],
+  ): Record<string, any> | null | undefined {
+    if (incoming === undefined) {
+      return undefined;
+    }
+
+    if (incoming === null) {
+      return null;
+    }
+
+    const merged: Record<string, any> = existing ? { ...existing } : {};
+
+    for (const [key, value] of Object.entries(incoming)) {
+      if (value === undefined) {
+        continue;
+      }
+
+      merged[key] = dateFields.includes(key)
+        ? this.normalizeDate(value)
+        : typeof value === 'string'
+          ? this.normalize(value)
+          : value;
+    }
+
+    return merged;
+  }
+
+  /**
+   * @Responsibility: Merge finance information one level deep so updates to a
+   * single subsection (bank, pension or tax) preserve the others.
+   */
+  private buildFinanceInformationUpdate(
+    existing: FinanceInformation | null | undefined,
+    incoming: Partial<FinanceInformation> | null | undefined,
+  ): Record<string, any> | null | undefined {
+    if (incoming === undefined) {
+      return undefined;
+    }
+
+    if (incoming === null) {
+      return null;
+    }
+
+    const merged: Record<string, any> = existing ? { ...existing } : {};
+    const sections = [
+      'bankDetails',
+      'pensionDetails',
+      'taxDetails',
+    ] as const;
+
+    for (const section of sections) {
+      const sectionUpdate = this.buildSectionUpdate(
+        existing?.[section],
+        incoming[section] ?? undefined,
+      );
+      if (sectionUpdate !== undefined) {
+        merged[section] = sectionUpdate;
+      }
+    }
+
+    return merged;
+  }
+
+  private buildContactUpdate(
+    contact: NonNullable<UpdateEmployeeDto['contacts']>[number],
+  ): Record<string, any> {
+    const payload: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(contact)) {
+      if (value === undefined) {
+        continue;
+      }
+      payload[key] = typeof value === 'string' ? this.normalize(value) : value;
+    }
+
+    return payload;
+  }
+
+  private normalizeDate(value: any): Date | null {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+
+    return value instanceof Date ? value : new Date(value);
   }
 
   /**

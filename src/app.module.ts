@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { createObserveModule } from '@nestjs/observe';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -20,9 +19,8 @@ import { SettingModule } from './bin/generic/setting/setting.module';
 import { FileUploadModule } from './file-upload/file-upload.module';
 import { EventModule } from './event/event.module';
 import { HttpExceptionFilter } from './common';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { RoleGuard } from './common/guards/role.guard';
 import { GoalSettingModule } from './bin/performance_mgt/goal-setting/goal-settings.module';
+import { AppraisalModule } from './bin/performance_mgt/appraisal/appraisal.module';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -41,6 +39,7 @@ import { GoalSettingModule } from './bin/performance_mgt/goal-setting/goal-setti
     OffboardingModule,
     OnboardingModule,
     GoalSettingModule,
+    AppraisalModule,
     RequestModule,
     SettingModule,
     FileUploadModule,
