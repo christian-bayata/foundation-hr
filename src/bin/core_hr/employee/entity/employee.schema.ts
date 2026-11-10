@@ -124,6 +124,9 @@ export class BankDetails {
 
   @Prop({ type: String, trim: true, default: null })
   bvn: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  swiftCode: string | null;
 }
 
 export const BankDetailsSchema = SchemaFactory.createForClass(BankDetails);

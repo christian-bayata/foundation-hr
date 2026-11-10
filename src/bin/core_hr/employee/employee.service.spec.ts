@@ -347,6 +347,50 @@ describe('EmployeeService', () => {
         firstName: 'Jane',
       });
     });
+
+    it('updates finance information and replaces documents', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        status: EmployeeStatus.ACTIVE,
+        financeInformation: null,
+        documents: [],
+      });
+      employeeRepository.updateById.mockResolvedValue({ _id: INVITE_ID });
+
+      await service.updateEmployeeDetails(
+        INVITE_ID,
+        {
+          financeInformation: {
+            bankDetails: { bank: 'First bank', accountNumber: '0123456789' },
+          },
+          documents: [
+            {
+              name: 'National ID',
+              uploadedBy: INVITE_ID,
+              type: 'national_id',
+              uploadDate: '2024-01-01',
+              url: 'https://example.com/id.pdf',
+            },
+          ],
+        } as any,
+        user,
+      );
+
+      const update = employeeRepository.updateById.mock.calls[0][1] as any;
+
+      expect(update.financeInformation).toEqual({
+        bankDetails: { bank: 'First bank', accountNumber: '0123456789' },
+      });
+      expect(update.documents).toEqual([
+        {
+          name: 'National ID',
+          uploadedBy: INVITE_ID,
+          type: 'national_id',
+          uploadDate: new Date('2024-01-01'),
+          url: 'https://example.com/id.pdf',
+        },
+      ]);
+    });
   });
 
   describe('saveDraft', () => {

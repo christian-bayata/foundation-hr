@@ -17,6 +17,7 @@ import {
 } from '../enum/employee.enum';
 import {
   AcademicInfo,
+  EmployeeUploadedDocument,
   FinanceInformation,
   HomeAddress,
   PersonalDetails,
@@ -81,6 +82,10 @@ export class CreateEmployeeDto {
 
   @IsOptional()
   @IsString()
+  personalEmail?: string;
+
+  @IsOptional()
+  @IsString()
   supervisor?: string;
 
   @IsOptional()
@@ -109,4 +114,7 @@ export class UpdateEmployeeDto extends CreateEmployeeDto {
 
   @IsOptional()
   contacts?: EmployeeContactDto[];
+
+  @IsOptional()
+  documents: EmployeeUploadedDocument[];
 }

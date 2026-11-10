@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { QueryFilter } from 'mongoose';
+import { Mongoose, QueryFilter } from 'mongoose';
 import { AppResponse } from '../../../common/response/app-response';
 import { EmailService } from '../../../email/email.service';
 import { MailDispatcherDto } from '../../../email/dto/send-mail.dto';
@@ -250,7 +250,9 @@ export class EmployeeService {
   ): Promise<unknown> {
     try {
       const employee =
-        (await this.employeeRepository.findById(employeeId)) ??
+        (await this.employeeRepository.findOne({
+          _id: employeeId,
+        })) ??
         AppResponse.error({
           message: `Employee not found`,
           status: HttpStatus.NOT_FOUND,
@@ -275,17 +277,12 @@ export class EmployeeService {
       }
 
       const update: Record<string, any> = dto
-        ? this.buildEmployeeUpdatePayload(dto, employee)
+        ? this.buildEmployeeUpdatePayload(dto, employee.toObject())
         : {};
 
-      const updated = await this.employeeRepository.updateById(
-        employeeId,
-        update,
-      );
+      await this.employeeRepository.updateById(employeeId, update);
 
-      this.logger.log(`Employee details updated: ${employeeId}`);
-
-      return updated;
+      return 'Employee details updated';
     } catch (error: any) {
       error.location = `EmployeeServices.${this.updateEmployeeDetails.name} method`;
       AppResponse.error(error);
@@ -1288,6 +1285,12 @@ export class EmployeeService {
         : [];
     }
 
+    if (dto.documents !== undefined) {
+      payload.documents = dto.documents
+        ? dto.documents.map((document) => this.buildDocumentUpdate(document))
+        : [];
+    }
+
     return payload;
   }
 
@@ -1342,11 +1345,7 @@ export class EmployeeService {
     }
 
     const merged: Record<string, any> = existing ? { ...existing } : {};
-    const sections = [
-      'bankDetails',
-      'pensionDetails',
-      'taxDetails',
-    ] as const;
+    const sections = ['bankDetails', 'pensionDetails', 'taxDetails'] as const;
 
     for (const section of sections) {
       const sectionUpdate = this.buildSectionUpdate(
@@ -1359,6 +1358,28 @@ export class EmployeeService {
     }
 
     return merged;
+  }
+
+  private buildDocumentUpdate(
+    document: NonNullable<UpdateEmployeeDto['documents']>[number],
+  ): Record<string, any> {
+    const payload: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(document)) {
+      if (value === undefined) {
+        continue;
+      }
+
+      if (key === 'uploadDate') {
+        payload[key] = this.normalizeDate(value);
+      } else if (typeof value === 'string') {
+        payload[key] = this.normalize(value);
+      } else {
+        payload[key] = value;
+      }
+    }
+
+    return payload;
   }
 
   private buildContactUpdate(
