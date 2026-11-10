@@ -380,6 +380,9 @@ export class Employee {
   @Prop({ type: PersonalDetailsSchema, default: null })
   personalDetails: PersonalDetails | null;
 
+  @Prop({ type: String, default: null })
+  personalEmail: HomeAddress | null;
+
   @Prop({ type: HomeAddressSchema, default: null })
   homeAddress: HomeAddress | null;
 
