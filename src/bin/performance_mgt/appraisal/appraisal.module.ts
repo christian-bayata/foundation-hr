@@ -38,6 +38,11 @@ import { AppraisalCyclesController } from './controllers/appraisal-cycles.contro
 import { AppraisalsController } from './controllers/appraisals.controller';
 import { AppraisalReviewsController } from './controllers/appraisal-reviews.controller';
 import { AppraisalCommentsController } from './controllers/appraisal-comments.controller';
+import { UserRoleRepository } from '../../generic/setting/access-control/repository/user-role.repository';
+import {
+  UserRole,
+  UserRoleSchema,
+} from '../../generic/setting/access-control/entity/user-role.schema';
 
 @Module({
   imports: [
@@ -51,6 +56,7 @@ import { AppraisalCommentsController } from './controllers/appraisal-comments.co
         schema: AppraisalBehaviouralSchema,
       },
       { name: AppraisalComment.name, schema: AppraisalCommentSchema },
+      { name: UserRole.name, schema: UserRoleSchema },
     ]),
     EmployeeModule,
     OrganizationModule,
@@ -73,6 +79,7 @@ import { AppraisalCommentsController } from './controllers/appraisal-comments.co
     AppraisalsService,
     AppraisalReviewsService,
     AppraisalCommentsService,
+    UserRoleRepository,
   ],
   exports: [
     AppraisalCycleRepository,
