@@ -67,7 +67,6 @@ export class EmployeeRepository {
    */
   async findById(id: string): Promise<EmployeeDocument | null> {
     try {
-      console.log(id);
       return await this.employeeModel.findById(id);
     } catch (error) {
       throw error;

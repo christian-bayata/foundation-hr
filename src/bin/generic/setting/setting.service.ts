@@ -39,8 +39,6 @@ import { OrganizationDepartment } from '../../core_hr/organization/entity/organi
 import { Invoice } from './organisation/entity/invoice.schema';
 import { OrganizationPolicy } from './organisation/entity/organization-policy.schema';
 import { DepartmentView } from './domain/settings.domain.organisation.service';
-import { EmployeeDocument } from '../../core_hr/employee/entity/employee.schema';
-import { HierarchyTreeNode } from '../../core_hr/employee/interface/employee.interface';
 import { SystemRole } from '../auth/enum/role.enum';
 import { UserRoleFlag } from './organisation/enum/organisation.enum';
 
@@ -401,11 +399,11 @@ export class SettingService {
    * @Responsibility: Module-level facade to retrieve an organization's organisation hierarchy settings
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<HierarchyTreeNode[]>}
+   * @returns {Promise<any[]>}
    */
   getOrgOrganisationHierarchy(
     organizationId: string,
-  ): Promise<HierarchyTreeNode[]> {
+  ): Promise<any[]> {
     return this.organisationDomainService.getOrganisationHierarchy(
       organizationId,
     );
@@ -416,12 +414,12 @@ export class SettingService {
    *
    * @param organizationId - The organization to scope the query to
    * @param dto - The employee reassignment payload
-   * @returns {Promise<EmployeeDocument>}
+   * @returns {Promise<any[]>}
    */
   updateOrgOrganisationHierarchy(
     organizationId: string,
-    dto: UpdateHierarchyDto,
-  ): Promise<EmployeeDocument> {
+    dto: UpdateHierarchyDto[],
+  ): Promise<any[]> {
     return this.organisationDomainService.updateOrganisationHierarchy(
       organizationId,
       dto,

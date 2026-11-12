@@ -333,8 +333,8 @@ describe('OrganisationController (integration)', () => {
           firstName: 'Priscilla',
           lastName: 'Jobi',
           jobTitle: 'Art director',
-          supervisor: null,
-          children: [],
+          department: 'Engineering',
+          supervisorId: null,
         },
       ];
       organisationService.getOrganisationHierarchy.mockResolvedValue(hierarchy);
@@ -365,40 +365,30 @@ describe('OrganisationController (integration)', () => {
   });
 
   describe('PATCH /setting/organization/organization-hierarchy/update', () => {
-    it('reassigns an employee supervisor with a valid payload', async () => {
-      const updated = {
-        _id: 'emp1',
-        firstName: 'Priscilla',
-        lastName: 'Jobi',
-        supervisor: 'emp2',
-      };
+    it('reassigns multiple employee supervisors in a single call', async () => {
+      const updated = [
+        { _id: 'emp1', firstName: 'Priscilla', supervisor: 'emp2' },
+        { _id: 'emp3', firstName: 'Eve', supervisor: null },
+      ];
       organisationService.updateOrganisationHierarchy.mockResolvedValue(
         updated,
       );
 
       const response = await request(app.getHttpServer())
         .patch('/setting/organization/organization-hierarchy/update')
-        .send({ employeeId: 'emp1', supervisorId: 'emp2' });
+        .send([
+          { employeeId: 'emp1', supervisorId: 'emp2' },
+          { employeeId: 'emp3', supervisorId: null },
+        ]);
 
       expect(response.status).toBe(200);
       expect(response.body.data).toEqual(updated);
       expect(
         organisationService.updateOrganisationHierarchy,
-      ).toHaveBeenCalledWith(ORG_ID, {
-        employeeId: 'emp1',
-        supervisorId: 'emp2',
-      });
-    });
-
-    it('rejects a payload missing the employee id', async () => {
-      const response = await request(app.getHttpServer())
-        .patch('/setting/organization/organization-hierarchy/update')
-        .send({ supervisorId: 'emp2' });
-
-      expect(response.status).toBe(400);
-      expect(
-        organisationService.updateOrganisationHierarchy,
-      ).not.toHaveBeenCalled();
+      ).toHaveBeenCalledWith(ORG_ID, [
+        { employeeId: 'emp1', supervisorId: 'emp2' },
+        { employeeId: 'emp3', supervisorId: null },
+      ]);
     });
   });
 

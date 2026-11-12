@@ -175,7 +175,7 @@ export class OrganisationController {
   @HttpCode(HttpStatus.OK)
   async updateOrganisationHierarchy(
     @CurrentUser() user: ICurrentUser,
-    @Body() updateHierarchyDto: UpdateHierarchyDto,
+    @Body() updateHierarchyDto: UpdateHierarchyDto[],
   ) {
     const data = await this.organisationService.updateOrganisationHierarchy(
       user.organizationId!,

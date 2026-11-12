@@ -42,8 +42,6 @@ import { FileUploadService } from '../../../../file-upload/file-upload.service';
 import { FileExtensionType } from '../../../../file-upload/enum/file-upload.enum';
 import { EmployeeRepository } from '../../../core_hr/employee/repository/employee.repository';
 import { EmployeeService } from '../../../core_hr/employee/employee.service';
-import { EmployeeDocument } from '../../../core_hr/employee/entity/employee.schema';
-import { HierarchyTreeNode } from '../../../core_hr/employee/interface/employee.interface';
 import { UpdateGeneralInfoDto } from '../organisation/dto/update-general-info.dto';
 import { UpdateBusinessDetailsDto } from '../organisation/dto/update-business-details.dto';
 import { UpdateLocationsDto } from '../organisation/dto/update-locations.dto';
@@ -553,17 +551,17 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Retrieve an organization's hierarchy as a nested tree.
-   * Employees reference their manager through the supervisor field, so the
-   * roots are the employees at the top of the reporting structure and children
-   * are the employees reporting to each node.
+   * @Responsibility: Retrieve a flat list of an organization's employees with
+   * their supervisor relationship. Each record includes the employee's
+   * department and job title, plus the id of their supervisor (null for roots).
+   * The caller is responsible for any tree formatting.
    *
    * @param organizationId - The organization to scope the query to
-   * @returns {Promise<HierarchyTreeNode[]>}
+   * @returns {Promise<any[]>}
    */
   async getOrganisationHierarchy(
     organizationId: string,
-  ): Promise<HierarchyTreeNode[]> {
+  ): Promise<any[]> {
     try {
       return await this.employeeService.getOrganisationHierarchy(
         organizationId,
@@ -576,27 +574,34 @@ export class SettingsDomainOrganisationService {
   }
 
   /**
-   * @Responsibility: Reassign an employee's supervisor to update the
+   * @Responsibility: Reassign employees' supervisors to update the
    * organization's reporting structure. The employee whose supervisor field
    * is null is the root of the hierarchy (e.g. the CEO).
    *
    * @param organizationId - The organization to scope the query to
-   * @param dto - The employee and their new supervisor
-   * @returns {Promise<EmployeeDocument>}
+   * @param dtos - The employees and their new supervisors
+   * @returns {Promise<any[]>}
    *
    * @throws {400} Self-assignment or circular reporting line
    * @throws {404} Employee or supervisor not found
    */
   async updateOrganisationHierarchy(
     organizationId: string,
-    dto: UpdateHierarchyDto,
-  ): Promise<EmployeeDocument> {
+    dtos: UpdateHierarchyDto[],
+  ): Promise<any[]> {
     try {
-      return await this.employeeService.updateSupervisor(
-        dto.employeeId,
-        dto.supervisorId ?? null,
-        organizationId,
-      );
+      const updated: any[] = [];
+
+      for (const dto of dtos) {
+        const result = await this.employeeService.updateSupervisor(
+          dto.employeeId,
+          dto.supervisorId ?? null,
+          organizationId,
+        );
+        updated.push(result);
+      }
+
+      return updated;
     } catch (error: any) {
       error.location = `SettingsDomainOrganisationService.${this.updateOrganisationHierarchy.name}`;
       AppResponse.error(error);

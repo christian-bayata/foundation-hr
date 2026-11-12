@@ -464,8 +464,8 @@ describe('SettingsDomainOrganisationService', () => {
           firstName: 'Priscilla',
           lastName: 'Jobi',
           jobTitle: 'Art director',
-          supervisor: null,
-          children: [],
+          department: 'Engineering',
+          supervisorId: null,
         },
       ];
       employeeService.getOrganisationHierarchy.mockResolvedValue(hierarchy);
@@ -491,33 +491,41 @@ describe('SettingsDomainOrganisationService', () => {
   });
 
   describe('updateOrganisationHierarchy', () => {
-    it('delegates the reassignment to the employee service', async () => {
-      const updated = {
-        _id: 'emp1',
-        firstName: 'Priscilla',
-        lastName: 'Jobi',
-        supervisor: 'emp2',
-      };
-      employeeService.updateSupervisor.mockResolvedValue(updated);
+    it('updates multiple employees in a single call', async () => {
+      const updated = [
+        { _id: 'emp1', firstName: 'Priscilla', supervisor: 'emp2' },
+        { _id: 'emp3', firstName: 'Eve', supervisor: null },
+      ];
+      employeeService.updateSupervisor
+        .mockResolvedValueOnce(updated[0])
+        .mockResolvedValueOnce(updated[1]);
 
-      const result = await service.updateOrganisationHierarchy(ORG_ID, {
-        employeeId: 'emp1',
-        supervisorId: 'emp2',
-      });
+      const result = await service.updateOrganisationHierarchy(ORG_ID, [
+        { employeeId: 'emp1', supervisorId: 'emp2' },
+        { employeeId: 'emp3', supervisorId: null },
+      ]);
 
+      expect(employeeService.updateSupervisor).toHaveBeenCalledTimes(2);
       expect(employeeService.updateSupervisor).toHaveBeenCalledWith(
         'emp1',
         'emp2',
         ORG_ID,
       );
+      expect(employeeService.updateSupervisor).toHaveBeenCalledWith(
+        'emp3',
+        null,
+        ORG_ID,
+      );
       expect(result).toEqual(updated);
     });
 
-    it('passes null through when no supervisor is provided', async () => {
+    it('unassigns supervisor when no supervisorId is provided', async () => {
       const updated = { _id: 'emp1', supervisor: null };
       employeeService.updateSupervisor.mockResolvedValue(updated);
 
-      await service.updateOrganisationHierarchy(ORG_ID, { employeeId: 'emp1' });
+      await service.updateOrganisationHierarchy(ORG_ID, [
+        { employeeId: 'emp1' },
+      ]);
 
       expect(employeeService.updateSupervisor).toHaveBeenCalledWith(
         'emp1',
@@ -535,10 +543,9 @@ describe('SettingsDomainOrganisationService', () => {
       );
 
       await expect(
-        service.updateOrganisationHierarchy(ORG_ID, {
-          employeeId: 'emp1',
-          supervisorId: 'missing',
-        }),
+        service.updateOrganisationHierarchy(ORG_ID, [
+          { employeeId: 'emp1', supervisorId: 'missing' },
+        ]),
       ).rejects.toThrow(AppException);
     });
   });

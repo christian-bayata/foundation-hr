@@ -26,7 +26,6 @@ import {
   FinanceInformation,
 } from './entity/employee.schema';
 import {
-  HierarchyTreeNode,
   ListEmployeeFilters,
   ListEmployeeQuery,
   PaginatedResult,
@@ -1479,45 +1478,33 @@ export class EmployeeService {
   }
 
   /**
-   * @Responsibility: Assemble an organization's reporting hierarchy as a
-   * nested tree. Employees whose supervisor field is null (or whose
-   * supervisor does not belong to the organization) are the root nodes.
+   * @Responsibility: Retrieve a flat list of an organization's employees with
+   * their supervisor relationship. Each record includes the employee's
+   * department and job title, plus the id of their supervisor (null for roots).
+   * The caller is responsible for any tree formatting.
    *
    * @param organizationId - Organization to build the hierarchy for
-   * @returns {Promise<HierarchyTreeNode[]>}
+   * @returns {Promise<any[]>}
    */
-  async getOrganisationHierarchy(
-    organizationId: string,
-  ): Promise<HierarchyTreeNode[]> {
+  async getOrganisationHierarchy(organizationId: string): Promise<any[]> {
     try {
       const employees = await this.employeeRepository.findByOrganization(
         organizationId,
         '_id firstName lastName employeeUniqueId department jobTitle supervisor',
       );
 
-      const nodes = new Map<string, HierarchyTreeNode>();
-
-      for (const employee of employees) {
-        nodes.set(employee._id.toString(), {
-          ...(employee as any).toObject(),
-          children: [],
-        });
-      }
-
-      const roots: HierarchyTreeNode[] = [];
-
-      for (const node of nodes.values()) {
-        const supervisorId = node.supervisor ? String(node.supervisor) : null;
-        const parent = supervisorId ? nodes.get(supervisorId) : undefined;
-
-        if (parent) {
-          parent.children.push(node);
-        } else {
-          roots.push(node);
-        }
-      }
-
-      return roots;
+      return employees.map((employee) => {
+        const obj = (employee as any).toObject();
+        return {
+          _id: obj._id,
+          firstName: obj.firstName,
+          lastName: obj.lastName,
+          employeeUniqueId: obj.employeeUniqueId,
+          department: obj.department,
+          jobTitle: obj.jobTitle,
+          supervisorId: obj.supervisor ?? null,
+        };
+      });
     } catch (error: any) {
       error.location = `EmployeeServices.${this.getOrganisationHierarchy.name} method`;
       AppResponse.error(error);

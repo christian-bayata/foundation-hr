@@ -1136,13 +1136,14 @@ describe('EmployeeService', () => {
       toObject: () => data,
     });
 
-    it('builds a nested tree from the supervisor relationships', async () => {
+    it('returns a flat list of employees with department, job title and supervisorId', async () => {
       employeeRepository.findByOrganization.mockResolvedValue([
         toDoc({
           _id: 'emp1',
           firstName: 'Priscilla',
           lastName: 'Jobi',
           jobTitle: 'Art director',
+          department: 'Engineering',
           supervisor: null,
         }),
         toDoc({
@@ -1150,6 +1151,7 @@ describe('EmployeeService', () => {
           firstName: 'Adam',
           lastName: 'Smith',
           jobTitle: 'Designer',
+          department: 'Design',
           supervisor: 'emp1',
         }),
         toDoc({
@@ -1157,6 +1159,7 @@ describe('EmployeeService', () => {
           firstName: 'Eve',
           lastName: 'Jones',
           jobTitle: 'Junior designer',
+          department: 'Design',
           supervisor: 'emp2',
         }),
       ]);
@@ -1165,6 +1168,7 @@ describe('EmployeeService', () => {
 
       expect(employeeRepository.findByOrganization).toHaveBeenCalledWith(
         ORG_ID,
+        '_id firstName lastName employeeUniqueId department jobTitle supervisor',
       );
       expect(result).toEqual([
         {
@@ -1172,39 +1176,36 @@ describe('EmployeeService', () => {
           firstName: 'Priscilla',
           lastName: 'Jobi',
           jobTitle: 'Art director',
-          supervisor: null,
-          children: [
-            {
-              _id: 'emp2',
-              firstName: 'Adam',
-              lastName: 'Smith',
-              jobTitle: 'Designer',
-              supervisor: 'emp1',
-              children: [
-                {
-                  _id: 'emp3',
-                  firstName: 'Eve',
-                  lastName: 'Jones',
-                  jobTitle: 'Junior designer',
-                  supervisor: 'emp2',
-                  children: [],
-                },
-              ],
-            },
-          ],
+          department: 'Engineering',
+          supervisorId: null,
+        },
+        {
+          _id: 'emp2',
+          firstName: 'Adam',
+          lastName: 'Smith',
+          jobTitle: 'Designer',
+          department: 'Design',
+          supervisorId: 'emp1',
+        },
+        {
+          _id: 'emp3',
+          firstName: 'Eve',
+          lastName: 'Jones',
+          jobTitle: 'Junior designer',
+          department: 'Design',
+          supervisorId: 'emp2',
         },
       ]);
     });
 
-    it('promotes employees whose supervisor is not in the org to roots', async () => {
+    it('returns supervisorId as null for root employees', async () => {
       employeeRepository.findByOrganization.mockResolvedValue([
         toDoc({ _id: 'emp1', supervisor: null }),
-        toDoc({ _id: 'emp2', supervisor: 'missing-employee' }),
       ]);
 
       const result: any = await service.getOrganisationHierarchy(ORG_ID);
 
-      expect(result.map((node: any) => node._id)).toEqual(['emp1', 'emp2']);
+      expect(result[0].supervisorId).toBeNull();
     });
 
     it('returns an empty array when the org has no employees', async () => {
