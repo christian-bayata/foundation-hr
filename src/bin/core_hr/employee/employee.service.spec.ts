@@ -229,7 +229,7 @@ describe('EmployeeService', () => {
 
       const result: any = await service.getEmployee(INVITE_ID);
 
-      expect(result).toEqual({ _id: INVITE_ID });
+      expect(result).toEqual({ _id: INVITE_ID, supervisor: null });
     });
 
     it('throws 404 when not found', async () => {
@@ -238,6 +238,94 @@ describe('EmployeeService', () => {
       await expect(service.getEmployee(INVITE_ID)).rejects.toThrow(
         AppException,
       );
+    });
+
+    it('resolves supervisor into an { id, name, avatar } object', async () => {
+      employeeRepository.findById
+        .mockResolvedValueOnce({
+          _id: INVITE_ID,
+          firstName: 'Jane',
+          lastName: 'Smith',
+          supervisor: '64f1b2c3d4e5f678901234ac',
+          toObject: () => ({
+            _id: INVITE_ID,
+            firstName: 'Jane',
+            lastName: 'Smith',
+            supervisor: '64f1b2c3d4e5f678901234ac',
+          }),
+        })
+        .mockResolvedValueOnce({
+          _id: '64f1b2c3d4e5f678901234ac',
+          firstName: 'Mike',
+          lastName: 'Ross',
+          avatarUrl: 'https://avatar.example.com/mike.png',
+        });
+
+      const result: any = await service.getEmployee(INVITE_ID);
+
+      expect(result.supervisor).toEqual({
+        id: '64f1b2c3d4e5f678901234ac',
+        name: 'Mike Ross',
+        avatar: 'https://avatar.example.com/mike.png',
+      });
+    });
+
+    it('returns supervisor null when no supervisor is assigned', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        toObject: () => ({ _id: INVITE_ID }),
+      });
+
+      const result: any = await service.getEmployee(INVITE_ID);
+
+      expect(result.supervisor).toBeNull();
+    });
+  });
+
+  describe('listEmployees', () => {
+    const toDoc = (data: any) => ({
+      _id: data._id,
+      toObject: () => data,
+    });
+
+    it('resolves each employee supervisor into an { id, name, avatar } object', async () => {
+      employeeRepository.paginatedQuery.mockResolvedValue({
+        items: [
+          toDoc({
+            _id: INVITE_ID,
+            firstName: 'Jane',
+            lastName: 'Smith',
+            supervisor: '64f1b2c3d4e5f678901234ac',
+          }),
+          toDoc({
+            _id: 'other-id',
+            firstName: 'Lonely',
+            lastName: 'Root',
+            supervisor: null,
+          }),
+        ],
+        total: 2,
+      });
+      employeeRepository.findById
+        .mockResolvedValueOnce({
+          _id: '64f1b2c3d4e5f678901234ac',
+          firstName: 'Mike',
+          lastName: 'Ross',
+          avatarUrl: 'https://avatar.example.com/mike.png',
+        })
+        .mockResolvedValueOnce(null);
+
+      const result: any = await service.listEmployees({
+        organizationId: ORG_ID,
+      } as any);
+
+      expect(result.data[0].supervisor).toEqual({
+        id: '64f1b2c3d4e5f678901234ac',
+        name: 'Mike Ross',
+        avatar: 'https://avatar.example.com/mike.png',
+      });
+      expect(result.data[1].supervisor).toBeNull();
+      expect(result.count).toBe(2);
     });
   });
 

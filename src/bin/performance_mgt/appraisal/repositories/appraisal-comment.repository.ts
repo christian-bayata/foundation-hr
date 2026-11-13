@@ -59,6 +59,16 @@ export class AppraisalCommentRepository {
     await this.commentModel.findByIdAndDelete(id).exec();
   }
 
+  async findByAppraisal(
+    organizationId: string,
+    appraisalId: string,
+  ): Promise<AppraisalCommentDocument[]> {
+    return await this.commentModel
+      .find({ organizationId, appraisalId })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
   async deleteByAppraisal(
     organizationId: string,
     appraisalId: string,

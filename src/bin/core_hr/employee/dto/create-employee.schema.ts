@@ -64,7 +64,16 @@ export const createEmployeeSchema = Joi.object({
     }),
   departmentCode: Joi.string().trim().optional().allow('', null),
   jobTitleCode: Joi.string().trim().optional().allow('', null),
-  supervisor: Joi.string().trim().optional().allow('', null),
+  supervisor: Joi.alternatives()
+    .try(
+      Joi.string().trim().allow('', null),
+      Joi.object({
+        id: Joi.string().trim().required(),
+        name: Joi.string().trim().optional().allow('', null),
+        avatar: Joi.string().trim().optional().allow('', null),
+      }).allow(null),
+    )
+    .optional(),
   salary: Joi.number().optional().allow('', null),
   salaryCurrency: Joi.string().trim().optional().allow('', null),
   personalEmail: Joi.string().trim().optional().allow('', null),

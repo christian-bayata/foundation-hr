@@ -323,7 +323,7 @@ export class Employee {
   jobTitleCode: string | null;
 
   @Prop({ type: String, default: null })
-  supervisor: string | null;
+  supervisorId: string | null;
 
   @Prop({ type: String, default: null })
   location: string | null;

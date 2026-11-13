@@ -178,12 +178,58 @@ export class EmployeeService {
           status: HttpStatus.NOT_FOUND,
         });
 
-      return employee;
+      return {
+        ...(employee.toObject ? employee.toObject() : { ...employee }),
+        supervisor: await this.resolveSupervisor(employee),
+      };
     } catch (error: any) {
       error.location = `EmployeeServices.${this.getEmployee.name} method`;
       AppResponse.error(error);
       throw error;
     }
+  }
+
+  /**
+   * @Responsibility: Resolve the persisted supervisor id into a supervisor
+   * object { id, name, avatar } for the employee summary screen. Returns null
+   * when no supervisor is assigned or the supervisor record cannot be found.
+   *
+   * @param employee - The employee whose supervisor to resolve
+   * @returns {Promise<{ id: string; name: string; avatar: string | null } | null>}
+   */
+  private async resolveSupervisor(
+    employee: EmployeeDocument,
+  ): Promise<{ id: string; name: string; avatar: string | null } | null> {
+    if (!employee.supervisorId) return null;
+
+    const supervisor = await this.employeeRepository.findById(
+      employee.supervisorId,
+    );
+    if (!supervisor) return null;
+
+    return {
+      id: supervisor._id?.toString() ?? '',
+      name: this.getEmployeeDisplayName(supervisor) ?? null,
+      avatar: supervisor.avatarUrl ?? null,
+    };
+  }
+
+  /**
+   * @Responsibility: Enrich a single employee document returned by the list
+   * endpoint with its supervisor resolved as an { id, name, avatar } object.
+   * Returns null supervisor when none is assigned or not found.
+   *
+   * @param employee - The employee document to enrich
+   * @returns {Promise<Record<string, any>>}
+   */
+  private async enrichEmployeeWithSupervisor(
+    employee: EmployeeDocument,
+  ): Promise<Record<string, any>> {
+    const obj = employee.toObject ? employee.toObject() : { ...employee };
+    return {
+      ...obj,
+      supervisor: await this.resolveSupervisor(employee),
+    };
   }
 
   /**
@@ -1207,7 +1253,10 @@ export class EmployeeService {
     pickString('probationPeriod', dto.probationPeriod);
     pickString('departmentCode', dto.departmentCode);
     pickString('jobTitleCode', dto.jobTitleCode);
-    pickString('supervisor', dto.supervisor);
+
+    if (dto.supervisorId) {
+      payload.supervisor = this.normalize(dto.supervisorId);
+    }
 
     if (
       dto.employmentDate !== undefined &&
@@ -1469,7 +1518,11 @@ export class EmployeeService {
         limit,
       );
 
-      return { data: items, count: total };
+      const updatedItems = await Promise.all(
+        items.map((employee) => this.enrichEmployeeWithSupervisor(employee)),
+      );
+
+      return { data: updatedItems, count: total };
     } catch (error: any) {
       error.location = `EmployeeServices.${this.listEmployees.name} method`;
       AppResponse.error(error);
@@ -1500,8 +1553,8 @@ export class EmployeeService {
           firstName: obj.firstName,
           lastName: obj.lastName,
           employeeUniqueId: obj.employeeUniqueId,
-          department: obj.department,
-          jobTitle: obj.jobTitle,
+          department: obj.department ?? null,
+          jobTitle: obj.jobTitle ?? null,
           supervisorId: obj.supervisor ?? null,
         };
       });
@@ -1547,7 +1600,7 @@ export class EmployeeService {
 
       if (!supervisorId) {
         const updated = await this.employeeRepository.updateById(employeeId, {
-          supervisor: null,
+          supervisorId: null,
         });
         this.logger.log(
           `Unassigned supervisor for employee ${employeeId} (org ${organizationId})`,
@@ -1588,7 +1641,7 @@ export class EmployeeService {
       }
 
       const updated = await this.employeeRepository.updateById(employeeId, {
-        supervisor: supervisorId,
+        supervisorId,
       });
 
       this.logger.log(
@@ -1625,7 +1678,7 @@ export class EmployeeService {
       ...(organizationId ? { organizationId } : {}),
     });
 
-    const nextSupervisorId = employee?.supervisor ?? null;
+    const nextSupervisorId = employee?.supervisorId ?? null;
 
     if (!nextSupervisorId) {
       return false;

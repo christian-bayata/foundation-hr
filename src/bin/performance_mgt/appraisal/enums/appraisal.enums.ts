@@ -64,3 +64,23 @@ export enum AppraisalActionType {
   RECOMPUTE = 'recompute',
   SKIP = 'skip',
 }
+
+export enum CalibrationSessionStatus {
+  DRAFT = 'draft',
+  SCHEDULED = 'scheduled',
+  ACTIVE = 'active',
+  FINALISED = 'finalised',
+  LOCKED = 'locked',
+  CLOSED = 'closed',
+}
+
+export enum ParticipantAuditAction {
+  SUBMIT_SELF = 'submit_self',
+  SUBMIT_MANAGER = 'submit_manager',
+  SUBMIT_FINAL = 'submit_final',
+  CALIBRATE = 'calibrate',
+  REROUTE = 'reroute',
+  RESET = 'reset',
+  SKIP = 'skip',
+  REMINDER_SENT = 'reminder_sent',
+}

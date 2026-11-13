@@ -24,6 +24,12 @@ import {
 } from '../entity/employee.schema';
 import { EmployeeContactDto } from './onboarding-contacts.dto';
 
+export interface SupervisorInput {
+  id: string;
+  name: string;
+  avatar: string;
+}
+
 export class CreateEmployeeDto {
   @IsOptional()
   @IsEnum(EmployeeType, { message: 'Invalid employee type.' })
@@ -85,8 +91,7 @@ export class CreateEmployeeDto {
   personalEmail?: string;
 
   @IsOptional()
-  @IsString()
-  supervisor?: string;
+  supervisorId?: string;
 
   @IsOptional()
   @IsNumber()

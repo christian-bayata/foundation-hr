@@ -22,6 +22,9 @@ import { CreateAppraisalCycleDto } from '../dto/create-appraisal-cycle.dto';
 import { UpdateAppraisalCycleDto } from '../dto/update-appraisal-cycle.dto';
 import { AddParticipantsDto } from '../dto/add-participants.dto';
 import { ListAppraisalCyclesQueryDto } from '../dto/list-appraisal-cycles-query.dto';
+import { ListCalibrationSessionsQueryDto } from '../dto/list-calibration-sessions-query.dto';
+import { CreateCalibrationSessionDto } from '../dto/create-calibration-session.dto';
+import { SendBulkReminderDto } from '../dto/send-bulk-reminder.dto';
 
 @Controller('performance-management/appraisals/cycles')
 @UseGuards(JwtAuthGuard, RoleGuard)
@@ -205,5 +208,56 @@ export class AppraisalCyclesController {
   )
   async getOptions(@CurrentUser() user: ICurrentUser) {
     return this.appraisalCyclesService.getCycleOptions(user.organizationId!);
+  }
+
+  @Get(':cycleId/calibration/sessions')
+  @Roles(
+    SystemRole.COMPANY_OWNER,
+    SystemRole.HR_ADMIN,
+    SystemRole.HR_OPS,
+    SystemRole.DEPT_MANAGER,
+  )
+  async listCalibrationSessions(
+    @CurrentUser() user: ICurrentUser,
+    @Query('cycleId') cycleId: string,
+    @Query() query: ListCalibrationSessionsQueryDto,
+  ) {
+    return this.appraisalCyclesService.listCalibrationSessions(
+      user.organizationId!,
+      cycleId,
+      query,
+    );
+  }
+
+  @Post(':cycleId/calibration/open')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.HR_OPS)
+  @HttpCode(HttpStatus.CREATED)
+  async openCalibrationSession(
+    @CurrentUser() user: ICurrentUser,
+    @Query('cycleId') cycleId: string,
+    @Body() dto: CreateCalibrationSessionDto,
+  ) {
+    return this.appraisalCyclesService.openCalibrationSession(
+      user.organizationId!,
+      user,
+      cycleId,
+      dto,
+    );
+  }
+
+  @Post(':cycleId/participants/send-reminder')
+  @Roles(SystemRole.COMPANY_OWNER, SystemRole.HR_ADMIN, SystemRole.HR_OPS)
+  @HttpCode(HttpStatus.OK)
+  async sendReminderToParticipants(
+    @CurrentUser() user: ICurrentUser,
+    @Query('cycleId') cycleId: string,
+    @Body() dto: SendBulkReminderDto,
+  ) {
+    return this.appraisalCyclesService.sendReminderToParticipants(
+      user.organizationId!,
+      user,
+      cycleId,
+      dto,
+    );
   }
 }

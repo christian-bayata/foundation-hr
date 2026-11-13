@@ -47,6 +47,12 @@ export class AppraisalComment {
 
   @Prop({ type: String, default: null })
   updatedBy: string | null;
+
+  @Prop({ type: Date, default: null })
+  createdAt: Date;
+
+  @Prop({ type: Date, default: null })
+  updatedAt: Date;
 }
 
 export const AppraisalCommentSchema =

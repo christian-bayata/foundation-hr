@@ -231,6 +231,72 @@ describe('EmployeeController (integration)', () => {
       expect(res.status).toBe(400);
     });
 
+    it('accepts a supervisor object and stores only the supervisor id', async () => {
+      employeeRepository.findOne.mockResolvedValue(null);
+      employeeRepository.create.mockResolvedValue({
+        ...payload,
+        supervisor: '64f1b2c3d4e5f678901234ac',
+        status: EmployeeStatus.DRAFT,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/create')
+        .send({
+          ...payload,
+          supervisor: {
+            id: '64f1b2c3d4e5f678901234ac',
+            name: 'Mike Ross',
+            avatar: 'https://avatar.example.com/mike.png',
+          },
+        });
+
+      expect(res.status).toBe(201);
+      expect(employeeRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          supervisor: '64f1b2c3d4e5f678901234ac',
+        }),
+      );
+    });
+
+    it('accepts a supervisor string id when provided', async () => {
+      employeeRepository.findOne.mockResolvedValue(null);
+      employeeRepository.create.mockResolvedValue({
+        ...payload,
+        supervisor: '64f1b2c3d4e5f678901234ac',
+        status: EmployeeStatus.DRAFT,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/create')
+        .send({
+          ...payload,
+          supervisor: '64f1b2c3d4e5f678901234ac',
+        });
+
+      expect(res.status).toBe(201);
+      expect(employeeRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          supervisor: '64f1b2c3d4e5f678901234ac',
+        }),
+      );
+    });
+
+    it('omits supervisor when not provided', async () => {
+      employeeRepository.findOne.mockResolvedValue(null);
+      employeeRepository.create.mockResolvedValue({
+        ...payload,
+        status: EmployeeStatus.DRAFT,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/employees/create')
+        .send(payload);
+
+      expect(res.status).toBe(201);
+      const created = (employeeRepository.create as jest.Mock).mock.calls[0][0] as Record<string, any>;
+      expect(created.supervisor).toBeUndefined();
+    });
+
     it('rejects an invalid contract duration', async () => {
       const res = await request(app.getHttpServer())
         .post('/employees/create')
@@ -279,6 +345,110 @@ describe('EmployeeController (integration)', () => {
       );
 
       expect(res.status).toBe(404);
+    });
+
+    it('returns the supervisor as an object { id, name, avatar }', async () => {
+      employeeRepository.findById
+        .mockResolvedValueOnce({
+          _id: INVITE_ID,
+          email: 'jane@example.com',
+          firstName: 'Jane',
+          lastName: 'Smith',
+          supervisor: '64f1b2c3d4e5f678901234ac',
+          toObject: () => ({
+            _id: INVITE_ID,
+            email: 'jane@example.com',
+            firstName: 'Jane',
+            lastName: 'Smith',
+            supervisor: '64f1b2c3d4e5f678901234ac',
+          }),
+        })
+        .mockResolvedValueOnce({
+          _id: '64f1b2c3d4e5f678901234ac',
+          email: 'mike@example.com',
+          firstName: 'Mike',
+          lastName: 'Ross',
+          avatarUrl: 'https://avatar.example.com/mike.png',
+        });
+
+      const res = await request(app.getHttpServer()).get(
+        `/employees/retrieve/${INVITE_ID}`,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.supervisor).toEqual({
+        id: '64f1b2c3d4e5f678901234ac',
+        name: 'Mike Ross',
+        avatar: 'https://avatar.example.com/mike.png',
+      });
+    });
+
+    it('returns supervisor null when no supervisor is assigned', async () => {
+      employeeRepository.findById.mockResolvedValue({
+        _id: INVITE_ID,
+        email: 'jane@example.com',
+        toObject: () => ({ _id: INVITE_ID, email: 'jane@example.com' }),
+      });
+
+      const res = await request(app.getHttpServer()).get(
+        `/employees/retrieve/${INVITE_ID}`,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.supervisor).toBeNull();
+    });
+  });
+
+  describe('GET /employees/retrieve/all', () => {
+    it('returns each employee with supervisor as an { id, name, avatar } object', async () => {
+      employeeRepository.paginatedQuery.mockResolvedValue({
+        items: [
+          {
+            _id: INVITE_ID,
+            firstName: 'Jane',
+            lastName: 'Smith',
+            supervisor: '64f1b2c3d4e5f678901234ac',
+            toObject: () => ({
+              _id: INVITE_ID,
+              firstName: 'Jane',
+              lastName: 'Smith',
+              supervisor: '64f1b2c3d4e5f678901234ac',
+            }),
+          },
+          {
+            _id: 'other-id',
+            firstName: 'Lonely',
+            lastName: 'Root',
+            supervisor: null,
+            toObject: () => ({
+              _id: 'other-id',
+              firstName: 'Lonely',
+              lastName: 'Root',
+              supervisor: null,
+            }),
+          },
+        ],
+        total: 2,
+      });
+      employeeRepository.findById.mockResolvedValue({
+        _id: '64f1b2c3d4e5f678901234ac',
+        firstName: 'Mike',
+        lastName: 'Ross',
+        avatarUrl: 'https://avatar.example.com/mike.png',
+      });
+
+      const res = await request(app.getHttpServer()).get(
+        '/employees/retrieve/all',
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.data[0].supervisor).toEqual({
+        id: '64f1b2c3d4e5f678901234ac',
+        name: 'Mike Ross',
+        avatar: 'https://avatar.example.com/mike.png',
+      });
+      expect(res.body.data.data[1].supervisor).toBeNull();
+      expect(res.body.data.count).toBe(2);
     });
   });
 
