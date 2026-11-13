@@ -473,7 +473,7 @@ export class GoalSettingsService {
             .join(' '),
           role: emp.jobTitleCode ?? null,
           department: emp.departmentCode ?? null,
-          supervisor: emp.supervisor ?? null,
+          supervisor: emp.supervisorId ?? null,
           noOfGoals: goals.total,
           goalStatus: goals.total > 0 ? GoalStatus.ACTIVE : null,
         });

@@ -136,8 +136,8 @@ export class RequestService {
               employee!.departmentCode,
             )
           : Promise.resolve(null),
-        employee!.supervisor
-          ? this.employeeRepository.findById(employee!.supervisor)
+        employee!.supervisorId
+          ? this.employeeRepository.findById(employee!.supervisorId)
           : Promise.resolve(null),
       ]);
 
