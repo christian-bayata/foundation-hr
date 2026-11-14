@@ -1,12 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CalibrationSession, CalibrationSessionDocument } from '../schemas/calibration-session.schema';
-import { CalibrationSessionStatus } from '../enums/appraisal.enums';
+import {
+  CalibrationSession,
+  CalibrationSessionDocument,
+} from '../schemas/calibration-session.schema';
+import {
+  CalibrationModel,
+  CalibrationSessionStatus,
+} from '../enums/appraisal.enums';
 
 export interface ListCalibrationSessionFilters {
   search?: string;
+  cycleId?: string;
   status?: CalibrationSessionStatus;
+  model?: CalibrationModel;
+  departmentCode?: string;
+  ownerId?: string;
   batch?: number;
   limit?: number;
   sortBy?: string;
@@ -25,7 +35,9 @@ export class CalibrationSessionRepository {
     private readonly sessionModel: Model<CalibrationSessionDocument>,
   ) {}
 
-  async create(data: Partial<CalibrationSession>): Promise<CalibrationSessionDocument> {
+  async create(
+    data: Partial<CalibrationSession>,
+  ): Promise<CalibrationSessionDocument> {
     return (await this.sessionModel.create(data)) as CalibrationSessionDocument;
   }
 
@@ -67,25 +79,8 @@ export class CalibrationSessionRepository {
     const { batch = 1, limit = 10 } = filters;
     const skip = (batch - 1) * limit;
 
-    const filter: Record<string, unknown> = {
-      organizationId,
-      ...(filters.status && { status: filters.status }),
-    };
-
-    if (filters.search) {
-      const regex = new RegExp(
-        filters.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-        'i',
-      );
-      filter.$or = [{ name: regex }, { description: regex }];
-    }
-
-    const sort: Record<string, 1 | -1> = {};
-    if (filters.sortBy) {
-      sort[filters.sortBy] = filters.sortOrder === 'asc' ? 1 : -1;
-    } else {
-      sort.createdAt = -1;
-    }
+    const filter = this.buildFilter(filters, organizationId);
+    const sort = this.buildSort(filters);
 
     const [items, total] = await Promise.all([
       this.sessionModel.find(filter).sort(sort).skip(skip).limit(limit).exec(),
@@ -93,6 +88,38 @@ export class CalibrationSessionRepository {
     ]);
 
     return { items, total };
+  }
+
+  async findAll(
+    filters: ListCalibrationSessionFilters,
+    organizationId: string,
+  ): Promise<CalibrationSessionDocument[]> {
+    return await this.sessionModel
+      .find(this.buildFilter(filters, organizationId))
+      .sort(this.buildSort(filters))
+      .exec();
+  }
+
+  async countByStatus(
+    organizationId: string,
+    cycleId?: string,
+  ): Promise<Record<string, number>> {
+    const rows = await this.sessionModel
+      .aggregate<{ _id: string; count: number }>([
+        {
+          $match: {
+            organizationId,
+            ...(cycleId && { cycleId }),
+          },
+        },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ])
+      .exec();
+
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row._id] = row.count;
+      return acc;
+    }, {});
   }
 
   async findByCycle(
@@ -119,5 +146,52 @@ export class CalibrationSessionRepository {
     cycleId: string,
   ): Promise<void> {
     await this.sessionModel.deleteMany({ organizationId, cycleId }).exec();
+  }
+
+  private buildFilter(
+    filters: ListCalibrationSessionFilters,
+    organizationId: string,
+  ): Record<string, unknown> {
+    const filter: Record<string, unknown> = {
+      organizationId,
+      ...(filters.cycleId && { cycleId: filters.cycleId }),
+      ...(filters.status && { status: filters.status }),
+      ...(filters.model && { calibrationModel: filters.model }),
+      ...(filters.ownerId && { sessionOwnerId: filters.ownerId }),
+    };
+
+    if (filters.departmentCode) {
+      filter.$and = [
+        {
+          $or: [
+            { includeAllDepartments: true },
+            { departmentCodes: filters.departmentCode },
+            { departmentCode: filters.departmentCode },
+          ],
+        },
+      ];
+    }
+
+    if (filters.search) {
+      const regex = new RegExp(
+        filters.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'i',
+      );
+      filter.$or = [{ name: regex }, { description: regex }];
+    }
+
+    return filter;
+  }
+
+  private buildSort(
+    filters: ListCalibrationSessionFilters,
+  ): Record<string, 1 | -1> {
+    const sort: Record<string, 1 | -1> = {};
+    if (filters.sortBy) {
+      sort[filters.sortBy] = filters.sortOrder === 'asc' ? 1 : -1;
+    } else {
+      sort.createdAt = -1;
+    }
+    return sort;
   }
 }

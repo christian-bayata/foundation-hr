@@ -21,6 +21,7 @@ import { EventModule } from './event/event.module';
 import { HttpExceptionFilter } from './common';
 import { GoalSettingModule } from './bin/performance_mgt/goal-setting/goal-settings.module';
 import { AppraisalModule } from './bin/performance_mgt/appraisal/appraisal.module';
+import { CalibrationModule } from './bin/performance_mgt/calibration/calibration.module';
 import { FeedbackModule } from './bin/performance_mgt/360-feedback/360-feedback.module';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -41,6 +42,7 @@ import { FeedbackModule } from './bin/performance_mgt/360-feedback/360-feedback.
     OnboardingModule,
     GoalSettingModule,
     AppraisalModule,
+    CalibrationModule,
     FeedbackModule,
     RequestModule,
     SettingModule,

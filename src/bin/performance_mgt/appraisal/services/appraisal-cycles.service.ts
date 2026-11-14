@@ -13,18 +13,17 @@ import { OrganizationDepartmentRepository } from '../../../core_hr/organization/
 import { JobTitleRepository } from '../../../core_hr/organization/repository/job-title.repository';
 import { GoalRepository } from '../../goal-setting/repositories/goal.repository';
 import { AppraisalCycleRepository } from '../repositories/appraisal-cycle.repository';
+import { CalibrationSessionRepository } from '../repositories/calibration-session.repository';
+import { CalibrationParticipantRepository } from '../../calibration/repositories/calibration-participant.repository';
 import { AppraisalRepository } from '../repositories/appraisal.repository';
 import { AppraisalGoalScoreRepository } from '../repositories/appraisal-goal-score.repository';
 import { AppraisalReviewRepository } from '../repositories/appraisal-review.repository';
 import { AppraisalBehaviouralRepository } from '../repositories/appraisal-behavioural.repository';
 import { AppraisalCommentRepository } from '../repositories/appraisal-comment.repository';
-import { CalibrationSessionRepository } from '../repositories/calibration-session.repository';
 import { CreateAppraisalCycleDto } from '../dto/create-appraisal-cycle.dto';
 import { UpdateAppraisalCycleDto } from '../dto/update-appraisal-cycle.dto';
 import { AddParticipantsDto } from '../dto/add-participants.dto';
 import { ListAppraisalCyclesQueryDto } from '../dto/list-appraisal-cycles-query.dto';
-import { ListCalibrationSessionsQueryDto } from '../dto/list-calibration-sessions-query.dto';
-import { CreateCalibrationSessionDto } from '../dto/create-calibration-session.dto';
 import { SendBulkReminderDto } from '../dto/send-bulk-reminder.dto';
 import {
   AppraisalCycleStatus,
@@ -33,7 +32,6 @@ import {
   AppraisalStageStatus,
   AppraisalStatus,
   AppraisalTargetPopulation,
-  CalibrationSessionStatus,
 } from '../enums/appraisal.enums';
 import { AppraisalCycleDocument } from '../schemas/appraisal-cycle.schema';
 import { AppraisalGoalScore } from '../schemas/appraisal-goal-score.schema';
@@ -60,12 +58,13 @@ export class AppraisalCyclesService {
 
   constructor(
     private readonly cycleRepository: AppraisalCycleRepository,
+    private readonly calibrationSessionRepository: CalibrationSessionRepository,
+    private readonly calibrationParticipantRepository: CalibrationParticipantRepository,
     private readonly appraisalRepository: AppraisalRepository,
     private readonly goalScoreRepository: AppraisalGoalScoreRepository,
     private readonly reviewRepository: AppraisalReviewRepository,
     private readonly behaviouralRepository: AppraisalBehaviouralRepository,
     private readonly commentRepository: AppraisalCommentRepository,
-    private readonly calibrationSessionRepository: CalibrationSessionRepository,
     private readonly employeeRepository: EmployeeRepository,
     private readonly organizationDepartmentRepository: OrganizationDepartmentRepository,
     private readonly jobTitleRepository: JobTitleRepository,
@@ -579,65 +578,6 @@ export class AppraisalCyclesService {
     });
   }
 
-  async listCalibrationSessions(
-    organizationId: string,
-    cycleId: string,
-    query: ListCalibrationSessionsQueryDto,
-  ) {
-    await this.requireCycle(organizationId, cycleId);
-    const result = await this.calibrationSessionRepository.paginatedList(
-      {
-        search: query.search,
-        status: query.status,
-        batch: query.batch,
-        limit: query.limit,
-      },
-      organizationId,
-    );
-    const items = result.items.filter(
-      (session) => session.cycleId === cycleId,
-    );
-
-    return AppResponse.success('Calibration sessions retrieved', 200, {
-      items,
-      count: items.length,
-    });
-  }
-
-  async openCalibrationSession(
-    organizationId: string,
-    user: ICurrentUser,
-    cycleId: string,
-    dto: CreateCalibrationSessionDto,
-  ) {
-    const cycle = await this.requireCycle(organizationId, cycleId);
-
-    if (cycle.status === AppraisalCycleStatus.ENDED) {
-      throw new BadRequestException(
-        'Calibration sessions cannot be opened for an ended cycle.',
-      );
-    }
-
-    const session = await this.calibrationSessionRepository.create({
-      organizationId,
-      cycleId,
-      name: dto.name,
-      description: dto.description ?? null,
-      status: dto.status ?? CalibrationSessionStatus.ACTIVE,
-      sessionOwnerId: dto.sessionOwnerId ?? null,
-      sessionOwnerName: dto.sessionOwnerName ?? null,
-      departmentCode: dto.departmentCode ?? null,
-      startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
-      endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
-      participantCount: 0,
-      finalisedCount: 0,
-      createdBy: user.userId,
-      updatedBy: user.userId,
-    });
-
-    return AppResponse.success('Calibration session opened', 201, session);
-  }
-
   async sendReminderToParticipants(
     organizationId: string,
     user: ICurrentUser,
@@ -719,6 +659,14 @@ export class AppraisalCyclesService {
       );
     }
 
+    await this.calibrationParticipantRepository.deleteByCycle(
+      organizationId,
+      cycleId,
+    );
+    await this.calibrationSessionRepository.deleteByCycle(
+      organizationId,
+      cycleId,
+    );
     await this.appraisalRepository.deleteByCycle(organizationId, cycleId);
   }
 

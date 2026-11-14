@@ -32,6 +32,11 @@ import {
   ParticipantAuditLog,
   ParticipantAuditLogSchema,
 } from './schemas/participant-audit-log.schema';
+import {
+  CalibrationParticipant,
+  CalibrationParticipantSchema,
+} from '../calibration/schemas/calibration-participant.schema';
+import { CalibrationParticipantRepository } from '../calibration/repositories/calibration-participant.repository';
 import { AppraisalCycleRepository } from './repositories/appraisal-cycle.repository';
 import { AppraisalRepository } from './repositories/appraisal.repository';
 import { AppraisalGoalScoreRepository } from './repositories/appraisal-goal-score.repository';
@@ -70,6 +75,10 @@ import {
       { name: AppraisalComment.name, schema: AppraisalCommentSchema },
       { name: CalibrationSession.name, schema: CalibrationSessionSchema },
       { name: ParticipantAuditLog.name, schema: ParticipantAuditLogSchema },
+      {
+        name: CalibrationParticipant.name,
+        schema: CalibrationParticipantSchema,
+      },
       { name: UserRole.name, schema: UserRoleSchema },
     ]),
     EmployeeModule,
@@ -92,6 +101,7 @@ import {
     AppraisalCommentRepository,
     CalibrationSessionRepository,
     ParticipantAuditLogRepository,
+    CalibrationParticipantRepository,
     AppraisalCyclesService,
     AppraisalsService,
     AppraisalReviewsService,
@@ -102,6 +112,9 @@ import {
   exports: [
     AppraisalCycleRepository,
     AppraisalRepository,
+    CalibrationSessionRepository,
+    ParticipantAuditLogRepository,
+    CalibrationParticipantRepository,
     AppraisalCyclesService,
     AppraisalsService,
   ],
