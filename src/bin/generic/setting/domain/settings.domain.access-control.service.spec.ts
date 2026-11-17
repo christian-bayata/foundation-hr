@@ -215,6 +215,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
           jobTitleCode: '',
           isBillingContact: true,
           isAuthorizedRepresentative: false,
+          isCompanyAdmin: true,
         }),
       );
       expect(row.status).toBe(AdminStatus.CREATED);
@@ -360,7 +361,9 @@ describe('SettingsDomainAccessControlService company admin', () => {
           addedById: ACTOR_ID,
         }),
       );
-      expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
+      expect(emailService.brevoEmailDispatcher).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'emp@foundation.com' }),
+      );
       expect(row.status).toBe(AdminStatus.ACTIVE);
       expect(row.email).toBe('emp@foundation.com');
     });
@@ -447,6 +450,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
         expect.objectContaining({
           organizationId: ORG_ID,
           roleIds: [role()._id, ownerRole()._id],
+          includeCompanyAdminAssignments: true,
         }),
       );
     });
@@ -455,12 +459,20 @@ describe('SettingsDomainAccessControlService company admin', () => {
       roleRepository.findByOrganizationAndParentSystemRoles.mockResolvedValue(
         [],
       );
+      roleRepository.findByOrganization.mockResolvedValue([]);
+      userRoleRepository.findByFilters.mockResolvedValue([]);
 
       await expect(service.listCompanyAdmins(ORG_ID, {})).resolves.toEqual({
         data: [],
         count: 0,
       });
-      expect(userRoleRepository.findByFilters).not.toHaveBeenCalled();
+      expect(userRoleRepository.findByFilters).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: ORG_ID,
+          roleIds: [],
+          includeCompanyAdminAssignments: true,
+        }),
+      );
     });
 
     it('scopes the role lookup to the requested role filter', async () => {
@@ -469,6 +481,23 @@ describe('SettingsDomainAccessControlService company admin', () => {
       expect(
         roleRepository.findByOrganizationAndParentSystemRoles,
       ).toHaveBeenCalledWith(ORG_ID, [SystemRole.HR_ADMIN]);
+    });
+
+    it('includes a company admin assignment whose role is outside the admin tier', async () => {
+      roleRepository.findByOrganization.mockResolvedValue([
+        role({ parentSystemRole: SystemRole.HR_OPS }),
+      ]);
+      userRoleRepository.findByFilters.mockResolvedValue([
+        assignment({
+          isCompanyAdmin: true,
+          roleId: role({ parentSystemRole: SystemRole.HR_OPS }),
+        }),
+      ]);
+
+      const result = await service.listCompanyAdmins(ORG_ID, {});
+
+      expect(result.count).toBe(1);
+      expect(result.data[0].role?.systemRole).toBe(SystemRole.HR_OPS);
     });
 
     it('passes the status and added-by filters straight to Mongo', async () => {

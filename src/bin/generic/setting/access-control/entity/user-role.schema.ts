@@ -42,6 +42,13 @@ export class UserRole {
   @Prop({ type: Boolean, default: true })
   systemSettings: boolean;
 
+  /**
+   * Marks an assignment created through the company-admin flow so the admin list
+   * can find it even when role definitions change later.
+   */
+  @Prop({ type: Boolean, default: false })
+  isCompanyAdmin: boolean;
+
   @Prop({ type: Date, default: null })
   activatedAt: Date | null;
 }

@@ -841,7 +841,8 @@ export class SettingsDomainAccessControlService {
    * resolved from the User collection — the collection every UserRole.userId points
    * at — and a placeholder account is provisioned when the email is not yet known,
    * so the assignment always has a valid subject. The assignment starts in the
-   * CREATED state and an invite email is dispatched; email failures are logged and
+   * CREATED state for external admins and ACTIVE for internal employees, and an
+   * admin notification email is dispatched to both; email failures are logged and
    * do not fail the request.
    *
    * @param organizationId - The organization the admin is added to
@@ -936,21 +937,20 @@ export class SettingsDomainAccessControlService {
         isBillingContact: billingContact ?? false,
         isAuthorizedRepresentative: authorizedRepresentative ?? false,
         systemSettings: systemSettings ?? true,
+        isCompanyAdmin: true,
       });
 
       this.logger.log(
         `Added company admin ${resolvedEmail} to org ${organizationId} as ${adminType} with role "${role.name}"`,
       );
 
-      if (!isInternal) {
-        await this.dispatchCompanyAdminInvite(
-          user.email,
-          user.firstName,
-          role.name,
-          String(role._id),
-          organizationId,
-        );
-      }
+      await this.dispatchCompanyAdminInvite(
+        user.email,
+        user.firstName,
+        role.name,
+        String(role._id),
+        organizationId,
+      );
 
       const jobTitleName = isInternal
         ? resolvedJobTitleCode
@@ -997,20 +997,18 @@ export class SettingsDomainAccessControlService {
   ): Promise<PaginatedResult<CompanyAdminRow>> {
     try {
       const systemRoles = query.role ? [query.role] : ADMIN_TIER_ROLES;
-      const roles =
+      const scopedRoles =
         await this.roleRepository.findByOrganizationAndParentSystemRoles(
           organizationId,
           systemRoles,
         );
-
-      if (roles.length === 0) {
-        return { data: [], count: 0 };
-      }
+      const allRoles =
+        (await this.roleRepository.findByOrganization(organizationId)) ?? [];
 
       const filters = await this.buildCompanyAdminFilters(
         organizationId,
         query,
-        roles,
+        scopedRoles,
       );
 
       if (!filters) {
@@ -1018,7 +1016,7 @@ export class SettingsDomainAccessControlService {
       }
 
       const assignments = await this.userRoleRepository.findByFilters(filters);
-      const rows = await this.hydrateCompanyAdminRows(assignments, roles);
+      const rows = await this.hydrateCompanyAdminRows(assignments, allRoles);
 
       const sorted = this.sortCompanyAdmins(
         rows,
@@ -1268,6 +1266,7 @@ export class SettingsDomainAccessControlService {
     const filters: ListCompanyAdminFilters = {
       organizationId,
       roleIds: roles.map((role) => role._id as Types.ObjectId),
+      includeCompanyAdminAssignments: !query.role,
     };
 
     if (query.status) {

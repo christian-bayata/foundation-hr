@@ -141,17 +141,30 @@ export class UserRoleRepository {
   ): Record<string, unknown> {
     const where: Record<string, unknown> = {
       organizationId: filters.organizationId,
-      roleId: { $in: filters.roleIds },
     };
+    const conditions: Record<string, unknown>[] = [];
 
-    if (filters.status) where.status = filters.status;
-    if (filters.addedById) where.addedById = filters.addedById;
-    if (filters.userIds) where.userId = { $in: filters.userIds };
+    if (filters.includeCompanyAdminAssignments) {
+      conditions.push({
+        $or: [
+          { roleId: { $in: filters.roleIds } },
+          { isCompanyAdmin: true },
+        ],
+      });
+    } else {
+      conditions.push({ roleId: { $in: filters.roleIds } });
+    }
+
+    if (filters.status) conditions.push({ status: filters.status });
+    if (filters.addedById) conditions.push({ addedById: filters.addedById });
+    if (filters.userIds) conditions.push({ userId: { $in: filters.userIds } });
     if (filters.dateCreatedRange) {
-      where.createdAt = {
-        $gte: filters.dateCreatedRange.from,
-        $lt: filters.dateCreatedRange.to,
-      };
+      conditions.push({
+        createdAt: {
+          $gte: filters.dateCreatedRange.from,
+          $lt: filters.dateCreatedRange.to,
+        },
+      });
     }
 
     if (filters.jobTitleCodes?.length || filters.jobTitleUserIds?.length) {
@@ -162,7 +175,11 @@ export class UserRoleRepository {
       if (filters.jobTitleUserIds?.length) {
         or.push({ userId: { $in: filters.jobTitleUserIds } });
       }
-      where.$or = or;
+      conditions.push({ $or: or });
+    }
+
+    if (conditions.length > 0) {
+      where.$and = conditions;
     }
 
     return where;

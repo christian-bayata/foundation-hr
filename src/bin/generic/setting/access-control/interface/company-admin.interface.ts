@@ -26,6 +26,7 @@ export interface ListCompanyAdminQuery {
 export interface ListCompanyAdminFilters {
   organizationId: string;
   roleIds: Types.ObjectId[];
+  includeCompanyAdminAssignments?: boolean;
   status?: AdminStatus;
   addedById?: string;
   dateCreatedRange?: { from: Date; to: Date };
