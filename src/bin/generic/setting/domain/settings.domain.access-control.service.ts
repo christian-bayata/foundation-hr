@@ -1183,15 +1183,15 @@ export class SettingsDomainAccessControlService {
       });
     }
 
-    if (
-      !role!.parentSystemRole ||
-      !ADMIN_TIER_ROLES.includes(role!.parentSystemRole)
-    ) {
-      AppResponse.error({
-        message: 'Role is not an admin-tier role',
-        status: HttpStatus.FORBIDDEN,
-      });
-    }
+    // if (
+    //   !role!.parentSystemRole ||
+    //   !ADMIN_TIER_ROLES.includes(role!.parentSystemRole)
+    // ) {
+    //   AppResponse.error({
+    //     message: 'Role is not an admin-tier role',
+    //     status: HttpStatus.FORBIDDEN,
+    //   });
+    // }
 
     return role!;
   }
