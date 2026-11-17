@@ -52,8 +52,7 @@ describe('SettingController access control (integration)', () => {
     firstName: 'Jobi',
     lastName: 'Olusayo',
     email: 'olusayo@foundation.com',
-    roleId: 'role-2',
-    jobTitle: 'Human resource',
+    adminRole: 'HR Admin',
     billingContact: false,
     authorizedRepresentative: true,
   };
@@ -173,8 +172,7 @@ describe('SettingController access control (integration)', () => {
           firstName: 'Jobi',
           lastName: 'Olusayo',
           email: 'olusayo@foundation.com',
-          roleId: 'role-2',
-          jobTitle: 'Human resource',
+          adminRole: 'HR Admin',
         });
 
       expect(response.status).toBe(201);
@@ -216,10 +214,10 @@ describe('SettingController access control (integration)', () => {
       expect(settingService.addCompanyAdmin).not.toHaveBeenCalled();
     });
 
-    it('rejects a payload without a roleId', async () => {
+    it('rejects a payload without an adminRole', async () => {
       const response = await request(app.getHttpServer())
         .post('/setting/access-control/company-admin/create')
-        .send({ ...validCreatePayload, roleId: undefined });
+        .send({ ...validCreatePayload, adminRole: undefined });
 
       expect(response.status).toBe(400);
       expect(settingService.addCompanyAdmin).not.toHaveBeenCalled();

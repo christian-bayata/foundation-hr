@@ -167,18 +167,13 @@ describe('SettingsDomainAccessControlService company admin', () => {
       firstName: '  Jobi ',
       lastName: ' Olusayo ',
       email: '  Olusayo@Foundation.com ',
-      roleId: HR_ROLE_ID,
-      jobTitle: ' Human resource ',
+      adminRole: 'HR Admin',
       billingContact: true,
       authorizedRepresentative: false,
     };
 
     beforeEach(() => {
       roleRepository.findByOrganizationAndName.mockResolvedValue(role());
-      jobTitleRepository.findByCodeOrName.mockResolvedValue({
-        code: 'HR',
-        name: 'Human resource',
-      });
       inviteeUserRepository.findByEmails.mockResolvedValue([]);
       inviteeUserRepository.create.mockResolvedValue(user());
       userRoleRepository.findByUserAndOrganization.mockResolvedValue([]);
@@ -208,7 +203,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
       expect(row.systemSettings).toBe(false);
     });
 
-    it('creates the assignment with a CREATED status, the actor and the job title code', async () => {
+    it('creates the assignment with a CREATED status and the actor', async () => {
       const row = await service.addCompanyAdmin(ORG_ID, ACTOR_ID, dto);
 
       expect(userRoleRepository.assign).toHaveBeenCalledWith(
@@ -217,13 +212,13 @@ describe('SettingsDomainAccessControlService company admin', () => {
           roleId: role()._id,
           status: AdminStatus.CREATED,
           addedById: ACTOR_ID,
-          jobTitleCode: 'HR',
+          jobTitleCode: '',
           isBillingContact: true,
           isAuthorizedRepresentative: false,
         }),
       );
       expect(row.status).toBe(AdminStatus.CREATED);
-      expect(row.jobTitle).toBe('Human resource');
+      expect(row.jobTitle).toBeNull();
       expect(row.assignments).toEqual(['Billing Contact']);
     });
 
@@ -382,15 +377,6 @@ describe('SettingsDomainAccessControlService company admin', () => {
       ).rejects.toMatchObject({ status: 404 });
       expect(userRoleRepository.assign).not.toHaveBeenCalled();
       expect(emailService.brevoEmailDispatcher).not.toHaveBeenCalled();
-    });
-
-    it('rejects with 404 when the job title is not in the organization', async () => {
-      jobTitleRepository.findByCodeOrName.mockResolvedValue(null);
-
-      await expect(
-        service.addCompanyAdmin(ORG_ID, ACTOR_ID, dto),
-      ).rejects.toMatchObject({ status: 404 });
-      expect(userRoleRepository.assign).not.toHaveBeenCalled();
     });
 
     it('rejects with 404 when the role does not exist', async () => {

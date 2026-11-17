@@ -24,8 +24,8 @@ export class AddCompanyAdminDto {
   email: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Job title is required.' })
-  jobTitle: string;
+  @IsNotEmpty({ message: 'Admin role is required.' })
+  adminRole: string;
 
   @IsOptional()
   @IsIn(['internal', 'external'], { message: 'Admin type must be internal or external.' })

@@ -849,7 +849,7 @@ export class SettingsDomainAccessControlService {
    * @param addCompanyAdminDto - The company admin creation payload
    * @returns {Promise<CompanyAdminRow>}
    *
-   * @throws {404} Role or job title not found in this organization
+   * @throws {404} Admin role not found in this organization
    * @throws {403} Role belongs to another organization or is not an admin-tier role
    * @throws {409} The user already holds an admin-tier role in this organization
    */
@@ -863,7 +863,7 @@ export class SettingsDomainAccessControlService {
         firstName,
         lastName,
         email,
-        jobTitle,
+        adminRole,
         billingContact,
         authorizedRepresentative,
         systemSettings,
@@ -872,15 +872,13 @@ export class SettingsDomainAccessControlService {
 
       const isInternal = adminType === 'internal';
 
-      const role = await this.resolveAdminTierRole(organizationId);
+      const role = await this.resolveAdminTierRole(organizationId, adminRole);
 
       let employee: EmployeeDocument | null = null;
       let resolvedFirstName = firstName.trim();
       let resolvedLastName = lastName.trim();
       let resolvedEmail = email.trim().toLowerCase();
       let resolvedJobTitleCode: string | null = null;
-
-      let externalJobTitleName: string | null = null;
 
       if (isInternal) {
         employee = await this.employeeRepository.findOne({
@@ -899,20 +897,6 @@ export class SettingsDomainAccessControlService {
         resolvedLastName = employee!.lastName ?? resolvedLastName;
         resolvedEmail = employee!.email ?? resolvedEmail;
         resolvedJobTitleCode = employee!.jobTitleCode ?? null;
-      } else {
-        const findJobTitle = await this.jobTitleRepository.findByCodeOrName(
-          organizationId,
-          jobTitle.trim(),
-        );
-
-        if (!findJobTitle) {
-          AppResponse.error({
-            message: `Job title not found in this organization`,
-            status: HttpStatus.NOT_FOUND,
-          });
-        }
-        resolvedJobTitleCode = findJobTitle!.code;
-        externalJobTitleName = findJobTitle!.name;
       }
 
       const user = await this.resolveOrCreateInviteeUser({
@@ -977,7 +961,7 @@ export class SettingsDomainAccessControlService {
               )
             )?.name ?? null)
           : null
-        : externalJobTitleName;
+        : null;
 
       return this.toCompanyAdminRow(assignment, {
         user: {
@@ -1159,21 +1143,35 @@ export class SettingsDomainAccessControlService {
    * @Responsibility: Resolve the role a company admin is being assigned to,
    * rejecting roles that are missing, cross-tenant, or outside the admin tier
    *
-   * @param roleId - The role id to resolve
    * @param organizationId - The organization the role must belong to
+   * @param adminRole - The requested admin role: role id, role name or system role
    * @returns {Promise<RoleDocument>}
    */
   private async resolveAdminTierRole(
     organizationId: string,
+    adminRole: string,
   ): Promise<RoleDocument> {
-    const role = await this.roleRepository.findByOrganizationAndName({
-      organizationId,
-      parentSystemRole: SystemRole.COMPANY_OWNER,
-    });
+    const requested = adminRole.trim();
+
+    let role = Types.ObjectId.isValid(requested)
+      ? await this.roleRepository.findById(requested)
+      : await this.roleRepository.findByOrganizationAndName({
+          organizationId,
+          name: requested,
+        });
+
+    if (!role && Object.values(SystemRole).includes(requested as SystemRole)) {
+      const roles =
+        await this.roleRepository.findByOrganizationAndParentSystemRoles(
+          organizationId,
+          [requested as SystemRole],
+        );
+      role = roles[0] ?? null;
+    }
 
     if (!role) {
       AppResponse.error({
-        message: 'Role not found',
+        message: 'Admin role not found',
         status: HttpStatus.NOT_FOUND,
       });
     }
@@ -1181,6 +1179,16 @@ export class SettingsDomainAccessControlService {
     if (role!.organizationId !== organizationId) {
       AppResponse.error({
         message: 'Role does not belong to this organization',
+        status: HttpStatus.FORBIDDEN,
+      });
+    }
+
+    if (
+      !role!.parentSystemRole ||
+      !ADMIN_TIER_ROLES.includes(role!.parentSystemRole)
+    ) {
+      AppResponse.error({
+        message: 'Role is not an admin-tier role',
         status: HttpStatus.FORBIDDEN,
       });
     }
