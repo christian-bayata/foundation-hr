@@ -17,11 +17,12 @@ import { getRequestFormDefinition } from './form/request-form.registry';
 import { RequestFormDefinition } from './form/request-form.types';
 import { RequestFormValidatorService } from './form/request-form-validator.service';
 import {
-  EMPLOYEE_REQUEST_STATUSES,
+  LEGACY_EMPLOYEE_REQUEST_STATUSES,
   EmployeeRequestStatus,
   EmployeeRequestStepAction,
   EmployeeRequestStepStatus,
 } from './enum/request.enum';
+import { RequestStepActionKind } from './enum/request-flow.enum';
 import { RequestRepository } from './repository/request.repository';
 import {
   REQUEST_TYPE_LABELS,
@@ -241,8 +242,12 @@ export class RequestService {
     const definition = getRequestFormDefinition(dto.requestType);
     const values = dto as unknown as Record<string, unknown>;
     const details: Record<string, unknown> = {};
+    const fields = [
+      ...definition.fields,
+      ...(definition.extendedFields ?? []),
+    ];
 
-    for (const field of definition.fields) {
+    for (const field of fields) {
       const value = values[field.key];
       if (value === undefined || value === null || value === '') {
         continue;
@@ -696,7 +701,7 @@ export class RequestService {
 
   private async countSummary(where: MongoFilter) {
     const counts = await Promise.all(
-      EMPLOYEE_REQUEST_STATUSES.map(async (status) => {
+      LEGACY_EMPLOYEE_REQUEST_STATUSES.map(async (status) => {
         const count = await this.requestRepository.count(
           Object.assign({}, where, { status }) as MongoFilter,
         );
@@ -796,6 +801,19 @@ export class RequestService {
       actedByUserId: null,
       actedByName: null,
       comment: null,
+      action: RequestStepActionKind.APPROVE,
+      assigneeUserId: null,
+      assigneeRole: null,
+      assigneeEmployeeId: null,
+      delegatedFromUserId: null,
+      dueAt: null,
+      decisionReasonCode: null,
+      decisionMessage: null,
+      queriedAt: null,
+      acceptedAt: null,
+      verifiedAt: null,
+      signedAt: null,
+      escalatedAt: null,
     }));
   }
 

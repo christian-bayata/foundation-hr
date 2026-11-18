@@ -8,9 +8,37 @@ import {
   EmployeeRequest,
   EmployeeRequestSchema,
 } from './entity/request.schema';
+import {
+  RequestActivity,
+  RequestActivitySchema,
+  RequestCounter,
+  RequestCounterSchema,
+  RequestDelegation,
+  RequestDelegationSchema,
+  RequestDocument,
+  RequestDocumentSchema,
+  RequestSettings,
+  RequestSettingsSchema,
+  RequestTypeConfig,
+  RequestTypeConfigSchema,
+  RequestViewLog,
+  RequestViewLogSchema,
+} from './entity/request-flow.schema';
 import { RequestController } from './request.controller';
+import { RequestFlowController } from './request-flow.controller';
+import { RequestFlowSettingsController } from './request-flow-settings.controller';
 import { RequestService } from './request.service';
+import { RequestFlowService } from './request-flow.service';
 import { RequestRepository } from './repository/request.repository';
+import {
+  RequestActivityRepository,
+  RequestCounterRepository,
+  RequestDelegationRepository,
+  RequestDocumentRepository,
+  RequestSettingsRepository,
+  RequestTypeConfigRepository,
+  RequestViewLogRepository,
+} from './repository/request-flow.repository';
 import { RequestFormValidatorService } from './form/request-form-validator.service';
 import { UserRoleRepository } from '../../generic/setting/access-control/repository/user-role.repository';
 import {
@@ -22,6 +50,13 @@ import {
   imports: [
     MongooseModule.forFeature([
       { name: EmployeeRequest.name, schema: EmployeeRequestSchema },
+      { name: RequestActivity.name, schema: RequestActivitySchema },
+      { name: RequestDocument.name, schema: RequestDocumentSchema },
+      { name: RequestDelegation.name, schema: RequestDelegationSchema },
+      { name: RequestViewLog.name, schema: RequestViewLogSchema },
+      { name: RequestTypeConfig.name, schema: RequestTypeConfigSchema },
+      { name: RequestSettings.name, schema: RequestSettingsSchema },
+      { name: RequestCounter.name, schema: RequestCounterSchema },
       { name: UserRole.name, schema: UserRoleSchema },
     ]),
     EmployeeModule,
@@ -29,13 +64,25 @@ import {
     SettingModule,
     NotificationModule,
   ],
-  controllers: [RequestController],
+  controllers: [
+    RequestController,
+    RequestFlowController,
+    RequestFlowSettingsController,
+  ],
   providers: [
     RequestService,
+    RequestFlowService,
     RequestRepository,
+    RequestActivityRepository,
+    RequestDocumentRepository,
+    RequestDelegationRepository,
+    RequestViewLogRepository,
+    RequestTypeConfigRepository,
+    RequestSettingsRepository,
+    RequestCounterRepository,
     UserRoleRepository,
     RequestFormValidatorService,
   ],
-  exports: [RequestService, RequestRepository],
+  exports: [RequestService, RequestFlowService, RequestRepository],
 })
 export class RequestModule {}

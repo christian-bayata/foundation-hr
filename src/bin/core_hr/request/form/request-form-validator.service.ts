@@ -6,6 +6,7 @@ import { RequestType } from '../../../generic/setting/request-management/enum/re
 import {
   getRequestFormDefinition,
   getRequestFormDtoClass,
+  hasRequestDetails,
 } from './request-form.registry';
 import { formatValidationErrors } from './request-validation.util';
 
@@ -27,6 +28,10 @@ export class RequestFormValidatorService {
         ([, value]) => value !== undefined && value !== null && value !== '',
       ),
     );
+    if (!hasRequestDetails(requestType, cleaned)) {
+      throw new AppException('Request details are invalid: fields are missing.', 400);
+    }
+
     const instance = plainToInstance(dtoClass, cleaned);
     const errors = validateSync(instance, {
       whitelist: true,
@@ -38,7 +43,11 @@ export class RequestFormValidatorService {
     }
 
     const normalized: Record<string, unknown> = {};
-    for (const field of definition.fields) {
+    const fields = [
+      ...definition.fields,
+      ...(definition.extendedFields ?? []),
+    ];
+    for (const field of fields) {
       const value = cleaned[field.key];
       if (value === undefined) {
         continue;

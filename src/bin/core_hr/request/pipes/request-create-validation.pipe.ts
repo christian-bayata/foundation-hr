@@ -4,6 +4,7 @@ import { validateSync } from 'class-validator';
 import { AppException } from '../../../../common/response/app-exception';
 import { RequestType } from '../../../generic/setting/request-management/enum/request-management.enum';
 import { getCreateRequestDtoClass } from '../dto/create/create-request.registry';
+import { hasRequestDetails } from '../form/request-form.registry';
 import { formatValidationErrors } from '../form/request-validation.util';
 
 @Injectable()
@@ -24,6 +25,13 @@ export class RequestCreateValidationPipe implements PipeTransform {
     const dtoClass = getCreateRequestDtoClass(requestType as RequestType);
     if (!dtoClass) {
       throw new AppException('Request form is not available.', 400);
+    }
+
+    if (!hasRequestDetails(requestType as RequestType, value as Record<string, unknown>)) {
+      throw new AppException(
+        'Request payload is invalid: required fields are missing.',
+        400,
+      );
     }
 
     const instance = plainToInstance(dtoClass, value);

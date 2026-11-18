@@ -4,10 +4,16 @@ import {
   RequestType,
 } from '../../../generic/setting/request-management/enum/request-management.enum';
 import {
+  AmendmentChangeType,
   AreaOfConcern,
+  EmploymentLetterType,
   InformationToUpdate,
   MobilityRequestType,
+  PayrollPaymentMethod,
   PerformanceIssue,
+  PerformanceRating,
+  ReimbursementCategory,
+  RightToWorkDocumentType,
   TerminationType,
 } from '../dto/forms';
 import { getCreateRequestDtoClass } from '../dto/create/create-request.registry';
@@ -25,6 +31,19 @@ const VALID_PAYLOADS: Record<RequestType, Record<string, unknown>> = {
   [RequestType.CONFIRMATION_REQUEST]: {
     location: 'Lagos',
   },
+  [RequestType.PROBATION_CONFIRMATION_LETTER]: {
+    probationEnded: '2026-03-01',
+    confirmedFrom: '2026-03-02',
+    performanceRating: PerformanceRating.MEETS_EXPECTATIONS,
+    lineManagerSummary: 'Met expectations',
+  },
+  [RequestType.EMPLOYMENT_AGREEMENT_AMENDMENT]: {
+    whatsChanging: AmendmentChangeType.JOB_TITLE,
+    currentValue: 'Engineer',
+    newValue: 'Senior Engineer',
+    effectiveFrom: '2026-03-01',
+    reasonForChange: 'Promotion',
+  },
   [RequestType.EMPLOYMENT_AGREEMENT_EXTENSION]: {
     reasonForExtension: 'Contract extension',
     newExtensionDate: '2026-03-01',
@@ -32,6 +51,31 @@ const VALID_PAYLOADS: Record<RequestType, Record<string, unknown>> = {
   [RequestType.EMPLOYMENT_AGREEMENT_RENEWAL]: {
     reasonForRenewal: 'Contract renewal',
     renewalDate: '2026-03-01',
+  },
+  [RequestType.CHANGE_OF_ADDRESS]: {
+    newAddress: '12 New Street',
+    city: 'Lagos',
+    state: 'Lagos',
+    effectiveFrom: '2026-03-01',
+  },
+  [RequestType.REIMBURSEMENT]: {
+    category: ReimbursementCategory.TRAVEL,
+    amount: '10000',
+    dateIncurred: '2026-02-01',
+    payWith: PayrollPaymentMethod.NEXT_PAYROLL_RUN,
+    purpose: 'Client visit',
+  },
+  [RequestType.EMPLOYMENT_LETTER_REQUEST]: {
+    letterType: EmploymentLetterType.PROOF_OF_EMPLOYMENT,
+    addressedTo: 'Landlord',
+    purpose: 'Tenancy',
+    neededBy: '2026-03-01',
+  },
+  [RequestType.RIGHT_TO_WORK]: {
+    documentType: RightToWorkDocumentType.PASSPORT,
+    documentNumber: 'A1234567',
+    issuedOn: '2025-01-01',
+    expiresOn: '2030-01-01',
   },
   [RequestType.EMPLOYEE_MOBILITY]: {
     mobilityRequestType: MobilityRequestType.TRANSFER,

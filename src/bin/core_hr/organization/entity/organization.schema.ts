@@ -9,6 +9,7 @@ import {
   TaskType,
 } from '../../../generic/setting/employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../../../generic/setting/request-management/enum/request-management.enum';
+import { RequestStepActionKind } from '../../request/enum/request-flow.enum';
 import {
   ApprovalDeadline,
   LeaveAllocationMethod,
@@ -415,6 +416,34 @@ export class RequestWorkflowStep {
 
   @Prop({ type: String, trim: true, default: null })
   responsibleParty: string | null;
+
+  @Prop({
+    type: String,
+    enum: Object.values(RequestStepActionKind),
+    default: RequestStepActionKind.APPROVE,
+  })
+  action: RequestStepActionKind;
+
+  @Prop({ type: String, trim: true, default: null })
+  assigneeUserId: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  assigneeRole: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  assigneeEmployeeId: string | null;
+
+  @Prop({ type: Number, default: null })
+  dueHours: number | null;
+
+  @Prop({ type: Boolean, default: true })
+  delegatable: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  notifyRequester: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  requiresDocument: boolean;
 }
 
 @Schema({ _id: true })

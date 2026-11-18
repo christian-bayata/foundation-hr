@@ -1,4 +1,5 @@
 import {
+  REQUEST_TYPES,
   REQUEST_TYPE_LABELS,
   RequestType,
 } from '../../../generic/setting/request-management/enum/request-management.enum';
@@ -24,6 +25,10 @@ import {
   RequestFormDtoClass,
   RequestFormSelectOption,
 } from './request-form.types';
+import {
+  FIGMA_FORM_DEFINITIONS,
+  FIGMA_FORM_DTO_CLASSES,
+} from './request-form.figma';
 
 const EMPLOYEE_CONTEXT = [
   'employeeName',
@@ -52,7 +57,9 @@ const AREA_OF_CONCERN_OPTIONS = toOptions(AreaOfConcern);
 const TERMINATION_TYPE_OPTIONS = toOptions(TerminationType);
 const INFORMATION_TO_UPDATE_OPTIONS = toOptions(InformationToUpdate);
 
-const FORM_DEFINITIONS: Record<RequestType, RequestFormDefinition> = {
+const LEGACY_FORM_DEFINITIONS: Partial<
+  Record<RequestType, RequestFormDefinition>
+> = {
   [RequestType.EMPLOYEE_TERMINATION]: {
     requestType: RequestType.EMPLOYEE_TERMINATION,
     label: REQUEST_TYPE_LABELS[RequestType.EMPLOYEE_TERMINATION],
@@ -279,6 +286,21 @@ const FORM_DEFINITIONS: Record<RequestType, RequestFormDefinition> = {
   },
 };
 
+const FORM_DEFINITIONS: Record<RequestType, RequestFormDefinition> =
+  Object.fromEntries(
+    REQUEST_TYPES.map((requestType) => {
+      const legacy = LEGACY_FORM_DEFINITIONS[requestType];
+      const figma = FIGMA_FORM_DEFINITIONS[requestType];
+
+      return [
+        requestType,
+        legacy
+          ? { ...figma, fields: legacy.fields, extendedFields: figma.fields }
+          : figma,
+      ];
+    }),
+  ) as Record<RequestType, RequestFormDefinition>;
+
 const FORM_DTO_CLASSES: Record<RequestType, RequestFormDtoClass> = {
   [RequestType.EMPLOYEE_TERMINATION]: EmployeeTerminationDetailsDto,
   [RequestType.CANCEL_HIRE_BEFORE_START_DATE]:
@@ -294,7 +316,8 @@ const FORM_DTO_CLASSES: Record<RequestType, RequestFormDtoClass> = {
   [RequestType.PERFORMANCE_IMPROVEMENT_PLAN]:
     PerformanceImprovementPlanDetailsDto,
   [RequestType.QUERY_REQUEST]: QueryRequestDetailsDto,
-};
+  ...FIGMA_FORM_DTO_CLASSES,
+} as Record<RequestType, RequestFormDtoClass>;
 
 export const getRequestFormDefinition = (
   requestType: RequestType,
@@ -306,3 +329,39 @@ export const getRequestFormDtoClass = (
 
 export const getRequestFormDefinitions = (): RequestFormDefinition[] =>
   Object.values(FORM_DEFINITIONS);
+
+const REQUIRED_FIELD_SETS: Record<RequestType, string[][]> = Object.fromEntries(
+  REQUEST_TYPES.map((requestType) => {
+    const sets = [
+      LEGACY_FORM_DEFINITIONS[requestType],
+      FIGMA_FORM_DEFINITIONS[requestType],
+    ]
+      .filter((definition): definition is RequestFormDefinition => !!definition)
+      .map((definition) =>
+        definition.fields
+          .filter((field) => field.required)
+          .map((field) => field.key),
+      );
+
+    const unique = sets.filter(
+      (fields, index) =>
+        sets.findIndex((other) => other.join('|') === fields.join('|')) ===
+        index,
+    );
+
+    return [requestType, unique];
+  }),
+) as Record<RequestType, string[][]>;
+
+export const hasRequestDetails = (
+  requestType: RequestType,
+  details: Record<string, unknown>,
+): boolean =>
+  REQUIRED_FIELD_SETS[requestType].some((fields) =>
+    fields.every(
+      (field) =>
+        details[field] !== undefined &&
+        details[field] !== null &&
+        details[field] !== '',
+    ),
+  );

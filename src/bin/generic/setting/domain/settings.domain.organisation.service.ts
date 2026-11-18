@@ -30,6 +30,7 @@ import {
   RequestWorkflowStep,
   WorkflowStep,
 } from '../../../core_hr/organization/entity/organization.schema';
+import { RequestStepActionKind } from '../../../core_hr/request/enum/request-flow.enum';
 import { OrganizationDepartment } from '../../../core_hr/organization/entity/organization-department.schema';
 import { JobTitle } from '../../../core_hr/organization/entity/job-title.schema';
 import { Invoice } from '../organisation/entity/invoice.schema';
@@ -3275,6 +3276,14 @@ export class SettingsDomainOrganisationService {
       id: String(step._id),
       order: step.order ?? 1,
       responsibleParty: step.responsibleParty ?? null,
+      action: step.action ?? RequestStepActionKind.APPROVE,
+      assigneeUserId: step.assigneeUserId ?? null,
+      assigneeRole: step.assigneeRole ?? null,
+      assigneeEmployeeId: step.assigneeEmployeeId ?? null,
+      dueHours: step.dueHours ?? null,
+      delegatable: step.delegatable ?? true,
+      notifyRequester: step.notifyRequester ?? true,
+      requiresDocument: step.requiresDocument ?? false,
     };
   }
 
@@ -3289,6 +3298,14 @@ export class SettingsDomainOrganisationService {
       _id: step._id,
       order: step.order ?? 1,
       responsibleParty: step.responsibleParty ?? null,
+      action: step.action ?? RequestStepActionKind.APPROVE,
+      assigneeUserId: step.assigneeUserId ?? null,
+      assigneeRole: step.assigneeRole ?? null,
+      assigneeEmployeeId: step.assigneeEmployeeId ?? null,
+      dueHours: step.dueHours ?? null,
+      delegatable: step.delegatable ?? true,
+      notifyRequester: step.notifyRequester ?? true,
+      requiresDocument: step.requiresDocument ?? false,
     };
   }
 
@@ -3335,6 +3352,14 @@ export class SettingsDomainOrganisationService {
       _id: new Types.ObjectId(),
       order: step.order ?? index + 1,
       responsibleParty: step.responsibleParty.trim(),
+      action: step.action ?? RequestStepActionKind.APPROVE,
+      assigneeUserId: step.assigneeUserId ?? null,
+      assigneeRole: step.assigneeRole ?? null,
+      assigneeEmployeeId: step.assigneeEmployeeId ?? null,
+      dueHours: step.dueHours ?? null,
+      delegatable: step.delegatable ?? true,
+      notifyRequester: step.notifyRequester ?? true,
+      requiresDocument: step.requiresDocument ?? false,
     }));
   }
 

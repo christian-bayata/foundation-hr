@@ -27,6 +27,7 @@ import {
   WorkflowType,
 } from '../employee-profiles/enum/employee-profile.enum';
 import { RequestType } from '../request-management/enum/request-management.enum';
+import { RequestStepActionKind } from '../../../core_hr/request/enum/request-flow.enum';
 import {
   ApprovalDeadline,
   LeaveAllocationMethod,
@@ -2771,7 +2772,7 @@ describe('SettingsDomainOrganisationService', () => {
 
       const result = await service.getRequestWorkflows(ORG_ID);
 
-      expect(result.requestTypes).toHaveLength(10);
+      expect(result.requestTypes).toHaveLength(Object.values(RequestType).length);
       expect(result.requestTypes[0]).toEqual({
         type: RequestType.EMPLOYEE_TERMINATION,
         label: 'Employee termination',
@@ -2804,7 +2805,21 @@ describe('SettingsDomainOrganisationService', () => {
         requestType: RequestType.EMPLOYEE_TERMINATION,
         name: 'Employee termination workflow',
         isDefault: true,
-        steps: [{ id: 's-1', order: 1, responsibleParty: 'Admin' }],
+        steps: [
+          {
+            id: 's-1',
+            order: 1,
+            responsibleParty: 'Admin',
+            action: RequestStepActionKind.APPROVE,
+            assigneeUserId: null,
+            assigneeRole: null,
+            assigneeEmployeeId: null,
+            dueHours: null,
+            delegatable: true,
+            notifyRequester: true,
+            requiresDocument: false,
+          },
+        ],
       });
     });
 
