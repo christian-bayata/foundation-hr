@@ -3,6 +3,7 @@ export function roleInviteTemplate(
   roleName: string,
   inviteLink: string,
   orgName: string,
+  showAcceptInvite = true,
 ): string {
   return `
     <!DOCTYPE html>
@@ -29,8 +30,15 @@ export function roleInviteTemplate(
                       Hi ${firstName},
                     </p>
                     <p style="margin: 0 0 24px; color: #475569; font-size: 15px; line-height: 1.6;">
-                      You've been granted the <strong>${roleName}</strong> role. Click the button below to sign in and get started.
+                      You've been granted the <strong>${roleName}</strong> role.${
+                        showAcceptInvite
+                          ? ' Click the button below to sign in and get started.'
+                          : ''
+                      }
                     </p>
+                    ${
+                      showAcceptInvite
+                        ? `
                     <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
                       <tr>
                         <td align="center">
@@ -42,6 +50,9 @@ export function roleInviteTemplate(
                       If the button does not work, copy and paste this link into your browser:
                     </p>
                     <p style="margin: 0 0 24px; color: #2563eb; font-size: 13px; line-height: 1.6; word-break: break-all;">${inviteLink}</p>
+                    `
+                        : ''
+                    }
                     <p style="margin: 0 0 24px; color: #64748b; font-size: 13px; line-height: 1.6;">
                       If you were not expecting this invitation, you can safely ignore this email.
                     </p>

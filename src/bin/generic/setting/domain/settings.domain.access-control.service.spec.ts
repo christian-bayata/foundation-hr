@@ -111,6 +111,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
       findByIds: jest.fn(),
       findIdsBySearchTerm: jest.fn(),
       create: jest.fn(),
+      updateEmailVerification: jest.fn(),
     };
     jobTitleRepository = {
       findByCodeOrName: jest.fn(),
@@ -282,6 +283,8 @@ describe('SettingsDomainAccessControlService company admin', () => {
           ),
         }),
       );
+      const payload = emailService.brevoEmailDispatcher.mock.calls[0][0];
+      expect(payload.html).toContain('Accept Invite');
     });
 
     it('keeps the created admin when the invite email cannot be delivered', async () => {
@@ -321,7 +324,7 @@ describe('SettingsDomainAccessControlService company admin', () => {
       ).resolves.toBeDefined();
     });
 
-    it('promotes an internal employee to admin with ACTIVE status and skips the invite email', async () => {
+    it('promotes an internal employee to admin with ACTIVE status and sends a notification without an accept button', async () => {
       const employee = {
         _id: oid('64f1b2c3d4e5f6789010e001'),
         firstName: 'Emp',
@@ -364,8 +367,55 @@ describe('SettingsDomainAccessControlService company admin', () => {
       expect(emailService.brevoEmailDispatcher).toHaveBeenCalledWith(
         expect.objectContaining({ to: 'emp@foundation.com' }),
       );
+      const payload = emailService.brevoEmailDispatcher.mock.calls[0][0];
+      expect(payload.html).toContain(
+        "You've been granted the <strong>HR Admin</strong> role",
+      );
+      expect(payload.html).not.toContain('Accept Invite');
+      expect(payload.html).not.toContain(`${FRONTEND_URL}/invite?`);
+      const created = inviteeUserRepository.create.mock.calls[0][0] as Record<
+        string,
+        any
+      >;
+      expect(created.isEmailVerified).toBe(true);
       expect(row.status).toBe(AdminStatus.ACTIVE);
       expect(row.email).toBe('emp@foundation.com');
+    });
+
+    it('marks an existing internal admin user as email verified', async () => {
+      const existing = user({
+        email: 'emp@foundation.com',
+        isEmailVerified: false,
+      });
+      employeeRepository.findOne.mockResolvedValue({
+        firstName: 'Emp',
+        lastName: 'Staff',
+        email: 'emp@foundation.com',
+        jobTitleCode: 'HR',
+        organizationId: ORG_ID,
+      });
+      inviteeUserRepository.findByEmails.mockResolvedValue([existing]);
+
+      await service.addCompanyAdmin(ORG_ID, ACTOR_ID, {
+        ...dto,
+        adminType: 'internal',
+        email: 'emp@foundation.com',
+      });
+
+      expect(inviteeUserRepository.create).not.toHaveBeenCalled();
+      expect(
+        inviteeUserRepository.updateEmailVerification,
+      ).toHaveBeenCalledWith(String(existing._id), true);
+    });
+
+    it('leaves an existing external admin user verification unchanged', async () => {
+      inviteeUserRepository.findByEmails.mockResolvedValue([user()]);
+
+      await service.addCompanyAdmin(ORG_ID, ACTOR_ID, dto);
+
+      expect(
+        inviteeUserRepository.updateEmailVerification,
+      ).not.toHaveBeenCalled();
     });
 
     it('rejects with 404 when no employee matches the email for an internal admin', async () => {

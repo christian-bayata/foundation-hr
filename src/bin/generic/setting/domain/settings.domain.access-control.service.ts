@@ -904,6 +904,7 @@ export class SettingsDomainAccessControlService {
         email: resolvedEmail,
         firstName: resolvedFirstName,
         lastName: resolvedLastName,
+        isEmailVerified: isInternal,
       });
 
       const existingRoles =
@@ -950,6 +951,7 @@ export class SettingsDomainAccessControlService {
         role.name,
         String(role._id),
         organizationId,
+        isInternal,
       );
 
       const jobTitleName = isInternal
@@ -1206,12 +1208,19 @@ export class SettingsDomainAccessControlService {
     email: string;
     firstName: string;
     lastName: string;
+    isEmailVerified: boolean;
   }) {
     const [existing] = await this.inviteeUserRepository.findByEmails([
       details.email,
     ]);
 
     if (existing) {
+      if (details.isEmailVerified) {
+        await this.inviteeUserRepository.updateEmailVerification(
+          String(existing._id),
+          true,
+        );
+      }
       return existing;
     }
 
@@ -1220,7 +1229,7 @@ export class SettingsDomainAccessControlService {
       lastName: details.lastName,
       email: details.email,
       password: await hash(this.authUtility.randomToken(), 10),
-      isEmailVerified: false,
+      isEmailVerified: details.isEmailVerified,
       userType: UserType.COMPANY,
     });
   }
@@ -1582,6 +1591,7 @@ export class SettingsDomainAccessControlService {
     roleName: string,
     roleId: string,
     organizationId: string,
+    isInternal: boolean,
   ): Promise<void> {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     const inviteLink = `${frontendUrl}/invite?roleId=${roleId}`;
@@ -1599,6 +1609,7 @@ export class SettingsDomainAccessControlService {
         roleName,
         inviteLink,
         organizationDetails?.name ?? '',
+        !isInternal,
       ),
     };
 

@@ -89,4 +89,15 @@ export class InviteeUserRepository {
       throw error;
     }
   }
+
+  async updateEmailVerification(
+    userId: string,
+    isEmailVerified: boolean,
+  ): Promise<UserDocument | null> {
+    return await this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: { isEmailVerified } },
+      { new: true },
+    );
+  }
 }
